@@ -148,7 +148,7 @@
                     </div>
                     
                     <!-- 系统信息 -->
-                    <div>
+                    <div style="margin-bottom: 5px;">
                       <div style="font-size: 10px; color: #666; margin-bottom: 3px; font-weight: 600;">🔧 {{ $t('batchTask.sysOps') }}</div>
                       <div style="display: flex; flex-wrap: wrap; gap: 3px;">
                         <el-button
@@ -160,6 +160,55 @@
                         >
                           {{ template.name }}
                         </el-button>
+                      </div>
+                    </div>
+
+                    <!-- 自定义快捷方式 -->
+                    <div>
+                      <div style="font-size: 10px; color: #666; margin-bottom: 3px; font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
+                        <span>⭐ {{ $t('batchTask.customShortcuts') }}</span>
+                        <el-button
+                          type="primary"
+                          size="small"
+                          text
+                          @click="showAddShortcutDialog"
+                          style="font-size: 10px; padding: 0 4px; height: 18px;"
+                        >
+                          + {{ $t('batchTask.addShortcut') }}
+                        </el-button>
+                      </div>
+                      <div v-if="customShortcuts.length === 0" style="color: #bbb; font-size: 11px; text-align: center; padding: 4px 0;">
+                        {{ $t('batchTask.noCustomShortcut') }}
+                      </div>
+                      <div v-else style="display: flex; flex-wrap: wrap; gap: 3px;">
+                        <el-popover
+                          v-for="(shortcut, idx) in customShortcuts"
+                          :key="idx"
+                          placement="top"
+                          :width="260"
+                          trigger="hover"
+                        >
+                          <template #reference>
+                            <el-button
+                              size="small"
+                              type="warning"
+                              @click="applyTemplate(shortcut.command)"
+                              style="padding: 4px 8px; font-size: 11px; height: 26px;"
+                            >
+                              {{ shortcut.name }}
+                            </el-button>
+                          </template>
+                          <div style="font-size: 12px;">
+                            <div style="font-weight: bold; margin-bottom: 4px;">{{ shortcut.name }}</div>
+                            <div style="font-family: 'Courier New', monospace; background: #f5f5f5; padding: 4px 6px; border-radius: 3px; word-break: break-all; color: #606266; max-height: 120px; overflow-y: auto;">
+                              {{ shortcut.command }}
+                            </div>
+                            <div style="margin-top: 6px; display: flex; justify-content: flex-end; gap: 4px;">
+                              <el-button size="small" text type="primary" @click="editShortcut(idx)" style="padding: 0 4px; font-size: 11px;">{{ $t('batchTask.editShortcut') }}</el-button>
+                              <el-button size="small" text type="danger" @click="deleteShortcut(idx)" style="padding: 0 4px; font-size: 11px;">{{ $t('batchTask.deleteShortcut') }}</el-button>
+                            </div>
+                          </div>
+                        </el-popover>
                       </div>
                     </div>
                   </div>
@@ -299,13 +348,45 @@
         <el-button @click="helpDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- 自定义快捷方式编辑对话框 -->
+    <el-dialog
+      v-model="shortcutDialogVisible"
+      :title="shortcutEditIndex >= 0 ? '✏️ ' + $t('batchTask.editShortcut') : '➕ ' + $t('batchTask.addShortcut')"
+      width="450px"
+      @close="resetShortcutForm"
+    >
+      <el-form :model="shortcutForm" label-width="80px" size="default">
+        <el-form-item :label="$t('batchTask.shortcutName')">
+          <el-input
+            v-model="shortcutForm.name"
+            :placeholder="$t('batchTask.shortcutNamePlaceholder')"
+            maxlength="20"
+            show-word-limit
+          />
+        </el-form-item>
+        <el-form-item :label="$t('batchTask.shortcutCmd')">
+          <el-input
+            v-model="shortcutForm.command"
+            type="textarea"
+            :rows="4"
+            :placeholder="$t('batchTask.shortcutCmdPlaceholder')"
+            style="font-family: 'Courier New', monospace; font-size: 12px;"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="shortcutDialogVisible = false">{{ $t('batchTask.cancelBtn') }}</el-button>
+        <el-button type="primary" @click="saveShortcut" :disabled="!shortcutForm.name.trim() || !shortcutForm.command.trim()">{{ $t('batchTask.saveBtn') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, getCurrentInstance } from 'vue'
+import { ref, computed, watch, onMounted, getCurrentInstance } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ExecuteBatchCommand } from '../../bindings/edgeclient/app'
+import { ExecuteBatchCommand, SaveCommandTemplate, GetCommandTemplates, DeleteCommandTemplate } from '../../bindings/edgeclient/app'
 import { getDevicePassword, startProjection, cleanupProjectionWindows, cleanupProjectionProcesses } from '../services/api.js'
 
 // Props
@@ -353,6 +434,104 @@ const helpDialogVisible = ref(false)
 const loopCount = ref(1)       // 循环次数
 const currentLoop = ref(0)     // 当前第几轮
 const stopFlag = ref(false)    // 停止标志
+
+// 自定义快捷方式状态（后端持久化，数据存储在 %AppData%/edgeclient/batch_tasks/command_templates.json）
+const shortcutDialogVisible = ref(false)
+const shortcutEditIndex = ref(-1) // -1=新增, >=0=编辑索引
+const shortcutForm = ref({ id: '', name: '', command: '' })
+const customShortcuts = ref([])
+
+// 从后端加载自定义快捷方式
+const loadCustomShortcuts = async () => {
+  try {
+    const result = await GetCommandTemplates()
+    if (result && result.success && Array.isArray(result.templates)) {
+      customShortcuts.value = result.templates.map(t => ({
+        id: t.id || '',
+        name: t.name || '',
+        command: t.command || ''
+      }))
+    }
+  } catch (e) {
+    console.error('[批量任务] 加载自定义快捷方式失败:', e)
+  }
+}
+
+// 组件挂载时加载
+onMounted(() => {
+  loadCustomShortcuts()
+})
+
+// 显示新增快捷方式对话框
+const showAddShortcutDialog = () => {
+  shortcutEditIndex.value = -1
+  shortcutForm.value = { id: '', name: '', command: '' }
+  shortcutDialogVisible.value = true
+}
+
+// 编辑快捷方式
+const editShortcut = (idx) => {
+  shortcutEditIndex.value = idx
+  shortcutForm.value = { ...customShortcuts.value[idx] }
+  shortcutDialogVisible.value = true
+}
+
+// 删除快捷方式
+const deleteShortcut = async (idx) => {
+  const shortcut = customShortcuts.value[idx]
+  try {
+    await ElMessageBox.confirm(
+      `${$t('batchTask.confirmDeleteShortcut')} "${shortcut.name}"?`,
+      $t('batchTask.deleteShortcut'),
+      { confirmButtonText: $t('batchTask.saveBtn'), cancelButtonText: $t('batchTask.cancelBtn'), type: 'warning' }
+    )
+    if (shortcut.id) {
+      const result = await DeleteCommandTemplate(shortcut.id)
+      if (result && result.success) {
+        ElMessage.success($t('batchTask.shortcutDeleted'))
+        await loadCustomShortcuts()
+      } else {
+        ElMessage.error(result?.message || $t('batchTask.shortcutDeleteFailed'))
+      }
+    }
+  } catch (e) {
+    // 用户取消
+  }
+}
+
+// 保存快捷方式（新增或编辑）—— 调用后端 CommandTemplate API
+const saveShortcut = async () => {
+  const { name, command: cmd } = shortcutForm.value
+  if (!name.trim() || !cmd.trim()) return
+
+  try {
+    const template = {
+      id: shortcutEditIndex.value >= 0 ? (shortcutForm.value.id || '') : '',
+      name: name.trim(),
+      command: cmd.trim(),
+      description: name.trim(),
+      category: 'custom',
+      variables: []
+    }
+    const result = await SaveCommandTemplate(template)
+    if (result && result.success) {
+      ElMessage.success(shortcutEditIndex.value >= 0 ? $t('batchTask.shortcutUpdated') : $t('batchTask.shortcutAdded'))
+      await loadCustomShortcuts()
+      shortcutDialogVisible.value = false
+    } else {
+      ElMessage.error(result?.message || $t('batchTask.shortcutSaveFailed'))
+    }
+  } catch (e) {
+    console.error('[批量任务] 保存快捷方式失败:', e)
+    ElMessage.error($t('batchTask.shortcutSaveFailed'))
+  }
+}
+
+// 重置表单
+const resetShortcutForm = () => {
+  shortcutForm.value = { id: '', name: '', command: '' }
+  shortcutEditIndex.value = -1
+}
 
 // 快速命令模板
 // 基础操作命令

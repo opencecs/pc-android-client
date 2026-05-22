@@ -1047,7 +1047,24 @@ const messages = {
       note2: '包含空格的文本参数需要用引号包裹',
       note3: '某些命令需要root权限才能执行',
       cmdInstall: '安装应用',
-      cmdGetVersion: '获取系统版本'
+      cmdGetVersion: '获取系统版本',
+      customShortcuts: '自定义快捷方式',
+      addShortcut: '添加',
+      noCustomShortcut: '暂无自定义快捷方式，点击 + 添加',
+      editShortcut: '编辑',
+      deleteShortcut: '删除',
+      shortcutName: '名称',
+      shortcutNamePlaceholder: '输入快捷方式名称，如：清理微信缓存',
+      shortcutCmd: '命令',
+      shortcutCmdPlaceholder: '输入要执行的命令，如：pm clear com.tencent.mm',
+      cancelBtn: '取消',
+      saveBtn: '保存',
+      confirmDeleteShortcut: '确定删除快捷方式',
+      shortcutDeleted: '快捷方式已删除',
+      shortcutUpdated: '快捷方式已更新',
+      shortcutAdded: '快捷方式已添加',
+      shortcutDeleteFailed: '删除快捷方式失败',
+      shortcutSaveFailed: '保存快捷方式失败'
     },
 
     stream: {
@@ -2776,7 +2793,24 @@ const messages = {
       note2: 'Wrap text containing spaces in quotes',
       note3: 'Some commands require root access',
       cmdInstall: 'Install App',
-      cmdGetVersion: 'Get Sys Version'
+      cmdGetVersion: 'Get Sys Version',
+      customShortcuts: 'Custom Shortcuts',
+      addShortcut: 'Add',
+      noCustomShortcut: 'No custom shortcuts yet, click + to add',
+      editShortcut: 'Edit',
+      deleteShortcut: 'Delete',
+      shortcutName: 'Name',
+      shortcutNamePlaceholder: 'Enter shortcut name, e.g. Clear WeChat Cache',
+      shortcutCmd: 'Command',
+      shortcutCmdPlaceholder: 'Enter command to execute, e.g. pm clear com.tencent.mm',
+      cancelBtn: 'Cancel',
+      saveBtn: 'Save',
+      confirmDeleteShortcut: 'Delete shortcut',
+      shortcutDeleted: 'Shortcut deleted',
+      shortcutUpdated: 'Shortcut updated',
+      shortcutAdded: 'Shortcut added',
+      shortcutDeleteFailed: 'Failed to delete shortcut',
+      shortcutSaveFailed: 'Failed to save shortcut'
     },
 
     stream: {

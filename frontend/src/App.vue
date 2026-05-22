@@ -10660,22 +10660,48 @@ const handleNodeDrop = (draggingNode, dropNode, dropType) => {
   }
 }
 
+// 自然排序辅助函数：将字符串拆分为 [文本, 数字, 文本, 数字, ...] 段，用于自然排序
+const naturalSortKey = (str) => {
+  if (!str) return []
+  const parts = []
+  const regex = /(\D+|\d+)/g
+  let match
+  while ((match = regex.exec(str)) !== null) {
+    // 数字段转为数值，文本段保持原样并转小写用于大小写不敏感排序
+    parts.push(/^\d+$/.test(match[1]) ? Number(match[1]) : match[1].toLowerCase())
+  }
+  return parts
+}
+
 // 计算排序后的备份列表
 const sortedBackupList = computed(() => {
   return [...backupList.value].sort((a, b) => {
-    let aVal = a[sortBy.value]
-    let bVal = b[sortBy.value]  
-    
     if (sortBy.value === 'createTime') {
-      aVal = new Date(aVal).getTime()
-      bVal = new Date(bVal).getTime()
+      const aVal = new Date(a[sortBy.value]).getTime()
+      const bVal = new Date(b[sortBy.value]).getTime()
+      return sortOrder.value === 'ascending' ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1)
     }
     
-    if (sortOrder.value === 'ascending') {
-      return aVal > bVal ? 1 : -1
-    } else {
-      return aVal < bVal ? 1 : -1
+    // 名称排序：使用自然排序（数字按数值大小排，如 B2 < B10）
+    const aKey = naturalSortKey(a[sortBy.value])
+    const bKey = naturalSortKey(b[sortBy.value])
+    const len = Math.min(aKey.length, bKey.length)
+    let cmp = 0
+    for (let i = 0; i < len; i++) {
+      const ai = aKey[i]
+      const bi = bKey[i]
+      // 同类型比较：数字与数字比，字符串与字符串比
+      if (typeof ai === 'number' && typeof bi === 'number') {
+        if (ai !== bi) { cmp = ai > bi ? 1 : -1; break }
+      } else {
+        const as = String(ai), bs = String(bi)
+        if (as !== bs) { cmp = as > bs ? 1 : -1; break }
+      }
     }
+    if (cmp === 0 && aKey.length !== bKey.length) {
+      cmp = aKey.length > bKey.length ? 1 : -1
+    }
+    return sortOrder.value === 'ascending' ? cmp : -cmp
   })
 })
 
@@ -15311,8 +15337,16 @@ const handleStartCopyTask = ({ device, name, indexNum, count, version }) => {
   }
   taskQueue.value.unshift(task)
 
+  // 构建鉴权 header
+  const savedPassword = getDevicePassword(ip)
+  const headers = {}
+  if (savedPassword) {
+    const auth = btoa(`admin:${savedPassword}`)
+    headers['Authorization'] = `Basic ${auth}`
+  }
+
   // 通过 fetch 读取 SSE 流
-  fetch(endpoint)
+  fetch(endpoint, { headers })
     .then(async res => {
       const reader = res.body.getReader()
       const decoder = new TextDecoder()

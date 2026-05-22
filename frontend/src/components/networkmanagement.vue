@@ -2839,6 +2839,12 @@ const filteredVpcContainerList = computed(() => {
         const slotSearch = vpcSlotSearch.value.trim()
         list = list.filter(c => c.indexNum !== undefined && String(c.indexNum).includes(slotSearch))
     }
+    // 运行中的云机排在最上面
+    list = [...list].sort((a, b) => {
+        if (a.status === 'running' && b.status !== 'running') return -1
+        if (a.status !== 'running' && b.status === 'running') return 1
+        return 0
+    })
     return list
 })
 
