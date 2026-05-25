@@ -10673,6 +10673,13 @@ const naturalSortKey = (str) => {
   return parts
 }
 
+// 提取名称最后一段（如 1778046657165_6_0_copy_A1 -> A1）
+const extractShortName = (name) => {
+  if (!name) return ''
+  const parts = name.split('_')
+  return parts.length > 0 ? parts[parts.length - 1] : name
+}
+
 // 计算排序后的备份列表
 const sortedBackupList = computed(() => {
   return [...backupList.value].sort((a, b) => {
@@ -10682,9 +10689,9 @@ const sortedBackupList = computed(() => {
       return sortOrder.value === 'ascending' ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1)
     }
     
-    // 名称排序：使用自然排序（数字按数值大小排，如 B2 < B10）
-    const aKey = naturalSortKey(a[sortBy.value])
-    const bKey = naturalSortKey(b[sortBy.value])
+    // 名称排序：按截取后的短名称自然排序（如 1778046657165_6_0_copy_A1 -> A1）
+    const aKey = naturalSortKey(extractShortName(a[sortBy.value]))
+    const bKey = naturalSortKey(extractShortName(b[sortBy.value]))
     const len = Math.min(aKey.length, bKey.length)
     let cmp = 0
     for (let i = 0; i < len; i++) {
@@ -10700,6 +10707,12 @@ const sortedBackupList = computed(() => {
     }
     if (cmp === 0 && aKey.length !== bKey.length) {
       cmp = aKey.length > bKey.length ? 1 : -1
+    }
+    // 短名称相同时，按完整名称排序作为二级排序（区分不同时间戳的同名备份）
+    if (cmp === 0) {
+      const aFull = a[sortBy.value] || ''
+      const bFull = b[sortBy.value] || ''
+      cmp = aFull > bFull ? 1 : (aFull < bFull ? -1 : 0)
     }
     return sortOrder.value === 'ascending' ? cmp : -cmp
   })

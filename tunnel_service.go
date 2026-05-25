@@ -2,7 +2,6 @@ package main
 
 import (
 	"archive/tar"
-	"archive/zip"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
@@ -25,21 +24,21 @@ func (a *App) InstallTunnel(deviceIP string, serverAddr string, serverPort int, 
 
 	ip := extractPureIP(deviceIP)
 
-	// 1. 从远程下载frpc zip包到临时目录
+	// 1. 从远程下载frpc tar.gz包到临时目录
 	localDir := filepath.Join(os.TempDir(), "frpc-install")
 	os.RemoveAll(localDir)
 	os.MkdirAll(localDir, 0755)
 	defer os.RemoveAll(localDir)
 
-	frpcDownloadURL := "http://47.107.33.172:10011/api/v1/moyu/download/frpc"
-	localZipPath := filepath.Join(localDir, "frpc.zip")
+	frpcDownloadURL := "https://newapi.moyunteng.com/api/v1/moyu/download/frpc"
+	localTarPath := filepath.Join(localDir, "frpc.tar.gz")
 	log.Printf("[公网穿透] 从远程下载frpc: %s", frpcDownloadURL)
 
-	if err := downloadFile(frpcDownloadURL, localZipPath); err != nil {
+	if err := downloadFile(frpcDownloadURL, localTarPath); err != nil {
 		return map[string]interface{}{"success": false, "message": fmt.Sprintf("下载frpc失败: %v", err)}
 	}
 
-	if err := extractFRPCFromZip(localZipPath, localDir); err != nil {
+	if err := extractFRPCFromTarGz(localTarPath, localDir); err != nil {
 		return map[string]interface{}{"success": false, "message": fmt.Sprintf("解压frpc失败: %v", err)}
 	}
 
@@ -361,48 +360,53 @@ func installTunnelDebianService(sshClient *ssh.Client) error {
 	return runSteps(sshClient, steps)
 }
 
-// extractFRPCFromZip 从本地zip包中解压frpc二进制和配置文件
-func extractFRPCFromZip(zipPath, targetDir string) error {
-	r, err := zip.OpenReader(zipPath)
+// extractFRPCFromTarGz 从合并tar.gz包中解压frpc-arm64并重命名为frpc
+func extractFRPCFromTarGz(tarPath, targetDir string) error {
+	f, err := os.Open(tarPath)
 	if err != nil {
-		return fmt.Errorf("打开zip文件失败: %w", err)
+		return fmt.Errorf("打开tar.gz文件失败: %w", err)
 	}
-	defer r.Close()
+	defer f.Close()
 
-	for _, f := range r.File {
-		// 只解压frpc相关文件
-		baseName := filepath.Base(f.Name)
-		if baseName != "frpc" && baseName != "frpc.toml" {
-			continue
-		}
-		if f.FileInfo().IsDir() {
-			continue
-		}
+	gzr, err := gzip.NewReader(f)
+	if err != nil {
+		return fmt.Errorf("解压gzip失败: %w", err)
+	}
+	defer gzr.Close()
 
-		rc, err := f.Open()
+	tr := tar.NewReader(gzr)
+	found := false
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
-			return fmt.Errorf("打开zip内文件 %s 失败: %w", f.Name, err)
+			return fmt.Errorf("读取tar失败: %w", err)
 		}
-
-		dstPath := filepath.Join(targetDir, baseName)
+		baseName := filepath.Base(hdr.Name)
+		if baseName != "frpc-arm64" {
+			continue
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+		dstPath := filepath.Join(targetDir, "frpc")
 		dst, err := os.Create(dstPath)
 		if err != nil {
-			rc.Close()
 			return fmt.Errorf("创建文件 %s 失败: %w", dstPath, err)
 		}
-
-		if _, err := io.Copy(dst, rc); err != nil {
+		if _, err := io.Copy(dst, tr); err != nil {
 			dst.Close()
-			rc.Close()
 			return fmt.Errorf("写入文件 %s 失败: %w", dstPath, err)
 		}
 		dst.Close()
-		rc.Close()
-
-		if baseName == "frpc" {
-			os.Chmod(dstPath, 0755)
-		}
-		log.Printf("[公网穿透] 解压文件: %s -> %s", f.Name, baseName)
+		os.Chmod(dstPath, 0755)
+		log.Printf("[公网穿透] 解压文件: %s -> frpc", hdr.Name)
+		found = true
+	}
+	if !found {
+		return fmt.Errorf("tar.gz包中未找到frpc-arm64文件")
 	}
 	return nil
 }
@@ -452,25 +456,12 @@ func (a *App) InstallTunnelServer(serverIP string, sshUser string, sshPassword s
 	os.MkdirAll(localDir, 0755)
 	defer os.RemoveAll(localDir)
 
-	// 从本地下载frps tar.gz，依次尝试多个镜像
+	// 从API下载合并tar.gz包（包含frpc-arm64和frps-amd64）
 	localTarPath := filepath.Join(localDir, "frps.tar.gz")
-	mirrors := []string{
-		"https://ghfast.top/https://github.com/fatedier/frp/releases/download/v0.68.1/frp_0.68.1_linux_amd64.tar.gz",
-		"https://mirror.ghproxy.com/https://github.com/fatedier/frp/releases/download/v0.68.1/frp_0.68.1_linux_amd64.tar.gz",
-		"https://github.com/fatedier/frp/releases/download/v0.68.1/frp_0.68.1_linux_amd64.tar.gz",
-	}
-	var downloadErr error
-	for _, mirror := range mirrors {
-		log.Printf("[公网穿透服务端] 尝试下载frps: %s", mirror)
-		downloadErr = downloadFile(mirror, localTarPath)
-		if downloadErr == nil {
-			break
-		}
-		log.Printf("[公网穿透服务端] 下载失败(%s): %v，尝试下一个镜像", mirror, downloadErr)
-		os.Remove(localTarPath)
-	}
-	if downloadErr != nil {
-		return map[string]interface{}{"success": false, "message": fmt.Sprintf("下载frps失败(已尝试所有镜像): %v", downloadErr)}
+	frpcDownloadURL := "https://newapi.moyunteng.com/api/v1/moyu/download/frpc"
+	log.Printf("[公网穿透服务端] 下载: %s", frpcDownloadURL)
+	if err := downloadFile(frpcDownloadURL, localTarPath); err != nil {
+		return map[string]interface{}{"success": false, "message": fmt.Sprintf("下载frps失败: %v", err)}
 	}
 	if err := extractFRPSFromTarGz(localTarPath, localDir); err != nil {
 		return map[string]interface{}{"success": false, "message": fmt.Sprintf("解压frps失败: %v", err)}
@@ -719,7 +710,7 @@ WantedBy=multi-user.target
 	os.WriteFile(filepath.Join(dir, "frps.service"), []byte(content), 0644)
 }
 
-// extractFRPSFromTarGz 从tar.gz包中解压frps二进制
+// extractFRPSFromTarGz 从合并tar.gz包中解压frps-amd64并重命名为frps
 func extractFRPSFromTarGz(tarPath, targetDir string) error {
 	f, err := os.Open(tarPath)
 	if err != nil {
@@ -744,13 +735,13 @@ func extractFRPSFromTarGz(tarPath, targetDir string) error {
 			return fmt.Errorf("读取tar失败: %w", err)
 		}
 		baseName := filepath.Base(hdr.Name)
-		if baseName != "frps" && baseName != "frps.toml" {
+		if baseName != "frps-amd64" {
 			continue
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
-		dstPath := filepath.Join(targetDir, baseName)
+		dstPath := filepath.Join(targetDir, "frps")
 		dst, err := os.Create(dstPath)
 		if err != nil {
 			return fmt.Errorf("创建文件 %s 失败: %w", dstPath, err)
@@ -760,71 +751,12 @@ func extractFRPSFromTarGz(tarPath, targetDir string) error {
 			return fmt.Errorf("写入文件 %s 失败: %w", dstPath, err)
 		}
 		dst.Close()
-		if baseName == "frps" {
-			os.Chmod(dstPath, 0755)
-		}
-		log.Printf("[公网穿透服务端] 解压文件: %s -> %s", hdr.Name, baseName)
+		os.Chmod(dstPath, 0755)
+		log.Printf("[公网穿透服务端] 解压文件: %s -> frps", hdr.Name)
 		found = true
 	}
 	if !found {
-		return fmt.Errorf("tar.gz包中未找到frps文件")
+		return fmt.Errorf("tar.gz包中未找到frps-amd64文件")
 	}
 	return nil
 }
-
-// extractFRPSFromZip 从zip包中解压frps二进制
-func extractFRPSFromZip(zipPath, targetDir string) error {
-	r, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return fmt.Errorf("打开zip文件失败: %w", err)
-	}
-	defer r.Close()
-
-	// 列出zip内所有文件用于调试
-	var fileNames []string
-	for _, f := range r.File {
-		fileNames = append(fileNames, f.Name)
-	}
-	log.Printf("[公网穿透服务端] zip内文件列表: %v", fileNames)
-
-	found := false
-	for _, f := range r.File {
-		baseName := filepath.Base(f.Name)
-		if baseName != "frps" && baseName != "frps.toml" {
-			continue
-		}
-		if f.FileInfo().IsDir() {
-			continue
-		}
-
-		rc, err := f.Open()
-		if err != nil {
-			return fmt.Errorf("打开zip内文件 %s 失败: %w", f.Name, err)
-		}
-
-		dstPath := filepath.Join(targetDir, baseName)
-		dst, err := os.Create(dstPath)
-		if err != nil {
-			rc.Close()
-			return fmt.Errorf("创建文件 %s 失败: %w", dstPath, err)
-		}
-
-		if _, err := io.Copy(dst, rc); err != nil {
-			dst.Close()
-			rc.Close()
-			return fmt.Errorf("写入文件 %s 失败: %w", dstPath, err)
-		}
-		dst.Close()
-		rc.Close()
-
-		if baseName == "frps" {
-			os.Chmod(dstPath, 0755)
-		}
-		log.Printf("[公网穿透服务端] 解压文件: %s -> %s", f.Name, baseName)
-			found = true
-		}
-		if !found {
-			return fmt.Errorf("zip包中未找到frps文件，包内文件: %v", fileNames)
-		}
-		return nil
-	}
