@@ -14128,6 +14128,7 @@ const groupedInstances = computed(() => {
 
 const deviceDetailCloudMachines = ref([])
 const deviceDetailCloudMachinesLoading = ref(false)
+const deviceDetailSearchKeyword = ref('')
 
 const fetchDeviceDetailCloudMachines = async () => {
   if (!activeDevice.value || !activeDevice.value.ip) return
@@ -14215,6 +14216,7 @@ const deviceDetailGroupedInstances = computed(() => {
   if (!activeDevice.value) return []
 
   const result = []
+  const keyword = deviceDetailSearchKeyword.value.trim().toLowerCase()
   
   let maxSlots = 12
   if (activeDevice.value && activeDevice.value.name && activeDevice.value.name.toLowerCase().includes('p1')) {
@@ -14222,7 +14224,16 @@ const deviceDetailGroupedInstances = computed(() => {
   }
   
   for (let slotNum = 1; slotNum <= maxSlots; slotNum++) {
-    const slotInstances = deviceDetailCloudMachines.value.filter(inst => inst.indexNum === slotNum)
+    let slotInstances = deviceDetailCloudMachines.value.filter(inst => inst.indexNum === slotNum)
+    
+    // 搜索过滤：按云机名称匹配（使用格式化后的名称）
+    if (keyword) {
+      slotInstances = slotInstances.filter(inst => {
+        const displayName = formatInstanceName(inst.name) || ''
+        return displayName.toLowerCase().includes(keyword)
+      })
+    }
+    
     const isExpanded = deviceDetailSlotFoldStatus.value[slotNum] === true
     
     const runningInstances = slotInstances.filter(inst => inst.status === 'running')
@@ -14264,7 +14275,8 @@ const deviceDetailGroupedInstances = computed(() => {
         }
         result.push(firstInstance)
       }
-    } else {
+    } else if (!keyword) {
+      // 无搜索词时显示空坑位，有搜索词时隐藏不匹配的坑位
       result.push({
         id: `slot-${slotNum}-empty`,
         slotNum,
@@ -17401,6 +17413,8 @@ const collapseRightSidebar = () => {
   deviceDetailsDialogVisible.value = false;
   // 退出查看详情模式，显示勾选框
   isViewingDeviceDetails.value = false;
+  // 清空搜索关键词
+  deviceDetailSearchKeyword.value = '';
 
   // 🔧 已移除定时器，无需清理
 
@@ -21987,6 +22001,14 @@ const handleBindsTest = async () => {
         <!-- 批量操作按钮 -->
         <el-space wrap class="batch-actions">
           <template v-if="currentRightTab === 'instance'">
+            <el-input
+              v-model="deviceDetailSearchKeyword"
+              :placeholder="$t('common.searchMachineName')"
+              size="small"
+              clearable
+              style="width: 180px;"
+              prefix-icon="Search"
+            />
             <!-- <el-button @click="handleBatchAction('restart')" size="small">批量重启</el-button>
             <el-button @click="handleBatchAction('reset')" size="small">批量重置</el-button>
             <el-button @click="handleBatchAction('start')" size="small">批量启动</el-button>

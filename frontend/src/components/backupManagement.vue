@@ -195,13 +195,21 @@
                                     </el-select>
                                 </div>
                                 <div style="display: flex; gap: 8px; align-items: center;">
+                                    <el-input v-model="cloudManageSearchKeyword" :placeholder="t('backup.searchMachineName')" size="small"
+                                        style="width: 180px;" clearable>
+                                        <template #prefix>
+                                            <el-icon>
+                                                <Search />
+                                            </el-icon>
+                                        </template>
+                                    </el-input>
                                     <el-button size="small" @click="fetchCloudMachines">{{ t('common.refresh') }}</el-button>
                                     <el-button size="small" type="danger" :disabled="!cloudManageSelectedRows.length" @click="handleBatchDeleteCloudMachine">
                                         {{ t('common.deleteSelected') }}<span v-if="cloudManageSelectedRows.length">({{ cloudManageSelectedRows.length }})</span>
                                     </el-button>
                                 </div>
                             </div>
-                            <el-table :data="cloudMachineList" v-loading="cloudManageLoading" stripe
+                            <el-table :data="filteredCloudMachineList" v-loading="cloudManageLoading" stripe
                                 max-height="800" style="width: 100%;"
                                 @selection-change="handleCloudManageSelectionChange">
                                 <el-table-column type="selection" width="45" />
@@ -718,6 +726,17 @@ const cloudStartingName = ref('')
 const cloudManageSlot = ref(1)
 const cloudManageSlotOptions = ref([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 const cloudManageSelectedRows = ref([])
+const cloudManageSearchKeyword = ref('')
+
+// 备份管理-云机列表搜索过滤
+const filteredCloudMachineList = computed(() => {
+    const keyword = cloudManageSearchKeyword.value.trim().toLowerCase()
+    if (!keyword) return cloudMachineList.value
+    return cloudMachineList.value.filter(item => {
+        const displayName = formatCloudMachineName(item.name) || ''
+        return displayName.toLowerCase().includes(keyword)
+    })
+})
 const cloudRenameDialogVisible = ref(false)
 const cloudRenameOldName = ref('')
 const cloudRenameFullName = ref('')
@@ -1240,6 +1259,7 @@ const selectDevice = async (device) => {
     selectedDeviceVersion.value = device.version || 'v3'
     currentPage.value = 1
     modelSearchText.value = ''
+    cloudManageSearchKeyword.value = ''
     // 三个请求互相独立，全部并行
     const tasks = [fetchBackupModels(), fetchLocalBackupModels()]
     if (activeTab.value === 'machine') {
