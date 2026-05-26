@@ -1252,7 +1252,8 @@ async function switchPhoneModel(device, containerId, modelInfo, password = null)
         name: containerId,
         modelId: '',
         localModel: '',
-        modelStatic: ''
+        modelStatic: '',
+        countryCode: modelInfo?.countryCode || 'CN'
       };
 
       if (typeof modelInfo === 'object' && modelInfo !== null && modelInfo.value) {

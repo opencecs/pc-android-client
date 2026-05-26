@@ -381,6 +381,7 @@ const handleUnreadCountChange = (count) => {
 const tempModelName = ref('') // 临时存储机型选择
 const tempModelId = ref('') // 临时存储机型ID
 const switchModelType = ref('online') // 机型切换类型: online, local, backup
+const switchCountryCode = ref('CN') // 切换机型国家代码
 const switchModelDialogVisible = ref(false) // 机型切换对话框可见性
 const currentSwitchContainer = ref(null) // 当前要切换机型的容器
 const switchingModel = ref(false) // 机型切换加载状态
@@ -3250,7 +3251,7 @@ const handleSwitchModelTypeChange = async () => {
 }
 
 // 切换云机机型函数
-const switchCloudMachineModel = async (device, containerName, modelId, modelName) => {
+const switchCloudMachineModel = async (device, containerName, modelId, modelName, countryCode) => {
   if (!device || !containerName || !modelId) {
     console.error('切换机型参数不完整:', device, containerName, modelId, modelName)
     throw new Error('参数不能为空')
@@ -3350,7 +3351,8 @@ const switchCloudMachineModel = async (device, containerName, modelId, modelName
         latitude: 0,
         longitude: 0,
         locateIp: '',
-        locateQueryMethod: 'ip-api'
+        locateQueryMethod: 'ip-api',
+        countryCode: countryCode || 'CN'
       })
       
       // 根据类型设置参数
@@ -3399,7 +3401,8 @@ const switchCloudMachineModel = async (device, containerName, modelId, modelName
                 latitude: 0,
                 longitude: 0,
                 locateIp: '',
-                locateQueryMethod: 'ip-api'
+                locateQueryMethod: 'ip-api',
+                countryCode: countryCode || 'CN'
               })
             }
             
@@ -6036,6 +6039,7 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
           
           // 打开批量切换机型对话框
           batchSwitchModelDialogVisible.value = true
+          if (countryList.value.length === 0) getCountryList(selectedCloudDevice.value?.ip || activeDevice.value?.ip)
         } catch (error) {
           console.error('批量切换机型失败:', error)
           ElMessage.error(`批量切换机型失败: ${error.message || '未知错误'}`)
@@ -12960,10 +12964,12 @@ const handleSwitchModel = async () => {
       tempModelName.value = ''
       tempModelId.value = ''
       switchModelType.value = 'online' // 重置为默认线上机型
+      switchCountryCode.value = 'CN'
       currentSwitchContainer.value = container
       
       // 打开机型切换对话框
       switchModelDialogVisible.value = true
+      if (countryList.value.length === 0) getCountryList(targetDevice.ip)
     } catch (error) {
       if (error !== 'cancel') {
         console.error('切换机型失败:', error)
@@ -13056,7 +13062,8 @@ const confirmSwitchModel = async () => {
         currentSwitchContainer.value.name, 
         {
           value: finalModelId,
-          type: switchModelType.value
+          type: switchModelType.value,
+          countryCode: switchCountryCode.value
         }
       )
       
@@ -15904,9 +15911,9 @@ const executeTask = async (taskId) => {
                   } else {
                     // 非V2容器使用切换机型接口
                     if (cloudManageMode.value === 'slot' && selectedCloudDevice.value) {
-                      await switchCloudMachineModel(selectedCloudDevice.value, containerName, modelInfo, modelName)
+                      await switchCloudMachineModel(selectedCloudDevice.value, containerName, modelInfo, modelName, batchSwitchCountryCode.value)
                     } else {
-                      await switchCloudMachineModel({ ip: target.deviceIp, version: target.deviceVersion || 'v3' }, containerName, modelInfo, modelName)
+                      await switchCloudMachineModel({ ip: target.deviceIp, version: target.deviceVersion || 'v3' }, containerName, modelInfo, modelName, batchSwitchCountryCode.value)
                     }
                     return true
                   }
@@ -16666,6 +16673,7 @@ const selectedBatchModelName = ref('')
 const selectedBatchModelId = ref('')
 const batchSwitchModelTargets = ref([])
 const batchSwitchModelOperationType = ref('switchModel') // 'switchModel' 或 'new'
+const batchSwitchCountryCode = ref('CN') // 批量切换机型国家代码
 
 // 批量新机 - 机型分配相关状态
 const modelSlots = ref([]) // 机型分配槽列表
@@ -21823,6 +21831,22 @@ const handleBindsTest = async () => {
             ></el-option>
           </el-select>
         </el-form-item>
+        <el-form-item :label="$t('common.modelCountry')">
+          <el-select
+            v-model="switchCountryCode"
+            :placeholder="$t('common.pleaseSelectModelCountry')"
+            :loading="countryListLoading"
+            filterable
+            @focus="fetchCountryList"
+          >
+            <el-option
+              v-for="country in countryList"
+              :key="country.countryCode"
+              :label="`${country.countryName} (${getCountryEnglishName(country.countryCode)})`"
+              :value="country.countryCode"
+            ></el-option>
+          </el-select>
+        </el-form-item>
       </el-form>
     </div>
     <template #footer>
@@ -22483,6 +22507,7 @@ const handleBindsTest = async () => {
           </div>
         </div>
         
+        <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px;"><span style="font-size: 13px; white-space: nowrap;">地区选择:</span><el-select v-model="batchSwitchCountryCode" placeholder="选择国家" :loading="countryListLoading" filterable size="small" style="width: 260px;" @focus="fetchCountryList"><el-option v-for="country in countryList" :key="country.countryCode" :label="`${country.countryName} (${getCountryEnglishName(country.countryCode)})`" :value="country.countryCode"></el-option></el-select></div>
         <!-- 机型列表 -->
         <div class="model-slots-container">
           <!-- 确保至少显示一个机型分配槽 -->
