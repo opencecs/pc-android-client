@@ -133,6 +133,8 @@ import {
   SetSharedDirPath,
   ListLocalDirFiles,
   DownloadCloudFile,
+  SelectApkFile,
+  SelectZipFile,
 } from '../bindings/edgeclient/app'
 
 // 导入主机管理组件
@@ -984,7 +986,6 @@ const v3DeviceInfoTimer = ref(null) // V3设备信息定时器
 
 // 文件上传相关
 const fileInput = ref(null) // 文件输入框引用
-const apkFileInput = ref(null) // APK上传输入框引用
 const contextMenuContainerId = ref('') // 当前右键菜单操作的容器ID
 const contextMenuContainer = ref(null) // 当前右键菜单操作的容器对象
 const sharedFilesDialogVisible = ref(false) // 共享文件对话框可见性
@@ -2642,16 +2643,30 @@ const runningSlots = ref(new Set())
 
 // ---- 坑位到期时间缓存工具 ----
 const SLOT_CACHE_TTL = 24 * 3600 * 1000 // 缓存有效期 1 天（毫秒）
+const SLOT_CACHE_TTL_WARN = 60 * 60 * 1000 // 即将过期的坑位缓存 1 小时
 const SLOT_WARN_SECONDS = 3 * 24 * 3600  // 3 天内到期 → 即将到期
 
 const getSlotCacheKey = (deviceId) => `slotStates_${deviceId}`
 
 // 将 API 返回的 child 对象转为 { [slot]: { state, expireTs } }
+// child 可能有两种格式：
+//   1) { "1": 1748xxx, "2": 1748xxx } — slot → 过期时间戳（秒）
+//   2) { "1": { state:0, extime:"2025-06-15", extimeState:0 }, ... } — slot → 对象（v2 API）
 const convertChild = (child) => {
   const now = Math.floor(Date.now() / 1000)
   const converted = {}
-  for (const [slot, expireTs] of Object.entries(child)) {
-    const ts = parseInt(expireTs, 10)
+  console.log('[convertChild] raw child:', JSON.stringify(child))
+  for (const [slot, val] of Object.entries(child)) {
+    // 兼容 v2 格式：val 是对象且包含 state 字段
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      const state = (typeof val.state === 'number') ? val.state : 0
+      const ts = parseInt(val.extime || val.expireTs || 0, 10)
+      console.log(`[convertChild] slot=${slot} v2格式 state=${state} extime=${val.extime} ts=${ts}`)
+      converted[slot] = { state, expireTs: isNaN(ts) ? 0 : ts }
+      continue
+    }
+    // 兼容旧格式：val 是时间戳数字/字符串
+    const ts = parseInt(val, 10)
     let state
     if (isNaN(ts) || ts === 0 || ts < now) {
       state = 2 // 已到期
@@ -2660,18 +2675,22 @@ const convertChild = (child) => {
     } else {
       state = 0 // 正常有效
     }
+    console.log(`[convertChild] slot=${slot} 时间戳格式 val=${val} ts=${ts} now=${now} state=${state}`)
     converted[slot] = { state, expireTs: ts }
   }
   return converted
 }
 
 // 从缓存读取，返回 converted 对象或 null（缓存不存在/已过期）
+// 含有即将过期/已过期坑位时使用短TTL，否则使用长TTL
 const loadSlotCache = (deviceId) => {
   try {
     const raw = localStorage.getItem(getSlotCacheKey(deviceId))
     if (!raw) return null
     const { cachedAt, data } = JSON.parse(raw)
-    if (Date.now() - cachedAt > SLOT_CACHE_TTL) return null
+    const hasWarn = Object.values(data).some(v => v.state === 1 || v.state === 2)
+    const ttl = hasWarn ? SLOT_CACHE_TTL_WARN : SLOT_CACHE_TTL
+    if (Date.now() - cachedAt > ttl) return null
     return data
   } catch {
     return null
@@ -2685,6 +2704,27 @@ const saveSlotCache = (deviceId, converted) => {
       cachedAt: Date.now(),
       data: converted
     }))
+  } catch {}
+}
+
+// 清除指定设备的坑位状态缓存（续费后调用）
+const clearSlotCache = (deviceId) => {
+  try {
+    localStorage.removeItem(getSlotCacheKey(deviceId))
+  } catch {}
+}
+
+// 清除所有设备的坑位状态缓存
+const clearAllSlotCache = () => {
+  try {
+    const keysToRemove = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('slotStates_')) {
+        keysToRemove.push(key)
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k))
   } catch {}
 }
 
@@ -13357,82 +13397,83 @@ const handleFileUpload = () => {
   closeContextMenu()
 }
 
-// 上传APK - 打开文件选择
-const handleApkUpload = () => {
+// 上传APKS - 使用后端文件选择对话框选择ZIP压缩包
+const handleApkUpload = async () => {
   const container = contextMenuContainer.value
   if (!container) {
     ElMessage.error('未找到容器信息')
     closeContextMenu()
     return
   }
-  contextMenuContainerId.value = container.containerId || container.id || container.indexNum || contextMenuSlot.value
-  if (apkFileInput.value) {
-    apkFileInput.value.click()
-  }
+  const containerId = container.containerId || container.id || container.indexNum || contextMenuSlot.value
   closeContextMenu()
-}
 
-// APK文件选择后上传
-const handleApkFileSelect = async (event) => {
-  const file = event.target.files?.[0]
-  if (!file) return
-
-  // 重置input，允许重复选择同一文件
-  event.target.value = ''
-
-  const container = contextMenuContainer.value
-  if (!container || !activeDevice.value?.ip) {
-    ElMessage.error('设备信息不完整，无法上传APK')
+  if (!activeDevice.value?.ip) {
+    ElMessage.error('设备信息不完整，无法上传APKS')
     return
   }
 
-  const password = getDevicePassword(activeDevice.value.ip) || ''
   try {
-    ElMessage.info('正在上传APK安装包...')
-    const result = await InstallAPKs(
-      activeDevice.value.ip,
-      contextMenuContainerId.value,
-      file.path,
-      password
-    )
-    if (result.success) {
-      // 显示安装结果
-      let msg = result.message || 'APK安装包上传成功'
-      if (result.installData) {
-        const installData = result.installData
-        if (typeof installData === 'object') {
-          // 解析安装结果列表
-          const results = []
-          if (Array.isArray(installData)) {
-            installData.forEach(item => {
-              const name = item.name || item.packageName || item.fileName || ''
-              const status = item.success || item.status || item.result || ''
-              if (name || status) results.push(`${name}: ${status}`)
-            })
-          } else {
-            Object.entries(installData).forEach(([key, val]) => {
-              results.push(`${key}: ${typeof val === 'object' ? JSON.stringify(val) : val}`)
-            })
+    // 调用后端 Wails 文件选择对话框，选择ZIP压缩包
+    const selectResult = await SelectZipFile()
+    if (!selectResult.success || !selectResult.path) {
+      if (selectResult.message && selectResult.message !== '用户取消选择') {
+        ElMessage.error(selectResult.message)
+      }
+      return
+    }
+
+    const password = getDevicePassword(activeDevice.value.ip) || ''
+    const fileName = selectResult.path.split(/[/\\]/).pop() || 'APKS压缩包'
+
+    try {
+      ElMessage.info(`正在上传: ${fileName}`)
+      const result = await InstallAPKs(
+        activeDevice.value.ip,
+        containerId,
+        selectResult.path,
+        password
+      )
+      if (result.success) {
+        let msg = result.message || 'APKS安装包上传成功'
+        if (result.installData) {
+          const installData = result.installData
+          if (typeof installData === 'object') {
+            const results = []
+            if (Array.isArray(installData)) {
+              installData.forEach(item => {
+                const name = item.name || item.packageName || item.fileName || ''
+                const status = item.success || item.status || item.result || ''
+                if (name || status) results.push(`${name}: ${status}`)
+              })
+            } else {
+              Object.entries(installData).forEach(([key, val]) => {
+                results.push(`${key}: ${typeof val === 'object' ? JSON.stringify(val) : val}`)
+              })
+            }
+            if (results.length > 0) msg += '\n' + results.join('\n')
+          } else if (typeof installData === 'string') {
+            msg += '\n' + installData
           }
-          if (results.length > 0) msg += '\n' + results.join('\n')
-        } else if (typeof installData === 'string') {
-          msg += '\n' + installData
         }
+        if (result.installResult && typeof result.installResult === 'string') {
+          msg += '\n' + result.installResult
+        }
+        ElMessage.success(msg)
+      } else {
+        let msg = result.message || 'APKS安装失败'
+        if (result.installData) {
+          msg += '\n' + (typeof result.installData === 'string' ? result.installData : JSON.stringify(result.installData))
+        }
+        ElMessage.error(msg)
       }
-      if (result.installResult && typeof result.installResult === 'string') {
-        msg += '\n' + result.installResult
-      }
-      ElMessage.success(msg)
-    } else {
-      let msg = result.message || 'APK安装失败'
-      if (result.installData) {
-        msg += '\n' + (typeof result.installData === 'string' ? result.installData : JSON.stringify(result.installData))
-      }
-      ElMessage.error(msg)
+    } catch (error) {
+      console.error('上传APKS失败:', error)
+      ElMessage.error(`上传失败: ${error.message || error}`)
     }
   } catch (error) {
-    console.error('上传APK失败:', error)
-    ElMessage.error(`上传APK失败: ${error.message || error}`)
+    console.error('选择文件失败:', error)
+    ElMessage.error(`选择文件失败: ${error.message || error}`)
   }
 }
 
@@ -18097,6 +18138,11 @@ const handleSyncAuthorization = async () => {
     } else {
       ElMessage.error(t('common.syncAuthAllFailed'));
     }
+    // 续费/授权同步后，清除坑位状态缓存并刷新当前设备
+    clearAllSlotCache()
+    if (selectedCloudDevice.value) {
+      fetchAndCacheSlotStates(selectedCloudDevice.value.id)
+    }
   } catch (error) {
     console.error('同步授权失败:', error);
     ElMessage.error(t('common.syncAuthFailed'));
@@ -21160,15 +21206,6 @@ const handleBindsTest = async () => {
     type="file"
     style="display: none"
     @change="handleFileSelect"
-  />
-
-  <!-- APK上传输入 -->
-  <input
-    ref="apkFileInput"
-    type="file"
-    accept=".zip"
-    style="display: none"
-    @change="handleApkFileSelect"
   />
 
 

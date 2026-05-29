@@ -3471,7 +3471,7 @@ func (a *App) SelectZipFile() map[string]interface{} {
 	}
 
 	selection, err := a.wailsApp.Dialog.OpenFile().
-		SetTitle("选择模型文件").
+		SetTitle("选择ZIP文件").
 		AddFilter("ZIP文件 (*.zip)", "*.zip").
 		PromptForSingleSelection()
 
@@ -7011,8 +7011,9 @@ func (a *App) UpgradeDeviceWithNewAPI(deviceIP interface{}, latestVersion interf
 	zipFilePath := filepath.Join(updateSDKDir, "myt-sdk.zip")
 
 	// 发起下载请求
-	dlClient := &http.Client{Timeout: 10 * time.Minute}
-		dlResp, err := dlClient.Get(downloadURL)
+	// Timeout 仅用于连接和响应头阶段，body 读取期间不触发整体超时
+	dlClient := &http.Client{}
+	dlResp, err := dlClient.Get(downloadURL)
 	if err != nil {
 		log.Printf("下载SDK包失败: %v", err)
 		return map[string]interface{}{
@@ -7445,8 +7446,9 @@ func (a *App) downloadSDKPackage(version string) (string, error) {
 	downloadURL := sdkResp.Data.DownloadURL
 	log.Printf("[SDK下载] 下载URL: %s", downloadURL)
 	
-	// 2. 下载zip包到updateSDK目录
-	dlResp, err := client.Get(downloadURL)
+	// 2. 下载zip包到updateSDK目录（使用无超时client，避免大文件下载超时）
+	dlClient := &http.Client{}
+	dlResp, err := dlClient.Get(downloadURL)
 	if err != nil {
 		return "", fmt.Errorf("下载SDK包失败: %v", err)
 	}
