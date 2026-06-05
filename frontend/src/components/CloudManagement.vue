@@ -225,12 +225,12 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="restart">{{ t('common.batchRestart') }}</el-dropdown-item>
-                <el-dropdown-item command="reset">{{ t('common.batchReset') }}</el-dropdown-item>
                 <el-dropdown-item command="projection">{{ t('common.batchProjection') }}</el-dropdown-item>
                 <el-dropdown-item command="shutdown">{{ t('common.batchShutdown') }}</el-dropdown-item>
                 <el-dropdown-item command="update-image">{{ t('common.batchUpdateImage') }}</el-dropdown-item>
                 <el-dropdown-item command="switch-backup">{{ t('common.batchSwitchBackup') }}</el-dropdown-item>
                 <el-dropdown-item command="delete" style="color: var(--el-color-danger)">{{ t('common.batchDelete') }}</el-dropdown-item>
+                <el-dropdown-item command="reset">{{ t('common.batchReset') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>

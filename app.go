@@ -2661,7 +2661,8 @@ func dockerExec(deviceIP string, dockerPort int, containerID string, cmd []strin
 	}
 
 	startReq.Header.Set("Content-Type", "application/json")
-	startReq.Body = io.NopCloser(strings.NewReader(`{"Detach":false,"Tty":false}`))
+	// Tty 必须与创建 exec 时一致（创建时 Tty:true，返回原始流不经 multiplexed）
+	startReq.Body = io.NopCloser(strings.NewReader(`{"Detach":false,"Tty":true}`))
 
 	// 添加认证头（所有版本都需要）
 	if password != "" {
@@ -2680,13 +2681,51 @@ func dockerExec(deviceIP string, dockerPort int, containerID string, cmd []strin
 		return DockerExecResult{}, err
 	}
 
-	// Docker API 返回的是 multiplexed stream 格式
-	// 每个消息块的格式：[stream_type(1字节), 0, 0, 0, size(4字节), payload]
-	// 我们需要跳过这些头部，只提取实际内容
-	cleanedOutput := stripDockerStreamHeaders(output)
+	// Tty:true 时 Docker 返回原始流（非 multiplexed），直接读取即可
+	// Tty:false 时返回 multiplexed stream，需要 strip 8字节头部
+	cleanedOutput := sanitizeString(string(output))
+
+	// 查询 exec 的真实退出码
+	exitCode := 0
+	var inspectUrl string
+	if version == "v3" && dockerPort == 8000 {
+		inspectUrl = fmt.Sprintf("http://%s/docker/exec/%s/json", baseAddr, execResp.ID)
+	} else {
+		inspectUrl = fmt.Sprintf("http://%s:%d/exec/%s/json", deviceIP, dockerPort, execResp.ID)
+	}
+	inspectReq, err := http.NewRequest("GET", inspectUrl, nil)
+	if err == nil {
+		if password != "" {
+			inspectReq.SetBasicAuth("admin", password)
+		}
+		inspectResp, err := client.Do(inspectReq)
+		if err == nil {
+			defer inspectResp.Body.Close()
+			inspectBody, err := io.ReadAll(inspectResp.Body)
+			if err == nil {
+				var inspectResult struct {
+					ExitCode int `json:"ExitCode"`
+				}
+				if json.Unmarshal(inspectBody, &inspectResult) == nil {
+					exitCode = inspectResult.ExitCode
+				} else {
+					// 尝试V3 API格式
+					var v3Inspect struct {
+						Code int `json:"code"`
+						Data struct {
+							ExitCode int `json:"ExitCode"`
+						} `json:"data"`
+					}
+					if json.Unmarshal(inspectBody, &v3Inspect) == nil && v3Inspect.Data.ExitCode != 0 {
+						exitCode = v3Inspect.Data.ExitCode
+					}
+				}
+			}
+		}
+	}
 
 	return DockerExecResult{
-		ExitCode: 0,
+		ExitCode: exitCode,
 		Stdout:   cleanedOutput,
 		Stderr:   "",
 	}, nil
@@ -2851,7 +2890,9 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 	// 准备容器内路径
 	fileName := filepath.Base(filePath)
 	uploadPath := "/sdcard/upload/" + fileName
-	installPath := "/data/local/tmp/" + fileName
+	// 安装路径使用安全的纯ASCII文件名，避免 sd -c 的 ax shell 无法处理括号/中文等特殊字符
+	safeInstallName := fmt.Sprintf("_install_%d.apk", time.Now().UnixNano())
+	installPath := "/data/local/tmp/" + safeInstallName
 
 
 	// 只复制文件到临时目录，不删除源文件
@@ -2914,26 +2955,86 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 		installCmd := fmt.Sprintf("pm install %s %s", strings.Join(installFlags, " "), installPath)
 		log.Printf("[InstallAPK] 执行安装命令: %s", installCmd)
 		
+		resultFile := "/data/local/tmp/_install_result.txt"
+		scriptFile := "/data/local/tmp/_install.sh"
+		
+		// sd -c 的 ax shell 不支持重定向/&&等操作符
+		// 方案：将安装脚本写入文件，用 sd -c sh 执行脚本
+		// 1) 写入安装脚本（在容器侧直接写，不需要 sd -c）
+		script := fmt.Sprintf("#!/system/bin/sh\n%s > %s 2>&1\n", installCmd, resultFile)
+		// 使用 base64 编码写脚本，避免特殊字符和换行符的转义问题
+		scriptB64 := base64.StdEncoding.EncodeToString([]byte(script))
+		dockerExec(deviceIP, dockerPort, container.ID,
+			[]string{"sh", "-c", fmt.Sprintf("echo %s | base64 -d > %s && chmod 755 %s", scriptB64, scriptFile, scriptFile)},
+			password, version)
+		
+		// 清除旧结果文件
+		dockerExec(deviceIP, dockerPort, container.ID,
+			[]string{"sh", "-c", fmt.Sprintf("rm -f %s", resultFile)}, password, version)
+		
+		// 2) 通过 sd -c 执行脚本
 		installResult, err := dockerExec(
-			deviceIP, 
-			dockerPort, 
-			container.ID, 
-			[]string{"sh", "-c", fmt.Sprintf("sd -c '%s'", installCmd)},
-			password, 
-			version,
+			deviceIP, dockerPort, container.ID,
+			[]string{"sh", "-c", fmt.Sprintf("sd -c 'sh %s'", scriptFile)},
+			password, version,
 		)
 		
-		if err != nil || installResult.ExitCode != 0 {
-			log.Printf("[InstallAPK] 安装失败: exitCode=%d, stderr=%s", installResult.ExitCode, installResult.Stderr)
+		log.Printf("[InstallAPK] 安装命令已发送, dockerExec返回: err=%v, exitCode=%d, stdout=%s", err, installResult.ExitCode, installResult.Stdout)
+		
+		// sd -c 异步执行，轮询等待结果文件
+		const maxWaitSeconds = 60
+		var installOutput string
+		
+		for i := 0; i < maxWaitSeconds; i++ {
+			time.Sleep(2 * time.Second)
 			
-			// 清理临时文件
+			// 在容器内直接读取结果文件（不需要 sd -c，文件在容器文件系统上）
+			readResult, readErr := dockerExec(
+				deviceIP, dockerPort, container.ID,
+				[]string{"sh", "-c", fmt.Sprintf("cat %s 2>/dev/null", resultFile)},
+				password, version,
+			)
+			
+			if readErr != nil {
+				log.Printf("[InstallAPK] 读取结果文件失败: %v", readErr)
+				continue
+			}
+			
+			readOutput := strings.TrimSpace(readResult.Stdout)
+			if readOutput == "" {
+				// 结果文件还不存在或为空，继续等待
+				log.Printf("[InstallAPK] 等待安装完成... (%d/%ds)", (i+1)*2, maxWaitSeconds*2)
+				continue
+			}
+			
+			installOutput = readOutput
+			log.Printf("[InstallAPK] 读取到安装结果: %s", installOutput)
+			break
+		}
+		
+		// 清理脚本文件
+		dockerExec(deviceIP, dockerPort, container.ID,
+			[]string{"sh", "-c", fmt.Sprintf("rm -f %s", scriptFile)}, password, version)
+		
+		// 检查安装结果
+		installFailed := installOutput == "" || strings.Contains(installOutput, "Failure") || !strings.Contains(installOutput, "Success")
+		if installFailed {
+			failMsg := installResult.Stderr
+			if installOutput != "" {
+				failMsg = installOutput
+			}
+			log.Printf("[InstallAPK] 安装失败: exitCode=%d, output=%s, stderr=%s", installResult.ExitCode, installOutput, installResult.Stderr)
+			
+			// 清理临时文件和结果文件
+			dockerExec(deviceIP, dockerPort, container.ID, 
+				[]string{"sh", "-c", fmt.Sprintf("rm -f %s", resultFile)}, password, version)
 			dockerExec(deviceIP, dockerPort, container.ID, 
 				[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", installPath)}, 
 				password, version)
 			
 			return map[string]interface{}{
 				"success": false,
-				"message": fmt.Sprintf("APK安装失败: %s", installResult.Stderr),
+				"message": fmt.Sprintf("APK安装失败: %s", failMsg),
 				"uploadPath":  uploadPath,
 				"installPath": installPath,
 			}
@@ -2941,7 +3042,9 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 		
 		log.Printf("[InstallAPK] APK安装成功: %s", fileName)
 		
-		// 清理临时安装文件（保留上传目录的文件）
+		// 清理临时文件和安装结果文件
+		dockerExec(deviceIP, dockerPort, container.ID, 
+			[]string{"sh", "-c", fmt.Sprintf("rm -f %s", resultFile)}, password, version)
 		dockerExec(deviceIP, dockerPort, container.ID, 
 			[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", installPath)}, 
 			password, version)
