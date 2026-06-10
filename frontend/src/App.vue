@@ -11,7 +11,7 @@ const getDeviceAddr = (ip) => {
 
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, reactive, getCurrentInstance } from 'vue'
 import axios from 'axios'
-import { More, Plus, Loading, Warning, Refresh, Download, Delete, Close, Switch, Upload, QuestionFilled, List, Timer, InfoFilled, ArrowRight, ArrowDown, Back, FolderOpened, Document, CircleCheck, CircleClose, Setting, BellFilled, WarningFilled, Rank } from '@element-plus/icons-vue'
+import { More, Plus, Loading, Warning, Refresh, Download, Delete, Close, Switch, Upload, QuestionFilled, List, Timer, InfoFilled, ArrowRight, ArrowDown, Back, FolderOpened, Document, CircleCheck, CircleClose, Setting, BellFilled, WarningFilled, Rank, Connection } from '@element-plus/icons-vue'
 import { Events } from '@wailsio/runtime'
 // 导入模型管理组件
 import ModelManagement from './components/modelManagement.vue'
@@ -241,6 +241,88 @@ const runningTasksCount = computed(() => {
 const settingsDialogVisible = ref(false)
 const storagePathInfo = ref({ path: '', isDefault: true, defaultPath: '' })
 const settingsLoading = ref(false)
+const isDarkTheme = ref(localStorage.getItem('theme-mode') === 'dark')
+
+// 跟随 Element Plus 官方做法：切换 html.dark class
+const applyThemeMode = () => {
+  const html = document.documentElement
+  html.classList.toggle('dark', isDarkTheme.value)
+  html.style.colorScheme = isDarkTheme.value ? 'dark' : 'light'
+}
+
+// 批量查找并替换 DOM 中计算后仍为白色/浅灰的背景色
+const fixDarkBackgrounds = () => {
+  if (!isDarkTheme.value) return
+  const lightBgs = {
+    'rgb(255, 255, 255)': 'rgb(23, 32, 51)',
+    'rgba(255, 255, 255, 1)': 'rgb(23, 32, 51)',
+    'rgb(245, 247, 250)': 'rgb(30, 41, 59)',
+    'rgb(240, 242, 245)': 'rgb(30, 41, 59)',
+    'rgb(250, 250, 250)': 'rgb(30, 41, 59)',
+    'rgb(245, 245, 245)': 'rgb(30, 41, 59)',
+    'rgb(255, 247, 230)': 'rgb(42, 36, 20)',
+  }
+  const all = document.querySelectorAll('*')
+  for (const el of all) {
+    const bg = getComputedStyle(el).backgroundColor
+    const replacement = lightBgs[bg]
+    if (replacement) {
+      el.style.setProperty('background-color', replacement, 'important')
+      el.dataset.darkBg = '1'
+    }
+  }
+}
+
+// 清除 fixDarkBackgrounds 注入的内联背景色，恢复组件原始样式
+const clearDarkOverrides = () => {
+  document.querySelectorAll('[data-dark-bg]').forEach(el => {
+    el.style.removeProperty('background-color')
+    delete el.dataset.darkBg
+  })
+}
+
+// MutationObserver: 深色模式下持续修复新增 DOM 节点的白色背景
+let darkObserver = null
+const startDarkObserver = () => {
+  if (darkObserver) return
+  darkObserver = new MutationObserver(() => {
+    if (isDarkTheme.value) fixDarkBackgrounds()
+  })
+  darkObserver.observe(document.body, { childList: true, subtree: true })
+}
+const stopDarkObserver = () => {
+  if (darkObserver) { darkObserver.disconnect(); darkObserver = null }
+}
+
+const toggleThemeMode = () => {
+  isDarkTheme.value = !isDarkTheme.value
+  localStorage.setItem('theme-mode', isDarkTheme.value ? 'dark' : 'light')
+  applyThemeMode()
+  if (isDarkTheme.value) {
+    requestAnimationFrame(fixDarkBackgrounds)
+    startDarkObserver()
+  } else {
+    stopDarkObserver()
+    clearDarkOverrides()
+  }
+  cleanupThemeResidue()
+  ElMessage.success(isDarkTheme.value ? '已切换为夜间模式' : '已切换为日间模式')
+}
+
+const cleanupThemeResidue = () => {
+  document.querySelectorAll('.dark').forEach(el => {
+    if (el !== document.documentElement) {
+      el.classList.remove('dark')
+    }
+  })
+}
+
+applyThemeMode()
+cleanupThemeResidue()
+if (isDarkTheme.value) {
+  requestAnimationFrame(fixDarkBackgrounds)
+  startDarkObserver()
+}
 
 const openSettingsDialog = async () => {
   settingsDialogVisible.value = true
@@ -1604,6 +1686,105 @@ const handleUpgradeDevice = async (device) => {
     if (error !== 'cancel') {
       ElMessage.error(`设备 ${device.ip} 升级失败: ${error.message}`)
     }
+  }
+}
+
+// 设置VPC对话框
+const vpcSetDialogVisible = ref(false)
+const vpcSetGroupList = ref([])
+const vpcSetGroupId = ref('')
+const vpcSetNodeId = ref('')
+const vpcSetSelectMode = ref('random')
+const vpcSetLoading = ref(false)
+
+// 打开设置VPC对话框
+const openVpcSetDialog = async () => {
+  const container = getCurrentContextMenuContainer()
+  if (!container) { ElMessage.warning('请先选择云机'); return }
+  if (!activeDevice.value?.ip) { ElMessage.warning('设备信息无效'); return }
+
+  vpcSetGroupId.value = ''
+  vpcSetNodeId.value = ''
+  vpcSetSelectMode.value = 'random'
+  vpcSetDialogVisible.value = true
+  vpcSetLoading.value = true
+
+  try {
+    const savedPassword = getDevicePassword(activeDevice.value.ip)
+    const headers = {}
+    if (savedPassword) headers['Authorization'] = `Basic ${btoa(`admin:${savedPassword}`)}`
+
+    const response = await fetch(`http://${getDeviceAddr(activeDevice.value.ip)}/mytVpc/group`, { headers })
+    if (response.ok) {
+      const data = await response.json()
+      if (data.code === 0) {
+        vpcSetGroupList.value = data.data?.list || []
+      } else {
+        ElMessage.error(data.message || '获取VPC分组失败')
+      }
+    } else {
+      ElMessage.error('获取VPC分组失败')
+    }
+  } catch (error) {
+    console.error('获取VPC分组失败:', error)
+    ElMessage.error('获取VPC分组失败')
+  } finally {
+    vpcSetLoading.value = false
+  }
+}
+
+// 获取当前选中分组下的节点列表
+const vpcSetNodeList = computed(() => {
+  const group = vpcSetGroupList.value.find(g => g.id === vpcSetGroupId.value)
+  return group?.vpcs?.list || []
+})
+
+// 提交设置VPC
+const submitVpcSet = async () => {
+  const container = getCurrentContextMenuContainer()
+  if (!container?.name) { ElMessage.warning('云机信息无效'); return }
+  if (!vpcSetGroupId.value) { ElMessage.warning('请选择分组'); return }
+
+  let vpcId = ''
+  if (vpcSetSelectMode.value === 'random') {
+    const nodes = vpcSetNodeList.value
+    if (!nodes.length) { ElMessage.warning('该分组下没有可用节点'); return }
+    vpcId = nodes[Math.floor(Math.random() * nodes.length)].id
+  } else {
+    if (!vpcSetNodeId.value) { ElMessage.warning('请选择节点'); return }
+    vpcId = vpcSetNodeId.value
+  }
+
+  vpcSetLoading.value = true
+  try {
+    const savedPassword = getDevicePassword(activeDevice.value.ip)
+    const headers = { 'Content-Type': 'application/json' }
+    if (savedPassword) headers['Authorization'] = `Basic ${btoa(`admin:${savedPassword}`)}`
+
+    const response = await fetch(
+      `http://${getDeviceAddr(activeDevice.value.ip)}/mytVpc/addRule/batch`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ names: [container.name], vpcID: vpcId })
+      }
+    )
+    if (response.ok) {
+      const data = await response.json()
+      if (data.code === 0) {
+        ElMessage.success('设置VPC节点成功')
+        vpcSetDialogVisible.value = false
+      } else {
+        ElMessage.error(data.message || '设置VPC失败')
+      }
+    } else {
+      ElMessage.error('设置VPC失败')
+    }
+  } catch (error) {
+    console.error('设置VPC失败:', error)
+    ElMessage.error('设置VPC失败')
+  } finally {
+    vpcSetLoading.value = false
   }
 }
 
@@ -18752,7 +18933,7 @@ const handleBindsTest = async () => {
         </el-tooltip>
         
         <!-- 更新菜单组件 -->
-        <UpdateMenu @show-update-dialog="handleShowUpdateDialog" />
+        <UpdateMenu :is-dark="isDarkTheme" @show-update-dialog="handleShowUpdateDialog" @theme-mode-change="toggleThemeMode" />
       </div>
       
       <!-- 标签页 -->
@@ -18764,10 +18945,13 @@ const handleBindsTest = async () => {
               <el-icon><More /></el-icon>
             </el-button>
             <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item>{{ t('common.settings') }}</el-dropdown-item>
-            <el-dropdown-item divided>{{ t('menu.logout') }}</el-dropdown-item>
-          </el-dropdown-menu>
+        <el-dropdown-menu>
+          <el-dropdown-item @click="toggleThemeMode">
+            切换主题颜色模式
+          </el-dropdown-item>
+          <el-dropdown-item @click="openSettingsDialog" divided>{{ t('common.settings') }}</el-dropdown-item>
+          <el-dropdown-item divided>{{ t('menu.logout') }}</el-dropdown-item>
+        </el-dropdown-menu>
         </template>
           </el-dropdown>
         </template>
@@ -21099,6 +21283,32 @@ const handleBindsTest = async () => {
     </template>
   </el-dialog>
 
+  <!-- 设置VPC对话框 -->
+  <el-dialog v-model="vpcSetDialogVisible" :title="$t('cloudMachine.setVpc')" width="450px" :close-on-click-modal="false">
+    <div v-loading="vpcSetLoading">
+      <el-form label-width="80px">
+        <el-form-item :label="$t('common.selectGroup')">
+          <el-select v-model="vpcSetGroupId" :placeholder="$t('common.selectGroup')" clearable style="width: 100%">
+            <el-option v-for="group in vpcSetGroupList" :key="group.id" :label="group.alias" :value="group.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="vpcSetGroupId" :label="$t('common.selectNode')">
+          <el-radio-group v-model="vpcSetSelectMode" style="margin-bottom: 8px;">
+            <el-radio value="random">{{ $t('common.randomNode') }}</el-radio>
+            <el-radio value="specified">{{ $t('common.specifiedNode') }}</el-radio>
+          </el-radio-group>
+          <el-select v-if="vpcSetSelectMode === 'specified'" v-model="vpcSetNodeId" :placeholder="$t('common.selectNode')" style="width: 100%">
+            <el-option v-for="node in vpcSetNodeList" :key="node.id" :label="node.remarks || node.id" :value="node.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+    </div>
+    <template #footer>
+      <el-button @click="vpcSetDialogVisible = false">{{ $t('common.cancel') }}</el-button>
+      <el-button type="primary" @click="submitVpcSet" :loading="vpcSetLoading">{{ $t('common.confirm') }}</el-button>
+    </template>
+  </el-dialog>
+
   <!-- 移动实例对话框 -->
   <el-dialog v-model="moveInstanceDialogVisible" :title="$t('cloudMachine.moveInstance')" width="420px">
     <el-form :model="moveInstanceForm" label-width="100px">
@@ -21178,6 +21388,10 @@ const handleBindsTest = async () => {
    <div class="context-menu-item" @click="closeS5Agent">
      <el-icon><Close /></el-icon>
      <span>{{ $t('cloudMachine.closeS5Agent') }}</span>
+   </div>
+   <div class="context-menu-item" @click="openVpcSetDialog">
+     <el-icon><Connection /></el-icon>
+     <span>{{ $t('cloudMachine.setVpc') }}</span>
    </div>
    <div class="context-menu-item" @click="handleSwitchBackup">
      <el-icon><Switch /></el-icon>

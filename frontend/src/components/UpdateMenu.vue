@@ -60,6 +60,22 @@
             </div>
           </el-dropdown-item>
 
+          <el-dropdown-item command="theme-mode">
+            <div class="menu-switch-item">
+              <div class="menu-switch-label">
+                <el-icon class="theme-icon"><component :is="isDark ? Moon : Sunny" /></el-icon>
+                <span>切换主题颜色模式</span>
+              </div>
+              <el-switch
+                v-model="isDark"
+                size="small"
+                active-color="#2563EB"
+                inactive-color="#94A3B8"
+                @click.stop
+              />
+            </div>
+          </el-dropdown-item>
+
           <el-dropdown-divider />
 
           <!-- <el-dropdown-item command="settings-page">
@@ -86,7 +102,7 @@
 
 <script setup>
 import { ref, computed, watch, getCurrentInstance } from 'vue';
-import { MoreFilled, Search, InfoFilled, Clock, Download, Setting } from '@element-plus/icons-vue';
+import { MoreFilled, Search, InfoFilled, Clock, Download, Setting, Moon, Sunny } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import AboutDialog from './AboutDialog.vue';
 import UpdateSettingsDialog from './UpdateSettingsDialog.vue';
@@ -111,7 +127,14 @@ const t = (key, params) => {
   }
 }
 
-const emit = defineEmits(['check-update', 'show-update-dialog']);
+const emit = defineEmits(['check-update', 'show-update-dialog', 'theme-mode-change']);
+
+const props = defineProps({
+  isDark: {
+    type: Boolean,
+    default: false
+  }
+});
 
 const {
   state,
@@ -126,6 +149,10 @@ const aboutDialogVisible = ref(false);
 const settingsDialogVisible = ref(false);
 const autoCheckLocal = ref(state.autoCheck);
 const autoUpdateLocal = ref(state.autoUpdate);
+const isDark = computed({
+  get: () => props.isDark,
+  set: (val) => emit('theme-mode-change', val)
+})
 
 const settingsConfig = ref({
   autoCheck: state.autoCheck,
@@ -179,10 +206,13 @@ const handleCommand = (command) => {
     case 'settings-page':
       settingsDialogVisible.value = true;
       break;
+    case 'theme-mode':
+      isDark.value = !isDark.value
+      break;
     default:
       break;
   }
-};
+}
 
 const handleCheckUpdate = async () => {
   await checkForUpdate();
@@ -357,5 +387,46 @@ getVersionInfo();
 
 :deep(.el-dropdown-menu__item .el-switch) {
   flex-shrink: 0;
+}
+
+:deep(.dark .update-menu-button) {
+  color: #cbd5e1;
+}
+:deep(.dark .update-menu-button:hover) {
+  background: #1e293b;
+  color: #60a5fa;
+}
+
+:deep(.dark .menu-badge.checking) {
+  background: #0c3556;
+  color: #93c5fd;
+}
+
+:deep(.dark .menu-badge.available) {
+  background: #14391f;
+  color: #86efac;
+}
+
+:deep(.dark .update-dropdown-menu),
+:deep(.dark .el-dropdown-menu) {
+  background: #172033;
+  border-color: #334155;
+  color: #e5e7eb;
+}
+
+:deep(.dark .update-dropdown-menu .el-dropdown-menu__item),
+:deep(.dark .el-dropdown-menu .el-dropdown-menu__item) {
+  background: #172033;
+  color: #e5e7eb;
+}
+
+:deep(.dark .update-dropdown-menu .el-dropdown-menu__item:hover),
+:deep(.dark .el-dropdown-menu .el-dropdown-menu__item:hover) {
+  background: #1e293b;
+  color: #bfdbfe;
+}
+
+:deep(.dark .menu-switch-label) {
+  color: #e5e7eb;
 }
 </style>

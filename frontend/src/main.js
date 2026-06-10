@@ -1,8 +1,9 @@
 import { createApp, reactive } from 'vue'
 import App from './App.vue'
-import './style.css';
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
+import 'element-plus/theme-chalk/dark/css-vars.css'
+import './style.css';
 import axios from 'axios'
 
 // 翻译消息数据
@@ -1695,6 +1696,7 @@ const messages = {
       shutdown: '关机',
       setS5Agent: '设置S5代理',
       closeS5Agent: '关闭安卓内SOCKS5代理',
+      setVpc: '设置VPC',
       fileUpload: '上传文件',
       apkUpload: '上传APKS',
       oneKeyNewDevice: '一键新机',
@@ -3431,6 +3433,7 @@ const messages = {
       shutdown: 'Shutdown',
       setS5Agent: 'Set S5 Proxy',
       closeS5Agent: 'Close Android SOCKS5 Proxy',
+      setVpc: 'Set VPC',
       fileUpload: 'Upload File',
       apkUpload: 'Upload APKS',
       oneKeyNewDevice: 'One-Click New Device',

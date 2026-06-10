@@ -99,7 +99,7 @@
                         <el-pagination background layout="prev, pager, next, jumper" :current-page="currentPage"
                             :page-size="pageSize" :total="displayTotal" @current-change="handleCurrentChange"
                             @size-change="handleSizeChange"></el-pagination>
-                        <div class="total-text">{{ $t('instance.totalCount') }}{{ displayTotal }}</div>
+                        <!-- <div class="total-text">{{ $t('instance.totalCount') }}{{ displayTotal }}</div> -->
                     </div>
                 </div>
             </div>
@@ -1895,7 +1895,7 @@ defineExpose({
   margin-top: 20px;
   padding: 0 20px; */
   position: absolute;
-  bottom: -26px;
+  bottom: 0px;
   right: 20px;
 }
 </style>

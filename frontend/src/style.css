@@ -1,17 +1,97 @@
+/* ========= 日间模式 ========= */
 html {
-    background-color: rgba(27, 38, 54, 1);
-    /* text-align: center; */
-    color: white;
+    background-color: #f5f7fa;
+    color: #303133;
 }
 
-body {
-    margin: 0;
-    color: white;
-    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
-    "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-    sans-serif;
+/* ========= 深色模式 ========= */
+/* Element Plus 官方 dark/css-vars.css 处理所有组件变量，这里只补 EP 覆盖不到的 */
+html.dark {
+    background-color: #0f172a;
+    color: #e2e8f0;
+
+    --el-bg-color: #0f172a;
+    --el-bg-color-overlay: #172033;
+    --el-bg-color-page: #0f172a;
+    --el-fill-color-blank: #172033;
+
+    /* EP scoped 按钮 */
+    html.dark .el-button.el-button--primary { background-color: var(--el-color-primary) !important; border-color: var(--el-color-primary) !important; color: #fff !important; }
+    html.dark .el-button.el-button--primary:hover { background-color: var(--el-color-primary-light-3) !important; border-color: var(--el-color-primary-light-3) !important; color: #fff !important; }
+    html.dark .el-button.el-button--success { background-color: var(--el-color-success) !important; border-color: var(--el-color-success) !important; color: #fff !important; }
+    html.dark .el-button.el-button--success:hover { background-color: var(--el-color-success-light-3) !important; border-color: var(--el-color-success-light-3) !important; color: #fff !important; }
+    html.dark .el-button.el-button--warning { background-color: var(--el-color-warning) !important; border-color: var(--el-color-warning) !important; color: #fff !important; }
+    html.dark .el-button.el-button--warning:hover { background-color: var(--el-color-warning-light-3) !important; border-color: var(--el-color-warning-light-3) !important; color: #fff !important; }
+    html.dark .el-button.el-button--danger { background-color: var(--el-color-danger) !important; border-color: var(--el-color-danger) !important; color: #fff !important; }
+    html.dark .el-button.el-button--danger:hover { background-color: var(--el-color-danger-light-3) !important; border-color: var(--el-color-danger-light-3) !important; color: #fff !important; }
+    html.dark .el-button.el-button--info { background-color: var(--el-color-info) !important; border-color: var(--el-color-info) !important; color: #fff !important; }
+    html.dark .el-button.el-button--info:hover { background-color: var(--el-color-info-light-3) !important; border-color: var(--el-color-info-light-3) !important; color: #fff !important; }
+
+    html.dark .el-button:not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(.el-button--danger):not(.el-button--info) {
+        background-color: var(--el-fill-color-blank) !important;
+        border-color: var(--el-border-color) !important;
+        color: var(--el-text-color-regular) !important;
+    }
+    html.dark .el-button:not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(.el-button--danger):not(.el-button--info):hover {
+        background-color: var(--el-fill-color) !important;
+        border-color: var(--el-border-color-light) !important;
+        color: var(--el-text-color-primary) !important;
+    }
+
+    html.dark .el-button--primary.is-plain { background-color: var(--el-fill-color-blank) !important; border-color: var(--el-color-primary) !important; color: var(--el-color-primary) !important; }
+    html.dark .el-button--success.is-plain { background-color: var(--el-fill-color-blank) !important; border-color: var(--el-color-success) !important; color: var(--el-color-success) !important; }
+    html.dark .el-button--danger.is-plain { background-color: var(--el-fill-color-blank) !important; border-color: var(--el-color-danger) !important; color: var(--el-color-danger) !important; }
 }
 
+/* ========= 页面结构 ========= */
+html.dark body {
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+html.dark body * {
+    color-scheme: dark;
+}
+
+html.dark .app-container,
+html.dark .app-main,
+html.dark #app {
+    background-color: #0f172a;
+    color: #e2e8f0;
+}
+
+html.dark .el-main {
+    padding: 0 !important;
+}
+
+html.dark .el-scrollbar__wrap {
+    scrollbar-color: #334155 #0f172a;
+}
+
+/* ========= 深色模式：强制覆盖所有白色/浅色背景 ========= */
+/* 组件 <style> 和内联样式中硬编码的 #fff/white/#f5f7fa 等日间背景色 */
+html.dark [style*="background: white"],
+html.dark [style*="background:#fff"],
+html.dark [style*="background: #fff"],
+html.dark [style*="background-color: white"],
+html.dark [style*="background-color:#fff"],
+html.dark [style*="background-color: #fff"],
+html.dark [style*="background: #ffffff"],
+html.dark [style*="background-color: #ffffff"],
+html.dark [style*="background: #f5f7fa"],
+html.dark [style*="background-color: #f5f7fa"],
+html.dark [style*="background: #f0f2f5"],
+html.dark [style*="background-color: #f0f2f5"],
+html.dark [style*="background: #fafafa"],
+html.dark [style*="background-color: #fafafa"],
+html.dark [style*="background: #f5f5f5"],
+html.dark [style*="background-color: #f5f5f5"],
+html.dark [style*="background: #fff7e6"],
+html.dark [style*="background-color: #fff7e6"] {
+    background-color: #172033 !important;
+}
+
+/* ========= 字体 ========= */
 @font-face {
     font-family: "Nunito";
     font-style: normal;
@@ -22,5 +102,4 @@ body {
 
 #app {
     height: 100vh;
-    /* text-align: center; */
 }
