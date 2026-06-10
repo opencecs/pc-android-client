@@ -612,7 +612,9 @@ const isR1qDevice = (deviceIP) => {
   // 支持 r1q 和 eces-rk3588-rk1828 机型
   const isR1q = info.rk182x === 'y' && version.includes('r1q')
   const isEces = model.includes('eces-rk3588-rk1828') || version.includes('eces-rk3588-rk1828')
-  return isR1q || isEces
+  const isR1s = model.includes('eces-rk3588s') || info.rk182x === 'y'
+  const isM50 = info.houmoM50 === 'y'
+  return isR1q || isEces || isR1s || isM50
 }
 
 // 在线且为支持机型的设备列表（用于设置抽屉）

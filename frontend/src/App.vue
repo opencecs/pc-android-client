@@ -14370,20 +14370,19 @@ const handleAddDevice = (device) => {
   }
   
   try {
-    // 按 id 或 ip 去重：同 ip 的设备已存在则更新其 id/name，不重复添加
-    const existingByIp = devices.value.find(d => d.ip === device.ip)
-    if (existingByIp) {
-      // 用新数据更新已有设备（修正 id/name 等字段）
-      Object.assign(existingByIp, device)
-      console.log(`设备 ${device.ip} 已存在，更新数据`)
+    // 以设备ID为主键去重：同ID更新属性，同IP不同ID视为不同设备，允许共存
+    const existingById = devices.value.find(d => d.id === device.id)
+    if (existingById) {
+      // 同一设备，更新可能变更的属性（IP变更、版本升级等）
+      existingById.ip = device.ip
+      existingById.version = device.version
+      existingById.name = device.name
+      existingById.type = device.type
+      console.log(`设备 ${device.id} 已存在，更新属性: ip=${device.ip}, version=${device.version}`)
       saveDevicesToLocalStorage()
       return
     }
-    const existingById = devices.value.find(d => d.id === device.id)
-    if (existingById) {
-      console.log(`设备 ${device.ip} 已存在（id重复），跳过`)
-      return
-    }
+    // 同IP不同ID：不同设备（同IP多设备场景），不做合并，直接添加
     
     if (!device.group) {
       device.group = '默认分组'
@@ -17314,19 +17313,28 @@ const discoverAndLoadDevices = async () => {
     // 发现设备
     const discoveredDevices = await discoverDevices()
     
-    // 以设备ID为比对，更新现有设备的IP信息
+    // 以设备ID为比对，同步更新现有设备的属性变更（IP变更、版本升级等）
     const discoveredDevicesMap = new Map(discoveredDevices.map(device => [device.id, device]))
-    const discoveredDeviceIds = new Set(discoveredDevicesMap.keys())
-    
-    // ⚠️ 完全禁用状态更新，避免与心跳检测系统冲突
-    // 心跳检测系统会通过 TCP Ping + HTTP 验证来管理设备状态
-    // mDNS 发现功能仅用于手动添加设备时的设备列表展示
-    // console.log('[发现设备] mDNS 扫描完成，发现', discoveredDevices.length, '个设备')
-    // console.log('[发现设备] 设备状态由心跳检测系统统一管理，不在此处更新')
-    
-    // 不修改任何设备信息，不修改任何状态
-    
-    // 设备列表保持不变，只更新现有设备的状态
+
+    // 同步已发现设备的属性到 devices.value（仅更新属性，不改状态，不与心跳冲突）
+    devices.value.forEach(device => {
+      const discovered = discoveredDevicesMap.get(device.id)
+      if (discovered) {
+        // 同ID：正常属性更新
+        if (device.version !== discovered.version) {
+          console.log(`[发现设备] 设备 ${device.ip} 版本变更: ${device.version} → ${discovered.version}`)
+          device.version = discovered.version
+        }
+        if (device.ip !== discovered.ip) {
+          console.log(`[发现设备] 设备ID ${device.id} IP变更: ${device.ip} → ${discovered.ip}`)
+          device.ip = discovered.ip
+        }
+        if (device.name !== discovered.name) {
+          device.name = discovered.name
+        }
+      }
+      // 同IP不同ID：不合并，视为不同设备
+    })
     
     // 不自动设置默认设备和获取容器列表，保持selectedCloudDevice为空，显示12个空坑位
     activeDevice.value = null
@@ -17485,8 +17493,8 @@ const initDeviceHeartbeat = async () => {
     await ResetAllDevicesOffline();
     console.log('[心跳] ✓ 已重置所有设备为离线状态');
     
-    // 收集所有设备IP
-    const deviceIPs = devices.value.map(device => device.ip);
+    // 收集所有设备IP（去重，避免同IP多设备重复发送）
+    const deviceIPs = [...new Set(devices.value.map(device => device.ip))];
     
     if (deviceIPs.length === 0) {
       console.warn('[心跳] ⚠️ 当前设备列表为空，但仍启动心跳服务（设备添加后会自动监控）');
@@ -17817,8 +17825,9 @@ const fetchDevicesStatusFromBackend = async () => {
 // 更新监控设备列表（当设备列表变化时调用）
 const updateHeartbeatDevices = async () => {
   try {
-    const deviceIPs = devices.value.map(device => device.ip);
+    const deviceIPs = [...new Set(devices.value.map(device => device.ip))];
     const deviceNamesMap = {}
+    // 同IP多设备时，以最后添加的设备名称为准
     devices.value.forEach(d => { deviceNamesMap[d.ip] = d.name || d.ip })
     await updateMonitoredDevices(deviceIPs, deviceNamesMap);
     // console.log('[心跳] 已更新监控设备列表');

@@ -242,6 +242,7 @@ func (a *App) doAIStream(req AIChatRequest, sess *aiSession) error {
 		isInThink     bool
 		thinkBuf      strings.Builder
 		chunkBuf      strings.Builder
+		reasoningBuf  strings.Builder  // 独立的 reasoning 缓冲（不通过 think 标签的），等 flush 一并推送
 	)
 	// tool_calls 增量累积：index → { id, name, argsStr }
 	toolCallMap := make(map[int]map[string]interface{})
@@ -255,12 +256,15 @@ func (a *App) doAIStream(req AIChatRequest, sess *aiSession) error {
 
 	flushPending := func() {
 		content := chunkBuf.String()
-		reasoning := ""
+		reasoning := reasoningBuf.String()
+		reasoningBuf.Reset()
 		// 把 thinkBuf 里已确定在 think 标签内的内容也一并推送
 		if isInThink {
-			reasoning = thinkBuf.String()
-			fullReasoning.WriteString(reasoning)
+			reasoning += thinkBuf.String()
 			thinkBuf.Reset()
+		}
+		if reasoning != "" {
+			fullReasoning.WriteString(reasoning)
 		}
 		if content != "" || reasoning != "" {
 			fullContent.WriteString(content)
@@ -301,8 +305,9 @@ func (a *App) doAIStream(req AIChatRequest, sess *aiSession) error {
 	var chunk struct {
 		Choices []struct {
 			Delta struct {
-				Content   string `json:"content"`
-				Reasoning string `json:"reasoning"`
+				Content         string `json:"content"`
+				Reasoning       string `json:"reasoning"`
+				ReasoningContent string `json:"reasoning_content"` // M50 qwen3.5 使用此字段
 				ToolCalls []struct {
 					Index    int    `json:"index"`
 					ID       string `json:"id"`
@@ -372,48 +377,49 @@ func (a *App) doAIStream(req AIChatRequest, sess *aiSession) error {
 			}
 		}
 
-		// 处理 reasoning 字段（兼容旧版）
-		if delta.Reasoning != "" {
-			fullReasoning.WriteString(delta.Reasoning)
-			a.emitEvent("ai:chunk:"+req.SessionID, map[string]interface{}{
-				"content":   "",
-				"reasoning": delta.Reasoning,
-			})
-		}
+	// 处理 reasoning / reasoning_content 字段
+	// reasoning: 旧版/部分模型使用
+	// reasoning_content: M50 qwen3.5 使用（官方 API 文档明确指定此字段名）
+	// 注意：不直接 emitEvent，写入 reasoningBuf 等 flushPending 批量推送，避免事件洪泛卡顿
+	reasoningChunk := delta.Reasoning
+	if delta.ReasoningContent != "" {
+		reasoningChunk = delta.ReasoningContent
+	}
+	if reasoningChunk != "" {
+		// 写入 reasoningBuf，等 flushPending 批量推送
+		reasoningBuf.WriteString(reasoningChunk)
+	}
 
-		// 处理 content，同时解析 <think> 标签
-		if delta.Content != "" {
-			thinkBuf.WriteString(delta.Content)
-			for {
-				cur := thinkBuf.String()
-				if !isInThink {
-					idx := strings.Index(cur, "<think>")
-					if idx < 0 {
-						chunkBuf.WriteString(cur)
-						thinkBuf.Reset()
-						break
-					}
-					chunkBuf.WriteString(cur[:idx])
+	// 处理 content，同时解析  homosex 标签
+	if delta.Content != "" {
+		thinkBuf.WriteString(delta.Content)
+		for {
+			cur := thinkBuf.String()
+			if !isInThink {
+				idx := strings.Index(cur, " homosex")
+				if idx < 0 {
+					chunkBuf.WriteString(cur)
 					thinkBuf.Reset()
-					thinkBuf.WriteString(cur[idx+7:])
-					isInThink = true
-				} else {
-					idx := strings.Index(cur, "</think>")
-					if idx < 0 {
-						break
-					}
-					reasoning := cur[:idx]
-					fullReasoning.WriteString(reasoning)
-					a.emitEvent("ai:chunk:"+req.SessionID, map[string]interface{}{
-						"content":   "",
-						"reasoning": reasoning,
-					})
-					thinkBuf.Reset()
-					thinkBuf.WriteString(cur[idx+8:])
-					isInThink = false
+					break
 				}
+				chunkBuf.WriteString(cur[:idx])
+				thinkBuf.Reset()
+				thinkBuf.WriteString(cur[idx+7:])
+				isInThink = true
+			} else {
+				idx := strings.Index(cur, " ")
+				if idx < 0 {
+					break
+				}
+				reasoning := cur[:idx]
+				// 不直接 emitEvent，写入 reasoningBuf 等 flushPending 批量推送
+				reasoningBuf.WriteString(reasoning)
+				thinkBuf.Reset()
+				thinkBuf.WriteString(cur[idx+8:])
+				isInThink = false
 			}
 		}
+	}
 
 		// 检查是否到了 flush 时机
 		select {

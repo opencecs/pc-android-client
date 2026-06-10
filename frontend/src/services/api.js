@@ -150,34 +150,42 @@ async function discoverDevices() {
     // 处理返回的设备数据
     const onlineDevices = discoveredDevices.map(d => new DeviceInfo(d.ip, d.type, d.id, d.name, d.version));
 
-    // 创建IP到设备的映射，便于快速查找
-    const onlineDeviceMap = new Map(onlineDevices.map(device => [device.ip, device]));
+    // 以设备ID为主键建立映射，避免同IP设备互相覆盖
+    const onlineDeviceMap = new Map(onlineDevices.filter(d => d.id).map(device => [device.id, device]));
 
     // 增量更新设备列表
     const updatedDevices = [];
-    const updatedDeviceIps = new Set();
+    const updatedDeviceIds = new Set();
 
-    // 1. 更新缓存中存在且当前在线的设备
+    // 1. 更新缓存中存在且当前在线的设备（按ID匹配）
     cachedDevices.forEach(cachedDevice => {
-      if (onlineDeviceMap.has(cachedDevice.ip)) {
-        // 设备在线，更新设备信息
-        const onlineDevice = onlineDeviceMap.get(cachedDevice.ip);
-        updatedDevices.push(onlineDevice);
-        updatedDeviceIps.add(cachedDevice.ip);
-        onlineDeviceMap.delete(cachedDevice.ip); // 从在线设备映射中移除，剩下的就是新设备
+      if (cachedDevice.id && onlineDeviceMap.has(cachedDevice.id)) {
+        // 设备在线，同步属性变更（IP变更、版本升级等），保留缓存对象引用
+        const onlineDevice = onlineDeviceMap.get(cachedDevice.id);
+        cachedDevice.ip = onlineDevice.ip;
+        cachedDevice.version = onlineDevice.version;
+        cachedDevice.name = onlineDevice.name;
+        cachedDevice.type = onlineDevice.type;
+        cachedDevice.isOnline = true;
+        cachedDevice.lastSeen = new Date();
+        updatedDevices.push(cachedDevice);
+        updatedDeviceIds.add(cachedDevice.id);
+        onlineDeviceMap.delete(cachedDevice.id);
       } else {
-        // 设备离线，更新状态
+        // 设备离线，保留缓存数据
         cachedDevice.isOnline = false;
         cachedDevice.lastSeen = new Date();
         updatedDevices.push(cachedDevice);
-        updatedDeviceIps.add(cachedDevice.ip);
+        updatedDeviceIds.add(cachedDevice.id || cachedDevice.ip);
       }
     });
 
     // 2. 添加新发现的设备
     onlineDeviceMap.forEach(newDevice => {
+      newDevice.isOnline = true;
+      newDevice.lastSeen = new Date();
       updatedDevices.push(newDevice);
-      updatedDeviceIps.add(newDevice.ip);
+      updatedDeviceIds.add(newDevice.id);
     });
 
     // 3. 保存更新后的设备列表到缓存

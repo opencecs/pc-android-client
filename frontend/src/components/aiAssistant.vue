@@ -874,7 +874,9 @@ const onlineDevices = computed(() => {
     const model = (info.model || '').toLowerCase()
     const isR1q = info.rk182x === 'y' && version.includes('r1q')
     const isEces = model.includes('eces-rk3588-rk1828') || version.includes('eces-rk3588-rk1828')
-    return isR1q || isEces
+    const isR1s = model.includes('eces-rk3588s') || info.rk182x === 'y'
+    const isM50 = info.houmoM50 === 'y'
+    return isR1q || isEces || isR1s || isM50
   })
   
   console.log('******支持AI的设备列表:', aiSupportedDevices)
@@ -1273,9 +1275,15 @@ const syncRunningModels = async () => {
       loadedModel.value = null
       return
     }
-    // 兼容两种格式
-    const modelsList = raw?.object === 'list' ? raw
-      : (raw?.data?.object === 'list' ? raw.data : null)
+    // 兼容多种格式（同 pollModelStatus）
+    let modelsList = null
+    if (raw?.object === 'list' && Array.isArray(raw?.data)) {
+      modelsList = raw
+    } else if (raw?.data?.object === 'list' && Array.isArray(raw?.data?.data)) {
+      modelsList = raw.data
+    } else if (Array.isArray(raw?.data)) {
+      modelsList = { data: raw.data }
+    }
     if (!modelsList?.data?.length) {
       loadedModel.value = null
       return
@@ -1283,13 +1291,20 @@ const syncRunningModels = async () => {
     const runningIds = modelsList.data.map(m => m.id)
     console.log('[syncRunningModels] 设备运行中的模型:', runningIds)
 
-    // 对话模型：在 modelList 中找匹配的
-    const runningChat = modelList.value.find(m => runningIds.includes(m.name))
+    // 对话模型：在 modelList 中找匹配（精确匹配 或 互相包含，兼容M50的gguf文件名id）
+    const runningChat = modelList.value.find(m =>
+      runningIds.includes(m.name) ||
+      runningIds.some(rid => rid.includes(m.name) || m.name.includes(rid))
+    )
     loadedModel.value = runningChat || null
     if (runningChat) {
       selectedModelName.value = runningChat.name
       selectedModel.value = runningChat
-      localOpenAIConfig.value.model = runningChat.name  // 同步模型名，避免发送时用旧值
+      // M50的llama-server要求model用实际id（如"himodel.gguf"），RK3588用name即可
+      const matchedRunningId = runningIds.find(rid =>
+        rid === runningChat.name || rid.includes(runningChat.name) || runningChat.name.includes(rid)
+      )
+      localOpenAIConfig.value.model = matchedRunningId || runningChat.name
     }
 
     if (runningChat) console.log('[syncRunningModels] 对话模型已同步:', runningChat.name)
@@ -1376,22 +1391,35 @@ const pollModelStatus = async (modelName, maxAttempts = 15, interval = 2000) => 
       if (result?.success) {
         const raw = result.data
         const rawCode = raw?.code
-        console.log(`[pollModelStatus] 第 ${attempt} 次 code=${rawCode} raw:`, JSON.stringify(raw))
+        console.log(`[pollModelStatus] 第 ${attempt} 次 code=${rawCode} raw:`, JSON.stringify(raw).substring(0, 500))
 
         // 502 = 启动中，继续等待
         if (rawCode === 502 || rawCode === '502') {
           console.log(`[pollModelStatus] 设备启动中(502)，继续等待...`)
         } else {
-          // 两种就绪格式:
+          // 兼容多种返回格式：
           // A) 直接返回 { object:'list', data:[...] }（无 code 字段）
           // B) 包在外层 { code:0, data:{ object:'list', data:[...] } }
-          const modelsList = raw?.object === 'list' ? raw
-            : (raw?.data?.object === 'list' ? raw.data : null)
+          // C) M50 llama-server 可能直接返回 { data:[{id:'xxx',...}] } 或其他格式
+          let modelsList = null
+          if (raw?.object === 'list' && Array.isArray(raw?.data)) {
+            modelsList = raw
+          } else if (raw?.data?.object === 'list' && Array.isArray(raw?.data?.data)) {
+            modelsList = raw.data
+          } else if (Array.isArray(raw?.data)) {
+            // C) { data: [...] } 格式，data是数组直接就是模型列表
+            modelsList = { data: raw.data }
+          }
 
           if (modelsList?.data?.length > 0) {
             const runningModels = modelsList.data
             console.log(`[pollModelStatus] 当前运行模型:`, runningModels.map(m => m.id))
-            const targetModel = runningModels.find(m => m.id === modelName)
+            // 匹配模型：精确匹配 或 互相包含（M50的id是gguf文件名，如"himodel.gguf"，而selectedModelName可能是"himodel"）
+            const targetModel = runningModels.find(m =>
+              m.id === modelName ||
+              m.id.includes(modelName) ||
+              modelName.includes(m.id)
+            )
             if (targetModel) {
               console.log(`[pollModelStatus] ✅ 模型已启动:`, targetModel)
               if (progressMessage) progressMessage.close()
@@ -1402,7 +1430,7 @@ const pollModelStatus = async (modelName, maxAttempts = 15, interval = 2000) => 
               console.log(`[pollModelStatus] 模型尚未出现在列表中，继续等待...`)
             }
           } else {
-            console.log(`[pollModelStatus] 模型列表为空，继续等待...`)
+            console.log(`[pollModelStatus] 模型列表为空，继续等待... raw keys:`, Object.keys(raw || {}))
           }
         }
       } else {
@@ -2506,11 +2534,21 @@ const startLLMService = async (showMessage = true) => {
     console.log('[startLLMService] 对话模型:', selectedModelName.value, '  isVLM:', isVLM)
     console.log('[startLLMService] 对话模型文件:', JSON.stringify(chatFiles))
 
+    // 根据设备类型区分校验逻辑：M50后摩只需.gguf，RK3588需要四件套
+    const deviceInfo = deviceModelsCache.value.get(selectedDevice.value.ip)
+    const isM50Device = deviceInfo && deviceInfo.houmoM50 === 'y'
+
     const missingFiles = []
-    if (!chatFiles.modelPath) missingFiles.push('模型文件(.rknn)')
-    if (!chatFiles.weightPath) missingFiles.push('权重文件(.weight)')
     if (!chatFiles.vocabPath) missingFiles.push('词表文件(.gguf)')
-    if (!chatFiles.embedPath) missingFiles.push('嵌入文件(.embed.bin)')
+    if (isM50Device) {
+      // M50后摩：只需要.gguf文件
+      // 不再检查 .rknn / .weight / .embed.bin
+    } else {
+      // RK3588：必须四件套
+      if (!chatFiles.modelPath) missingFiles.push('模型文件(.rknn)')
+      if (!chatFiles.weightPath) missingFiles.push('权重文件(.weight)')
+      if (!chatFiles.embedPath) missingFiles.push('嵌入文件(.embed.bin)')
+    }
     if (isVLM && !chatFiles.model2Path) missingFiles.push('视觉模型文件(vision_*.rknn)')
     if (isVLM && !chatFiles.weight2Path) missingFiles.push('视觉权重文件(vision_*.weight)')
     if (missingFiles.length > 0) {
@@ -2529,30 +2567,9 @@ const startLLMService = async (showMessage = true) => {
     }
 
     // 对话模型 embedding:false
-    modelConfig.models[selectedModelName.value] = isVLM ? {
+    const baseModelConfig = {
       alias: selectedModelName.value,
-      model: chatFiles.modelPath,
-      weight: chatFiles.weightPath,
-      model2: chatFiles.model2Path,
-      weight2: chatFiles.weight2Path,
-      model3: "", weight3: "",
-      vocab: chatFiles.vocabPath,
-      embed: chatFiles.embedPath,
-      "mel-filter": "", "ctx-size": 2048, "predict": -1,
-      "temp": 0.8, "top-k": 1, "top-p": 0.8,
-      "repeat-penalty": 1.1, "presence-penalty": 1.0, "frequency-penalty": 1.0,
-      "img-start": "<|vision_start|>", "img-end": "<|vision_end|>", "img-content": "<|image_pad|>",
-      "audio-start": "", "audio-end": "", "audio-content": "",
-      "img-width": 392, "img-height": 392,
-      "chat-template-file": chatFiles.chatTemplateFile,
-      "embedding": false
-    } : {
-      alias: selectedModelName.value,
-      model: chatFiles.modelPath,
-      weight: chatFiles.weightPath,
       model2: "", weight2: "", model3: "", weight3: "",
-      vocab: chatFiles.vocabPath,
-      embed: chatFiles.embedPath,
       "mel-filter": "", "ctx-size": 2048, "predict": -1,
       "temp": 0.8, "top-k": 1, "top-p": 0.8,
       "repeat-penalty": 1.1, "presence-penalty": 1.0, "frequency-penalty": 1.0,
@@ -2561,6 +2578,36 @@ const startLLMService = async (showMessage = true) => {
       "img-width": 0, "img-height": 0,
       "chat-template-file": chatFiles.chatTemplateFile,
       "embedding": false
+    }
+
+    if (isM50Device) {
+      // M50后摩：.gguf就是模型文件，model字段必填指向gguf路径
+      modelConfig.models[selectedModelName.value] = {
+        ...baseModelConfig,
+        model: chatFiles.vocabPath,
+        vocab: chatFiles.vocabPath,
+      }
+    } else if (isVLM) {
+      modelConfig.models[selectedModelName.value] = {
+        ...baseModelConfig,
+        model: chatFiles.modelPath,
+        weight: chatFiles.weightPath,
+        model2: chatFiles.model2Path,
+        weight2: chatFiles.weight2Path,
+        vocab: chatFiles.vocabPath,
+        embed: chatFiles.embedPath,
+        "img-start": "<|vision_start|>", "img-end": "<|vision_end|>", "img-content": "<|image_pad|>",
+        "img-width": 392, "img-height": 392,
+      }
+    } else {
+      // RK3588 非VLM：四件套
+      modelConfig.models[selectedModelName.value] = {
+        ...baseModelConfig,
+        model: chatFiles.modelPath,
+        weight: chatFiles.weightPath,
+        vocab: chatFiles.vocabPath,
+        embed: chatFiles.embedPath,
+      }
     }
 
     console.log('[startLLMService] 启动配置（models 数量:', Object.keys(modelConfig.models).length, '):', JSON.stringify(modelConfig, null, 2))
@@ -2574,11 +2621,12 @@ const startLLMService = async (showMessage = true) => {
       return false
     }
 
-    // 等待对话模型就绪（最多 3 分钟，每 5 秒一次）
+    // 等待对话模型就绪（M50大模型加载慢，最长10分钟，每5秒一次）
+    const maxPollAttempts = isM50Device ? 120 : 36
     console.log('[startLLMService] 等待对话模型就绪...')
-    const chatReady = await pollModelStatus(selectedModelName.value, 36, 5000)
+    const chatReady = await pollModelStatus(selectedModelName.value, maxPollAttempts, 5000)
     if (!chatReady) {
-      const errMsg = '对话模型启动超时（超过3分钟），请检查设备状态'
+      const errMsg = `对话模型启动超时（超过${isM50Device ? '10' : '3'}分钟），请检查设备状态`
       console.error('[startLLMService]', errMsg)
       if (showMessage) ElMessage.error(errMsg)
       return false

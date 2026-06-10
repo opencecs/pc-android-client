@@ -1668,7 +1668,10 @@ func (a *App) GetWebplayerAsset(path string) string {
 // emitEvent 发送事件到前端 (V3事件系统)
 func (a *App) emitEvent(eventName string, data interface{}) {
 	if a.wailsApp != nil {
-		a.log.Info("[Event] 发送事件: %s", eventName)
+		// 只对非 chunk 类事件打印日志，chunk 事件频率太高会刷屏且影响性能
+		if !strings.HasPrefix(eventName, "ai:chunk:") {
+			a.log.Info("[Event] 发送事件: %s", eventName)
+		}
 		a.wailsApp.Event.Emit(eventName, data)
 	} else {
 		a.log.Error("[Event] 无法发送事件 %s: wailsApp 未初始化", eventName)

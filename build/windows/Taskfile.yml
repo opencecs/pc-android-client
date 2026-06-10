@@ -31,7 +31,7 @@ tasks:
     summary: 从源码编译 RPA 静态库 libmytrpc.a（MinGW）
     dir: rpa/libmytrpc
     env:
-      PATH: '{{.LOCALAPPDATA}}\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin;{{.PATH}}'
+      PATH: 'C:\ProgramData\chocolatey\bin;C:\Go\bin;E:\nodejs;{{.PATH}}'
     cmds:
       - cmd: g++ -c -O2 -std=c++11 -DWIN32 -DLIBMYTRPC_EXPORTS -I. -Ijsoncpp stdafx.cpp -o stdafx.o
         platforms: [windows]
@@ -155,7 +155,7 @@ tasks:
           done | tr '\n' ' '
       LDFLAGS:
         sh: |
-          python build/get_version.py 2>/dev/null | grep "^##vso\[task.setvariable variable=LDFLAGS;\]" | sed 's/##vso\[task.setvariable variable=LDFLAGS;\]//' || echo "-X edgeclient/updater.AppVersion=1.7.9 -X edgeclient/updater.BuildTime=unknown -w -s -H windowsgui"
+          python build/get_version.py 2>/dev/null | grep "^##vso\[task.setvariable variable=LDFLAGS;\]" | sed 's/##vso\[task.setvariable variable=LDFLAGS;\]//' || echo "-X edgeclient/updater.AppVersion=1.8.0 -X edgeclient/updater.BuildTime=unknown -w -s -H windowsgui"
 
   package:
     summary: Packages the application

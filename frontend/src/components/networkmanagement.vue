@@ -963,12 +963,20 @@
                                             <div style="color: #909399; margin-top: 4px;">现代化的VPN协议，性能优秀</div>
                                         </div>
 
-                                        <div>
+                                        <div style="margin-bottom: 12px;">
                                             <div style="font-weight: bold; color: #409EFF; margin-bottom: 4px;">8. Hysteria2协议</div>
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 hysteria2://auth@server:port?sni=xxx&insecure=1&obfs-password=xxx#remarks
                                             </div>
                                             <div style="color: #909399; margin-top: 4px;">基于QUIC的高性能代理协议</div>
+                                        </div>
+
+                                        <div>
+                                            <div style="font-weight: bold; color: #409EFF; margin-bottom: 4px;">9. SSTP协议</div>
+                                            <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
+                                                sstp://username:password@server:port?sni=xxx&insecure=1#remarks
+                                            </div>
+                                            <div style="color: #909399; margin-top: 4px;">基于HTTPS的安全套接字隧道协议，用户名和密码可为空</div>
                                         </div>
                                     </div>
                                 </el-collapse-item>
@@ -1615,12 +1623,20 @@
                                             <div style="color: #909399; margin-top: 4px;">Modernized VPN protocol with excellent performance</div>
                                         </div>
 
-                                        <div>
+                                        <div style="margin-bottom: 12px;">
                                             <div style="font-weight: bold; color: #409EFF; margin-bottom: 4px;">8. Hysteria2 Protocol</div>
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 hysteria2://auth@server:port?sni=xxx&insecure=1&obfs-password=xxx#remarks
                                             </div>
                                             <div style="color: #909399; margin-top: 4px;">High-performance proxy protocol based on QUIC</div>
+                                        </div>
+
+                                        <div>
+                                            <div style="font-weight: bold; color: #409EFF; margin-bottom: 4px;">9. SSTP Protocol</div>
+                                            <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
+                                                sstp://username:password@server:port?sni=xxx&insecure=1#remarks
+                                            </div>
+                                            <div style="color: #909399; margin-top: 4px;">Secure Socket Tunneling Protocol over HTTPS, username and password can be empty</div>
                                         </div>
                                     </div>
                                 </el-collapse-item>
@@ -2113,6 +2129,8 @@
                                     <div class="protocol-item">http格式: server/port/user/password/remarks/  （用户名和密码可不填）</div>
                                     <div class="protocol-item">wireguard格式: privateKey@server:port?publickey=xxx&address=xxx&mtu=xxx#remarks</div>
                                     <div class="protocol-item">hysteria2格式: auth@server:port?sni=xxx&insecure=1&obfs-password=xxx#remarks</div>
+                                    <div class="protocol-item">sstp格式: username:password@server:port?sni=xxx&insecure=1#remarks （用户名和密码可不填）</div>
+                                    <div class="protocol-item">ssh格式: user:password@server:port</div>
                                 </div>
                             </template>
                             <el-button type="primary" link class="protocol-btn">
@@ -2885,7 +2903,8 @@ const protocolOptions = [
     { label: 'socks', value: '5' },
     { label: 'http', value: '6' },
     { label: 'wireguard', value: '7' },
-    { label: 'hysteria2', value: '8' }
+    { label: 'hysteria2', value: '8' },
+    { label: 'sstp', value: '9' },
 ]
 
 const selectedProtocolLabel = ref('') // 当前选中的协议label
@@ -3290,7 +3309,8 @@ const handleSubmit = async () => {
                     '3': 'ss://',
                     '4': 'trojan://',
                     '7': 'wireguard://',
-                    '8': 'hysteria2://'
+                    '8': 'hysteria2://',
+                    '9': 'sstp://'
                 }
                 const prefix = protocolPrefixes[formData.protocol]
                 if (prefix) {
@@ -4483,7 +4503,8 @@ const validateProtocolMatch = (address, expectedProtocol) => {
         '5': 'socks://',
         '6': 'http://',
         '7': 'wireguard://',
-        '8': 'hysteria2://'
+        '8': 'hysteria2://',
+        '9': 'sstp://'
     }
 
     const expectedPrefix = protocolPrefixes[expectedProtocol]
@@ -4518,7 +4539,8 @@ const validateBatchAddresses = (addresses, protocol) => {
         '5': 'IP/端口/用户名/密码/节点别名',
         '6': 'IP/端口/用户名/密码/节点别名',
         '7': 'wireguard://privateKey@server:port',
-        '8': 'hysteria2://auth@server:port'
+        '8': 'hysteria2://auth@server:port',
+        '9': 'sstp://username:password@server:port'
     }
 
     addresses.forEach(address => {
