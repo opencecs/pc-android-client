@@ -2161,6 +2161,29 @@
                             show-password />
                     </el-form-item>
                 </template> -->
+
+                <!-- socks 中转配置：逐条配对 -->
+                <el-form-item v-if="formData.protocol === '5' && addressLines.length > 0" label="中转配置" class="via-config-form-item">
+                    <div v-for="(line, i) in addressLines" :key="i" class="via-config-item">
+                        <div class="via-config-addr" :title="line">#{{ i + 1 }} {{ line }}</div>
+                        <div class="via-config-row">
+                            <el-select :model-value="(viaConfigs[i] || {}).mode || 'none'" @change="val => updateViaConfig(i, { mode: val })"
+                                class="via-config-mode" size="small">
+                                <el-option label="不中转" value="none" />
+                                <el-option label="已有VPC" value="vpcId" />
+                                <el-option label="中转链接" value="address" />
+                            </el-select>
+                            <el-select v-if="(viaConfigs[i] || {}).mode === 'vpcId'"
+                                :model-value="(viaConfigs[i] || {}).vpcId || ''" @change="val => updateViaConfig(i, { vpcId: Number(val) })"
+                                placeholder="选择VPC节点" size="small" class="via-config-value">
+                                <el-option v-for="n in existingNodes" :key="n.id" :label="n.label" :value="n.id" />
+                            </el-select>
+                            <el-input v-if="(viaConfigs[i] || {}).mode === 'address'"
+                                :model-value="(viaConfigs[i] || {}).address || ''" @input="val => updateViaConfig(i, { address: val })"
+                                placeholder="vless://uuid@server:port?..." size="small" class="via-config-value" />
+                        </div>
+                    </div>
+                </el-form-item>
             </el-form>
             <template #footer>
                 <span class="dialog-footer">
@@ -2878,12 +2901,31 @@ const formData = reactive({
     type: 1,
     protocol: null,
     addresses: []
-    // remarks: '',
-    // socksIp: '',
-    // socksPort: '',
-    // socksUser: '',
-    // socksPassword: ''
 })
+
+// socks 中转配置：按行索引存储
+const viaConfigs = ref({})
+
+// 从已有 VPC 分组中提取所有节点，用于中转下拉选择
+const existingNodes = computed(() => {
+    const nodes = []
+    for (const g of groupList.value) {
+        for (const n of g.vpcs?.list || []) {
+            nodes.push({ id: n.id, label: `${g.alias} / ${n.remarks || n.protocol}` })
+        }
+    }
+    return nodes
+})
+
+// 解析当前地址文本为行数组
+const addressLines = computed(() => {
+    if (formData.type !== 2 || !formData.addresses) return []
+    const text = Array.isArray(formData.addresses) ? formData.addresses[0] || '' : formData.addresses || ''
+    if (!text.trim()) return []
+    return text.split(/[，,]/).map(a => a.trim()).filter(Boolean)
+})
+
+const isSocks = computed(() => formData.protocol === '5')
 
 // 监听类型切换，清空之前的内容
 watch(() => formData.type, (newType, oldType) => {
@@ -2892,8 +2934,23 @@ watch(() => formData.type, (newType, oldType) => {
         formData.addresses = []
         formData.protocol = null
         selectedProtocolLabel.value = ''
+        viaConfigs.value = {}
     }
 })
+
+// 监听协议切换，清空中转配置
+watch(() => formData.protocol, () => {
+    viaConfigs.value = {}
+})
+
+// 更新中转配置
+const updateViaConfig = (index, patch) => {
+    const existing = viaConfigs.value[index] || { mode: 'none', vpcId: 0, address: '' }
+    viaConfigs.value = {
+        ...viaConfigs.value,
+        [index]: { ...existing, ...patch }
+    }
+}
 
 const protocolOptions = [
     { label: 'vmess', value: '1' },
@@ -3363,11 +3420,33 @@ const handleSubmit = async () => {
 
             submitLoading.value = true
             try {
+                // 组装中转参数（与 addresses 一一对应）
+                const viaVpcIds = []
+                const viaAddresses = []
+                if (formData.protocol === '5' && formData.type === 2) {
+                    for (let i = 0; i < addresses.length; i++) {
+                        const cfg = viaConfigs.value[i]
+                        if (cfg?.mode === 'vpcId' && cfg.vpcId) {
+                            viaVpcIds.push(cfg.vpcId)
+                        } else if (cfg?.mode === 'address' && cfg.address?.trim()) {
+                            viaAddresses.push(cfg.address.trim())
+                        }
+                    }
+                }
+
                 let submitData = {
                     alias: formData.alias,
                     url: formData.url,
                     source: formData.type,
                     addresses: addresses
+                }
+
+                // socks 协议添加中转参数
+                if (viaVpcIds.length > 0) {
+                    submitData.viaVpcIds = viaVpcIds
+                }
+                if (viaAddresses.length > 0) {
+                    submitData.viaAddresses = viaAddresses
                 }
 
                 let submitUrl = `http://${getDeviceAddr(selectedDeviceIP.value)}/mytVpc/group`
@@ -3394,6 +3473,7 @@ const handleSubmit = async () => {
                         formData.addresses = []
                         formData.protocol = null
                         selectedProtocolLabel.value = ''
+                        viaConfigs.value = {}
                         fetchGroupList()
                     } else {
                         ElMessage.error(data.message || `${t('network.addGroup')}失败`)
@@ -5179,6 +5259,47 @@ defineExpose({
 }
 
 :deep(.el-table__body-wrapper) {
-   max-height: calc(100vh - 400px) !important; 
+   max-height: calc(100vh - 400px) !important;
+}
+
+.via-config-form-item :deep(.el-form-item__content) {
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.via-config-item {
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    border: 1px solid #ebeef5;
+    border-radius: 4px;
+    background: #f5f7fa;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.via-config-addr {
+    font-size: 11px;
+    color: #909399;
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.via-config-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.via-config-mode {
+    width: 110px;
+    flex-shrink: 0;
+}
+
+.via-config-value {
+    flex: 1;
+    min-width: 0;
 }
 </style>

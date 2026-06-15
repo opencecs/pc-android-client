@@ -23,10 +23,11 @@ import (
 
 // AIChatMessage 单条对话消息（与 OpenAI 格式兼容）
 // ToolCalls/ToolCallID 用于 RPA Agent function calling
-// Content 使用 *string 支持 null（assistant + tool_calls 时 content 为空字符串""）
+// Content 使用 interface{} 支持 string、null、以及多模态数组格式
+// 纯文本: "hello"  多模态: [{type:"text",text:"..."},{type:"image_url",image_url:{url:"..."}}]
 type AIChatMessage struct {
 	Role       string      `json:"role"`
-	Content    *string     `json:"content"`                // 指针，允许为 null（omitempty 对指针 nil 生效）
+	Content    interface{} `json:"content"`                // string | null | []multimodal content
 	ToolCalls  interface{} `json:"tool_calls,omitempty"`   // assistant 消息的工具调用列表
 	ToolCallID string      `json:"tool_call_id,omitempty"` // tool 消息的调用 ID
 	Name       string      `json:"name,omitempty"`         // tool 消息的工具名（可选）
@@ -146,7 +147,13 @@ func (a *App) AISendMessage(req AIChatRequest) map[string]interface{} {
 		for i, m := range req.Messages {
 			content := ""
 			if m.Content != nil {
-				content = *m.Content
+				switch v := m.Content.(type) {
+				case string:
+					content = v
+				default:
+					b, _ := json.Marshal(m.Content)
+					content = string(b)
+				}
 			}
 			log.Printf("[AIService]   msg[%d] role=%s content=%q", i, m.Role, truncate(content, 100))
 		}

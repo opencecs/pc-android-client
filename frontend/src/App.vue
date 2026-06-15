@@ -135,6 +135,7 @@ import {
   DownloadCloudFile,
   SelectApkFile,
   SelectZipFile,
+  GetVPCProxies,
 } from '../bindings/edgeclient/app'
 
 // 导入主机管理组件
@@ -191,6 +192,7 @@ const instances = ref([]) // 当前选中设备的容器列表，每个坑位只
 const allInstances = ref([]) // 当前选中设备的所有容器，用于备份切换
 const cloudMachines = ref([]) // 当前选中设备的云机列表
 const deviceCloudMachinesCache = ref(new Map()) // 设备云机缓存，存储每个设备的云机列表，键为设备IP
+const deviceAllInstancesCache = ref(new Map()) // 设备全量容器缓存（含备份），用于批量模式切换备份
 const cloudManageMode = ref('slot') // slot: 坑位模式, batch: 批量模式
 const cloudMachineGroups = ref([]) // 云机分组数据
 const selectedCloudDevice = ref(null) // 当前选中的云机设备
@@ -491,9 +493,10 @@ const s5ProxyForm = ref({
   username: '',
   password: '',
   vpcInfo: '',
-  dnsMode: 'server' // local: 本地域名解析, server: 服务端域名解析
+  dnsMode: 'server', // local: 本地域名解析, server: 服务端域名解析
 })
 const s5ProxyLoading = ref(false)
+const vpcProxyList = ref([]) // VPC代理列表，中转设置-已有VPC选项使用
 
 // 重命名相关状态
 const renameDialogVisible = ref(false)
@@ -1273,12 +1276,15 @@ watch(currentRightTab, async (newTab, oldTab) => {
 // 从本地存储加载设备列表
 const loadDevicesFromLocalStorage = () => {
   try {
+    // 清空 api.js 的设备缓存，避免 deviceCache 中积累的历史离线设备干扰
+    localStorage.removeItem('deviceCache')
+
     const savedDevices = localStorage.getItem('edgeclient_devices')
     if (savedDevices) {
       const parsedDevices = JSON.parse(savedDevices)
       devices.value = parsedDevices
       console.log('从本地存储加载设备列表成功，共', parsedDevices.length, '个设备')
-      
+
       // ⚠️ 初始化设备状态为 offline，等待心跳检测验证
       // 避免启动时显示假的在线状态
       parsedDevices.forEach(device => {
@@ -1934,6 +1940,9 @@ const createForm = ref({
   s5Port: '', // 代理服务器端口
   s5User: '', // 代理用户名
   s5Password: '', // 代理密码
+  s5RelayType: '0', // 中转类型，0-不中转，1-已有VPC，2-中转链接
+  s5RelayVpcId: '', // 已有VPC的ID
+  s5RelayAddress: '', // 中转链接地址
   enableMagisk: false,
   enableGMS: false,
   enforce: true, // 安全模式，默认开启
@@ -3065,6 +3074,9 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
       s5Port: '',
       s5User: '',
       s5Password: '',
+      s5RelayType: '0',
+      s5RelayVpcId: '',
+      s5RelayAddress: '',
       enableMagisk: false,
       enableGMS: false,
       enforce: true, // 安全模式，默认开启
@@ -3131,6 +3143,9 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
       s5Port: '',
       s5User: '',
       s5Password: '',
+      s5RelayType: '0',
+      s5RelayVpcId: '',
+      s5RelayAddress: '',
       enableMagisk: false,
       enableGMS: false,
       enforce: true, // 安全模式，默认开启
@@ -3149,6 +3164,39 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
   
   // 先显示创建对话框
   createDialogVisible.value = true
+
+  // 加载VPC代理列表（中转设置使用），从设备API获取真实节点
+  try {
+    const targetDevice = activeDevice.value
+    if (targetDevice?.ip) {
+      const savedPassword = getDevicePassword(targetDevice.ip)
+      const headers = {}
+      if (savedPassword) headers['Authorization'] = `Basic ${btoa(`admin:${savedPassword}`)}`
+      const resp = await fetch(`http://${getDeviceAddr(targetDevice.ip)}/mytVpc/group`, { headers })
+      if (resp.ok) {
+        const data = await resp.json()
+        if (data.code === 0) {
+          const groups = data.data?.list || []
+          const nodes = []
+          for (const g of groups) {
+            for (const n of g.vpcs?.list || []) {
+              nodes.push({ id: n.id, name: `${g.alias} / ${n.remarks || n.protocol}`, ip: n.remarks || n.protocol })
+            }
+          }
+          vpcProxyList.value = nodes
+        } else {
+          vpcProxyList.value = []
+        }
+      } else {
+        vpcProxyList.value = []
+      }
+    } else {
+      vpcProxyList.value = []
+    }
+  } catch (e) {
+    console.warn('加载VPC代理列表失败:', e)
+    vpcProxyList.value = []
+  }
 
   if (mode === 'multi-device-batch') {
     selectedBatchDevices.value = []
@@ -5749,13 +5797,8 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
           
           for (const container of projectionContainersToOperate) {
             try {
-              if (cloudManageMode.value === 'slot' && selectedCloudDevice.value) {
-                // 坑位模式
-                await startProjection({ ip: selectedCloudDevice.value.ip }, container, customOrient)
-              } else {
-                // 批量模式
-                await startProjection({ ip: container.deviceIp }, container, customOrient)
-              }
+              // 使用容器自身的deviceIp，避免用户切换设备后IP不一致
+              await startProjection({ ip: container.deviceIp || selectedCloudDevice.value?.ip }, container, customOrient)
               successCount++
             } catch (error) {
               console.error(`对云机 ${container.name || container.ID} 打开投屏失败:`, error)
@@ -5963,10 +6006,10 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
             
             // 查找同一设备同一坑位的所有容器（备份）
             // 坑位模式：从 allInstances 查找（包含当前设备所有容器）
-            // 批量模式：从 deviceCloudMachinesCache 查找
+            // 批量模式：从 deviceAllInstancesCache 查找（包含所有备份）
             const allDeviceContainers = cloudManageMode.value === 'slot'
               ? allInstances.value
-              : (deviceCloudMachinesCache.value.get(deviceIp) || [])
+              : (deviceAllInstancesCache.value.get(deviceIp) || [])
             
             const slotAllContainers = allDeviceContainers.filter(inst =>
               inst.indexNum === slotNum &&
@@ -6014,9 +6057,8 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
               }
             )
             
-            const device = cloudManageMode.value === 'slot' && selectedCloudDevice.value
-              ? selectedCloudDevice.value
-              : null
+            // 使用每个target自身的deviceIp，避免用户切换设备后IP不一致
+            const getTargetDevice = (target) => ({ ip: target.deviceIp, version: target.deviceVersion || 'v3' })
             
             // 初始化进度列表
             batchSwitchBackupTotal.value = switchBackupTargets.length
@@ -6041,7 +6083,7 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
               progressItem.message = '关机中...'
               
               try {
-                const targetDevice = device || { ip: target.deviceIp }
+                const targetDevice = getTargetDevice(target)
                 
                 // 1. 关机当前运行的容器
                 if (target.currentContainer.status === 'running') {
@@ -6070,16 +6112,11 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
               batchSwitchBackupDone.value = i + 1
             }
             
-            // 3. 刷新容器列表
-            if (device) {
-              await fetchAndroidContainers(device)
-            } else {
-              // 批量模式：按设备分组刷新
-              const deviceIpSet = new Set(switchBackupTargets.map(t => t.deviceIp))
-              for (const ip of deviceIpSet) {
-                const d = devices.value.find(dev => dev.ip === ip)
-                if (d) await fetchAndroidContainers(d)
-              }
+            // 3. 刷新容器列表（按设备分组刷新）
+            const deviceIpSet = new Set(switchBackupTargets.map(t => t.deviceIp))
+            for (const ip of deviceIpSet) {
+              const d = devices.value.find(dev => dev.ip === ip)
+              if (d) await fetchAndroidContainers(d)
             }
             
             if (successCount > 0) {
@@ -9136,6 +9173,10 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
       S5Port: form.s5Port,
       S5User: form.s5User,
       S5Password: form.s5Password,
+      // 中转设置
+      S5RelayType: form.s5RelayType,
+      S5RelayVpcId: form.s5RelayType === '1' ? form.s5RelayVpcId : '',
+      S5RelayAddress: form.s5RelayType === '2' ? form.s5RelayAddress : '',
       DoboxFps: '24', // 默认24FPS
       DoboxWidth: doboxWidth,
       DoboxHeight: doboxHeight,
@@ -11993,6 +12034,7 @@ onMounted(() => {
       devices.value.splice(idx, 1)
       // 清除该设备的云机缓存，避免旧容器对象（携带旧 deviceIp）被复用
       deviceCloudMachinesCache.value.delete(deviceIp)
+      deviceAllInstancesCache.value.delete(deviceIp)
       // 如果当前正在查看的设备被移除，清空容器列表，避免旧 deviceIp 的容器残留
       if (activeDevice.value && activeDevice.value.ip === deviceIp) {
         instances.value = []
@@ -12011,6 +12053,7 @@ onMounted(() => {
       devicesStatusCache.value.delete(device.id)
       devicesLastUpdateTime.value.delete(device.id)
       deviceCloudMachinesCache.value.delete(device.ip)
+      deviceAllInstancesCache.value.delete(device.ip)
       if (activeDevice.value && activeDevice.value.ip === device.ip) {
         instances.value = []
         allInstances.value = []
@@ -12092,6 +12135,7 @@ onMounted(() => {
       devicesStatusCache.value.delete(device.id)
       devicesLastUpdateTime.value.delete(device.id)
       deviceCloudMachinesCache.value.delete(device.ip)
+      deviceAllInstancesCache.value.delete(device.ip)
       if (activeDevice.value && activeDevice.value.ip === device.ip) {
         activeDevice.value = null
         instances.value = []
@@ -12306,12 +12350,51 @@ const setS5Agent = async () => {
       s5Port: container.s5Port || '',
       username: container.s5User || '',
       password: container.s5Password || '',
-      dnsMode: container.s5Type == 0 || container.s5Type == 2 ? 'server' : 'local'
+      dnsMode: container.s5Type == 0 || container.s5Type == 2 ? 'server' : 'local',
+      relayType: container.s5RelayType || '0',
+      relayVpcId: container.s5RelayVpcId || '',
+      relayAddress: container.s5RelayAddress || ''
     }
     
     // 显示S5代理设置弹窗
     s5ProxyDialogVisible.value = true
     
+    // 加载VPC代理列表（中转设置使用），从设备API获取真实节点
+    try {
+      let deviceIp = (container.networkName === 'myt' || container.networkMode === 'myt' || container.network === 'myt') && container.ip
+        ? container.ip
+        : container.deviceIp
+      if (deviceIp && deviceIp.includes(':')) deviceIp = deviceIp.split(':')[0]
+      const targetDevice = deviceIp ? { ip: deviceIp } : (cloudManageMode.value === 'slot' ? selectedCloudDevice.value : activeDevice.value)
+      if (targetDevice?.ip) {
+        const savedPassword = getDevicePassword(targetDevice.ip)
+        const headers = {}
+        if (savedPassword) headers['Authorization'] = `Basic ${btoa(`admin:${savedPassword}`)}`
+        const resp = await fetch(`http://${getDeviceAddr(targetDevice.ip)}/mytVpc/group`, { headers })
+        if (resp.ok) {
+          const data = await resp.json()
+          if (data.code === 0) {
+            const groups = data.data?.list || []
+            const nodes = []
+            for (const g of groups) {
+              for (const n of g.vpcs?.list || []) {
+                nodes.push({ id: n.id, name: `${g.alias} / ${n.remarks || n.protocol}`, ip: n.remarks || n.protocol })
+              }
+            }
+            vpcProxyList.value = nodes
+          } else {
+            vpcProxyList.value = []
+          }
+        } else {
+          vpcProxyList.value = []
+        }
+      } else {
+        vpcProxyList.value = []
+      }
+    } catch (e) {
+      console.warn('加载VPC代理列表失败:', e)
+      vpcProxyList.value = []
+    }
     // 每次都调用接口获取最新的s5代理详情
     try {
       // 构造请求参数
@@ -14572,7 +14655,7 @@ const handleAddDevice = (device) => {
     devices.value.push(device)
     devicesStatusCache.value.set(device.id, 'offline')  // ✅ 改为 offline，由心跳检测验证
     devicesLastUpdateTime.value.set(device.id, Date.now())
-    
+
     saveDevicesToLocalStorage()
     initCloudMachineGroups()
     autoGetAllDeviceVersions()
@@ -14582,7 +14665,12 @@ const handleAddDevice = (device) => {
       console.log('[添加设备] 手动触发心跳监控更新')
       updateHeartbeatDevices()
     }
-    
+
+    // 异步验证设备是否需要密码，如果 401 则弹窗让用户输入
+    if (device.version === 'v3') {
+      verifyDeviceAuth(device)
+    }
+
     console.log(`设备 ${device.ip} 添加成功，分组: ${device.group}`)
   } catch (error) {
     console.error('添加设备失败:', error)
@@ -14625,13 +14713,20 @@ const handleBatchAddDevices = async (devicesToAdd) => {
     saveDevicesToLocalStorage()
     initCloudMachineGroups()
     autoGetAllDeviceVersions()
-    
+
     // ✅ 手动触发心跳监控列表更新
     if (heartbeatInitialized) {
       console.log('[批量添加设备] 手动触发心跳监控更新')
       updateHeartbeatDevices()
     }
-    
+
+    // 异步验证需要密码的设备
+    for (const device of devicesToProcess) {
+      if (device.version === 'v3') {
+        verifyDeviceAuth(device)
+      }
+    }
+
     console.log(`批量添加设备成功: ${devicesToProcess.length} 个`)
   } catch (error) {
     console.error('批量添加设备失败:', error)
@@ -14642,7 +14737,24 @@ const handleBatchAddDevices = async (devicesToAdd) => {
   }
 }
 
-// 发现设备并加载数据
+// 验证 V3 设备是否需要密码，如果 401 则弹窗让用户输入
+const verifyDeviceAuth = async (device) => {
+  try {
+    const savedPassword = getDevicePassword(device.ip)
+    const result = await getContainers(device, savedPassword)
+    if (result && result.code === 61) {
+      // 需要认证，弹出密码输入框
+      showAuthDialog(device, async (password) => {
+        await saveDevicePassword(device.ip, password)
+        triggerAndroidRefresh([device.ip]).catch(() => {})
+      })
+    }
+  } catch (e) {
+    // 网络错误等，忽略
+  }
+}
+
+// 发现设备并加�数据
 
 
 // 后台10个一批加载云机列表（只处理在线设备）
@@ -16021,62 +16133,40 @@ const executeTask = async (taskId) => {
             switch (task.type) {
                 case 'restart': {
                   const device = { ip: target.deviceIp, version: target.deviceVersion || 'v3' }
-                  const actualDevice = cloudManageMode.value === 'slot' && selectedCloudDevice.value ? selectedCloudDevice.value : device
 
                   // 重启容器前，清空该容器的截图缓存，避免显示旧截图
-                  clearContainerScreenshotCache(actualDevice, target)
+                  clearContainerScreenshotCache(device, target)
 
-                  if (cloudManageMode.value === 'slot' && selectedCloudDevice.value) {
-                    await restartAndroidContainer(selectedCloudDevice.value, containerName)
-                  } else {
-                    await restartAndroidContainer(device, containerName)
-                  }
+                  await restartAndroidContainer(device, containerName)
                   return true
                 }
 
                 case 'start': {
                   const startDevice = { ip: target.deviceIp, version: target.deviceVersion || 'v3' }
-                  if (cloudManageMode.value === 'slot' && selectedCloudDevice.value) {
-                    await startContainer(selectedCloudDevice.value, containerName)
-                  } else {
-                    await startContainer(startDevice, containerName)
-                  }
+                  await startContainer(startDevice, containerName)
                   return true
                 }
                 
                 case 'reset': {
                   const device = { ip: target.deviceIp, version: target.deviceVersion || 'v3' }
-                  const actualDevice = cloudManageMode.value === 'slot' && selectedCloudDevice.value ? selectedCloudDevice.value : device
-                  
+
                   // 重置容器前，清空该容器的截图缓存，避免显示旧截图
-                  clearContainerScreenshotCache(actualDevice, target)
-                  
+                  clearContainerScreenshotCache(device, target)
+
                   // 从任务中获取 start 参数（metadata 通过 spread 合并到 task 上），默认为 true
                   const resetStart = task.start !== undefined ? task.start : true
                   console.log('[重置任务执行] start参数:', resetStart, 'task.start:', task.start)
-                  if (cloudManageMode.value === 'slot' && selectedCloudDevice.value) {
-                    await resetAndroidContainer(selectedCloudDevice.value, containerName, null, resetStart)
-                  } else {
-                    await resetAndroidContainer(device, containerName, null, resetStart)
-                  }
+                  await resetAndroidContainer(device, containerName, null, resetStart)
                   return true
                 }
                 
                 case 'shutdown': {
-                  if (cloudManageMode.value === 'slot' && selectedCloudDevice.value) {
-                    await stopContainer(selectedCloudDevice.value, containerName)
-                  } else {
-                    await stopContainer({ ip: target.deviceIp, version: target.deviceVersion || 'v3' }, containerName)
-                  }
+                  await stopContainer({ ip: target.deviceIp, version: target.deviceVersion || 'v3' }, containerName)
                   return true
                 }
                 
                 case 'delete': {
-                  if (cloudManageMode.value === 'slot' && selectedCloudDevice.value) {
-                    await deleteContainer(selectedCloudDevice.value, containerName)
-                  } else {
-                    await deleteContainer({ ip: target.deviceIp, version: target.deviceVersion || 'v3' }, containerName)
-                  }
+                  await deleteContainer({ ip: target.deviceIp, version: target.deviceVersion || 'v3' }, containerName)
                   return true
                 }
                 
@@ -16109,9 +16199,7 @@ const executeTask = async (taskId) => {
                   // V2容器使用一键新机接口，不支持指定机型
                   if (target.androidType === 'V2') {
                     // V2容器只能调用一键新机接口
-                    const device = cloudManageMode.value === 'slot' && selectedCloudDevice.value 
-                      ? selectedCloudDevice.value 
-                      : { ip: target.deviceIp, version: target.deviceVersion || 'v3' }
+                    const device = { ip: target.deviceIp, version: target.deviceVersion || 'v3' }
                     
                     // 判断使用哪个IP和端口
                     let host, port
@@ -16143,11 +16231,7 @@ const executeTask = async (taskId) => {
                     }
                   } else {
                     // 非V2容器使用切换机型接口
-                    if (cloudManageMode.value === 'slot' && selectedCloudDevice.value) {
-                      await switchCloudMachineModel(selectedCloudDevice.value, containerName, modelInfo, modelName, batchSwitchCountryCode.value)
-                    } else {
-                      await switchCloudMachineModel({ ip: target.deviceIp, version: target.deviceVersion || 'v3' }, containerName, modelInfo, modelName, batchSwitchCountryCode.value)
-                    }
+                    await switchCloudMachineModel({ ip: target.deviceIp, version: target.deviceVersion || 'v3' }, containerName, modelInfo, modelName, batchSwitchCountryCode.value)
                     return true
                   }
                 }
@@ -16280,9 +16364,7 @@ const executeTask = async (taskId) => {
             
             try {
               const verifyContainerName = target.name || target.id || target.ID
-              const verifyDevice = cloudManageMode.value === 'slot' && selectedCloudDevice.value
-                ? selectedCloudDevice.value
-                : { ip: target.deviceIp, version: target.deviceVersion || 'v3' }
+              const verifyDevice = { ip: target.deviceIp, version: target.deviceVersion || 'v3' }
               
               const containers = await getContainers(verifyDevice)
               const targetContainer = containers.find(c => 
@@ -17490,14 +17572,15 @@ const discoverAndLoadDevices = async () => {
   try {
     // 记录开始发现设备的时间
     const discoveryTime = Date.now()
-    
+
     // 发现设备
     const discoveredDevices = await discoverDevices()
-    
+
     // 以设备ID为比对，同步更新现有设备的属性变更（IP变更、版本升级等）
     const discoveredDevicesMap = new Map(discoveredDevices.map(device => [device.id, device]))
 
     // 同步已发现设备的属性到 devices.value（仅更新属性，不改状态，不与心跳冲突）
+    let propsChanged = false
     devices.value.forEach(device => {
       const discovered = discoveredDevicesMap.get(device.id)
       if (discovered) {
@@ -17505,27 +17588,35 @@ const discoverAndLoadDevices = async () => {
         if (device.version !== discovered.version) {
           console.log(`[发现设备] 设备 ${device.ip} 版本变更: ${device.version} → ${discovered.version}`)
           device.version = discovered.version
+          propsChanged = true
         }
         if (device.ip !== discovered.ip) {
           console.log(`[发现设备] 设备ID ${device.id} IP变更: ${device.ip} → ${discovered.ip}`)
           device.ip = discovered.ip
+          propsChanged = true
         }
         if (device.name !== discovered.name) {
           device.name = discovered.name
+          propsChanged = true
         }
       }
       // 同IP不同ID：不合并，视为不同设备
     })
-    
+
+    if (propsChanged) {
+      saveDevicesToLocalStorage()
+      if (heartbeatInitialized) updateHeartbeatDevices()
+    }
+
     // 不自动设置默认设备和获取容器列表，保持selectedCloudDevice为空，显示12个空坑位
     activeDevice.value = null
     selectedCloudDevice.value = null
     instances.value = []
     updateCloudMachines()
-    
+
     // 设备列表更新后，重新初始化云机分组
     initCloudMachineGroups()
-    
+
     // 3. 加载完成后，检查哪些设备没有被更新
     // 注意：这里不再简单地将未更新的设备标记为离线，
     // 而是保留它们的状态，因为有些设备可能能访问Docker API但在本次加载中失败
@@ -17535,7 +17626,7 @@ const discoverAndLoadDevices = async () => {
         updatedDeviceIds.add(deviceId)
       }
     })
-    
+
     // 4. 对于本次发现且成功加载的设备，确保标记为在线
     // 对于本次发现但未成功加载的设备，保持原有状态，不自动标记为离线
     // 这样可以避免能访问Docker API的设备被误判为离线
@@ -17545,9 +17636,9 @@ const discoverAndLoadDevices = async () => {
   } finally {
     loading.value = false
   }
-  
+
   // 云机列表加载由 initDeviceHeartbeat 首次完成状态更新后触发，确保只请求在线设备
-  
+
   // 获取设备绑定状态
   if(token.value) {
     fetchDeviceBindStatus()
@@ -17794,6 +17885,7 @@ const fetchAndroidCacheIfUpdated = async () => {
       // 离线或错误状态：清空该设备缓存
       if (cacheEntry.status === 'offline') {
         deviceCloudMachinesCache.value.set(ip, [])
+        deviceAllInstancesCache.value.set(ip, [])
         if (activeDevice.value && activeDevice.value.ip === ip) {
           instances.value = []
           allInstances.value = []
@@ -17802,9 +17894,20 @@ const fetchAndroidCacheIfUpdated = async () => {
         continue
       }
 
-      // 无数据或认证失败：保留当前缓存不清空
+      // 无数据或错误：保留当前缓存不清空
       if (cacheEntry.status === 'error' && !cacheEntry.list) continue
-      if (cacheEntry.status === 'auth_fail') continue
+      // 认证失败：弹窗让用户输入密码，输入后更新后端密码并触发重新轮询
+      if (cacheEntry.status === 'auth_fail') {
+        // 仅在该设备尚未弹出认证对话框时触发
+        const alreadyAuthing = batchAuthDevices.value.some(item => item.device.ip === ip)
+        if (!alreadyAuthing) {
+          showAuthDialog(device, async (password) => {
+            await saveDevicePassword(device.ip, password)
+            triggerAndroidRefresh([ip]).catch(() => {})
+          })
+        }
+        continue
+      }
 
       // 有数据：解析并更新 deviceCloudMachinesCache（复用 _parseV3RawContainers）
       const raw = cacheEntry.list
@@ -17848,31 +17951,24 @@ const fetchDevicesStatusFromBackend = async () => {
     
     for (const [ip, statusInfo] of Object.entries(statusMap)) {
       const device = devices.value.find(d => d.ip === ip);
-      
+
       if (!device) {
         console.warn(`[心跳] ⚠️ 找不到IP为 ${ip} 的设备`);
         continue;
       }
-      
+
       const newStatus = statusInfo.status;
       const oldStatus = devicesStatusCache.value.get(device.id);
-      
-      // console.log(`[心跳] 处理设备 ${ip} (ID: ${device.id}):`, {
-      //   status: statusInfo.status,
-      //   apiVersion: statusInfo.apiVersion,
-      //   storageTotal: statusInfo.storageTotal,
-      //   oldStatus: oldStatus
-      // });
-      
+
       // 更新状态缓存
       devicesStatusCache.value.set(device.id, newStatus);
       devicesLastUpdateTime.value.set(device.id, Date.now());
       updatedCount++;
-      
+
       // 如果设备离线，清除版本和存储信息，显示"未知"
       if (newStatus === 'offline') {
-        // 清除 API 版本信息
-        deviceVersionInfo.value.delete(device.id);
+          // 清除 API 版本信息
+          deviceVersionInfo.value.delete(device.id);
         // 清除存储信息
         deviceFirmwareInfo.value.delete(device.id);
         // console.log(`[心跳] 🔒 设备 ${ip} 离线，已清除缓存数据`);
@@ -18118,6 +18214,7 @@ const _parseV3RawContainers = (device, rawContainers) => {
 
   devicesLastUpdateTime.value.set(device.id, Date.now())
   deviceCloudMachinesCache.value.set(device.ip, deviceCloudMachines)
+  deviceAllInstancesCache.value.set(device.ip, allRawContainers)
 
   if (activeDevice.value && activeDevice.value.ip === device.ip) {
     instances.value = processedContainers
@@ -18256,6 +18353,7 @@ const fetchAndroidContainers = async (device, isUserInitiated = false) => {
       })
 
       deviceCloudMachinesCache.value.set(device.ip, deviceCloudMachines)
+      deviceAllInstancesCache.value.set(device.ip, processedContainers)
       if (activeDevice.value && activeDevice.value.ip === device.ip) {
         instances.value = processedContainers
         allInstances.value = processedContainers
@@ -18267,6 +18365,7 @@ const fetchAndroidContainers = async (device, isUserInitiated = false) => {
       console.error('获取安卓云机列表失败:', device.ip, error)
     }
     deviceCloudMachinesCache.value.set(device.ip, [])
+    deviceAllInstancesCache.value.set(device.ip, [])
   } finally {
     cloudMachineLoadingState.value.set(device.ip, false)
   }
@@ -18355,6 +18454,7 @@ const clearCache = async () => {
     // 1. 清理localStorage缓存
     console.log('[清理缓存] 清理 localStorage...')
     localStorage.removeItem('edgeclient_devices')  // ✅ 修复：正确的设备列表key
+    localStorage.removeItem('deviceCache')  // 同步清理 api.js 的设备缓存
     localStorage.removeItem('devicePasswords')
     localStorage.removeItem('mytos_image_list')
     localStorage.removeItem('mytos_image_list_last_update')
@@ -18366,6 +18466,7 @@ const clearCache = async () => {
     // 2. 清理内存缓存（Map类型）
     console.log('[清理缓存] 清理 Map 缓存...')
     deviceCloudMachinesCache.value.clear()
+    deviceAllInstancesCache.value.clear()
     cloudMachineLoadingState.value.clear()
     devicesLastUpdateTime.value.clear()
     devicesStatusCache.value.clear()
@@ -18653,10 +18754,9 @@ const handleBatchDeleteDevices = async () => {
     
     // 保存到本地存储
     saveDevicesToLocalStorage()
-    
-    // 清除设备相关的缓存
     deviceIpsToDelete.forEach(ip => {
       deviceCloudMachinesCache.value.delete(ip)
+      deviceAllInstancesCache.value.delete(ip)
       // 如果删除的是当前激活的设备，清空激活状态
       if (activeDevice.value && activeDevice.value.ip === ip) {
         activeDevice.value = null

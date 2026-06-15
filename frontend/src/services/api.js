@@ -1735,5 +1735,6 @@ export {
   triggerAndroidRefresh,
   getScreenshotVersions,
   getScreenshots,
-  clearScreenshotCache
+  clearScreenshotCache,
+  saveDeviceCache
 };

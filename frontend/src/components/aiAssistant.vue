@@ -1291,11 +1291,20 @@ const syncRunningModels = async () => {
     const runningIds = modelsList.data.map(m => m.id)
     console.log('[syncRunningModels] 设备运行中的模型:', runningIds)
 
-    // 对话模型：在 modelList 中找匹配（精确匹配 或 互相包含，兼容M50的gguf文件名id）
-    const runningChat = modelList.value.find(m =>
-      runningIds.includes(m.name) ||
-      runningIds.some(rid => rid.includes(m.name) || m.name.includes(rid))
-    )
+    // 对话模型：在 modelList 中找匹配
+    // 匹配策略：1) 精确匹配name 2) name互相包含 3) 运行中模型id匹配本地模型files的文件名
+    const runningChat = modelList.value.find(m => {
+      if (runningIds.includes(m.name)) return true
+      return runningIds.some(rid => {
+        if (rid.includes(m.name) || m.name.includes(rid)) return true
+        // 用运行中模型的id（gguf文件名）匹配本地模型的files列表
+        const files = m.files || []
+        return files.some(f => {
+          const fileName = (f.filePath || '').split('/').pop()
+          return fileName === rid || (fileName && rid && fileName.includes(rid) || rid.includes(fileName))
+        })
+      })
+    })
     loadedModel.value = runningChat || null
     if (runningChat) {
       selectedModelName.value = runningChat.name
@@ -1415,11 +1424,16 @@ const pollModelStatus = async (modelName, maxAttempts = 15, interval = 2000) => 
             const runningModels = modelsList.data
             console.log(`[pollModelStatus] 当前运行模型:`, runningModels.map(m => m.id))
             // 匹配模型：精确匹配 或 互相包含（M50的id是gguf文件名，如"himodel.gguf"，而selectedModelName可能是"himodel"）
-            const targetModel = runningModels.find(m =>
-              m.id === modelName ||
-              m.id.includes(modelName) ||
-              modelName.includes(m.id)
-            )
+            // 额外通过selectedModel的files文件名匹配（运行中id就是gguf文件名）
+            const targetModel = runningModels.find(m => {
+              if (m.id === modelName || m.id.includes(modelName) || modelName.includes(m.id)) return true
+              // 通过已选中模型的files匹配运行中模型id
+              const files = selectedModel.value?.files || []
+              return files.some(f => {
+                const fileName = (f.filePath || '').split('/').pop()
+                return fileName === m.id || (fileName && m.id && (fileName.includes(m.id) || m.id.includes(fileName)))
+              })
+            })
             if (targetModel) {
               console.log(`[pollModelStatus] ✅ 模型已启动:`, targetModel)
               if (progressMessage) progressMessage.close()

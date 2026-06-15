@@ -2161,6 +2161,7 @@ const clearCache = async () => {
     
     // 1. 清理localStorage缓存
     localStorage.removeItem('deviceCache')
+    localStorage.removeItem('edgeclient_devices')  // 同步清理 App.vue 的设备缓存
     localStorage.removeItem('devicePasswords')
     localStorage.removeItem('mytos_image_list')
     localStorage.removeItem('mytos_image_list_last_update')
