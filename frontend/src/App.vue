@@ -135,7 +135,6 @@ import {
   DownloadCloudFile,
   SelectApkFile,
   SelectZipFile,
-  GetVPCProxies,
 } from '../bindings/edgeclient/app'
 
 // 导入主机管理组件
@@ -1174,6 +1173,7 @@ const authForm = ref({
 
 // 批量认证管理 - 收集所有需要认证的设备，一次性弹出多个输入框
 const batchAuthDevices = ref([]) // 待批量认证的设备列表：[{device, callback, password: ''}]
+const authCancelledDevices = ref(new Set()) // 用户取消认证的设备IP集合，心跳不再弹窗
 const batchAuthDialogVisible = ref(false) // 批量认证对话框
 
 // 授权同步对话框
@@ -7723,20 +7723,20 @@ const openRegisterFromForgot = () => {
 
 // 处理批量认证提交
 const handleBatchAuthSubmit = async () => {
-  // 检查是否所有设备都输入了密码
-  const devicesWithoutPassword = batchAuthDevices.value.filter(item => !item.password)
-  if (devicesWithoutPassword.length > 0) {
-    ElMessage.warning(`还有 ${devicesWithoutPassword.length} 个设备未输入密码`)
+  // 只认证已输入密码的设备，未输入密码的跳过
+  const devicesWithPassword = batchAuthDevices.value.filter(item => item.password && item.status !== 'success' && item.status !== 'verifying')
+  if (devicesWithPassword.length === 0) {
+    ElMessage.warning('请至少为一个设备输入密码')
     return
   }
-  
+
   batchAuthLoading.value = true
-  
+
   try {
-    console.log(`[认证] 🚀 开始批量认证 ${batchAuthDevices.value.length} 个设备`)
-    
-    // 并行验证所有设备
-    const authPromises = batchAuthDevices.value.map(async (item) => {
+    console.log(`[认证] 🚀 开始批量认证 ${devicesWithPassword.length} 个设备（共 ${batchAuthDevices.value.length} 个）`)
+
+    // 并行验证已输入密码的设备
+    const authPromises = devicesWithPassword.map(async (item) => {
       item.status = 'verifying'
       
       try {
@@ -7746,7 +7746,10 @@ const handleBatchAuthSubmit = async () => {
         // 认证成功
         item.status = 'success'
         console.log(`[认证] ✅ 设备 ${item.device.ip} 认证成功`)
-        
+
+        // 认证成功，移除取消标记
+        authCancelledDevices.value.delete(item.device.ip)
+
         // 保存密码到本地存储并同步到后端
         if (item.savePassword) {
           await saveDevicePassword(item.device.ip, item.password)
@@ -7780,19 +7783,20 @@ const handleBatchAuthSubmit = async () => {
     
     console.log(`[认证] 📊 批量认证完成: 成功 ${successCount} 个, 失败 ${failCount} 个`)
     
-    if (failCount === 0) {
-      // 全部成功
-      ElMessage.success(`所有设备认证成功 (${successCount} 个)`)
+    if (failCount === 0 && batchAuthDevices.value.every(item => item.status === 'success')) {
+      // 全部成功（包括之前已成功的）
+      ElMessage.success(`所有设备认证成功`)
       batchAuthDialogVisible.value = false
       batchAuthDevices.value = []
-    } else if (successCount === 0) {
-      // 全部失败
-      ElMessage.error('所有设备认证失败，请检查密码')
+    } else if (successCount === 0 && failCount === 0) {
+      // 没有新的认证结果（都是已成功的）
+      batchAuthDialogVisible.value = false
+      batchAuthDevices.value = []
     } else {
-      // 部分成功
-      ElMessage.warning(`${successCount} 个设备认证成功，${failCount} 个失败`)
-      // 移除成功的设备，保留失败的继续输入
-      batchAuthDevices.value = batchAuthDevices.value.filter(item => item.status === 'failed')
+      if (successCount > 0) ElMessage.success(`${successCount} 个设备认证成功`)
+      if (failCount > 0) ElMessage.error(`${failCount} 个设备认证失败，请检查密码`)
+      // 移除成功的设备，保留失败的和无密码的继续输入
+      batchAuthDevices.value = batchAuthDevices.value.filter(item => item.status !== 'success')
     }
   } catch (error) {
     console.error('[认证] 批量认证过程出错:', error)
@@ -7805,11 +7809,29 @@ const handleBatchAuthSubmit = async () => {
 // 处理批量认证取消
 const handleBatchAuthCancel = () => {
   console.log(`[认证] ⚠️ 用户取消批量认证，共 ${batchAuthDevices.value.length} 个设备`)
-  
+
+  // 取消认证的设备标记为离线，并记录到已取消列表，避免心跳重复弹窗
+  batchAuthDevices.value.forEach(item => {
+    const device = item.device
+    devicesStatusCache.value.set(device.id, 'offline')
+    authCancelledDevices.value.add(device.ip)
+    // 清除该设备的缓存数据
+    deviceVersionInfo.value.delete(device.id)
+    deviceFirmwareInfo.value.delete(device.id)
+    deviceCloudMachinesCache.value.set(device.ip, [])
+    deviceAllInstancesCache.value.set(device.ip, [])
+    // 如果是当前选中设备，清空云机列表
+    if (activeDevice.value && activeDevice.value.ip === device.ip) {
+      instances.value = []
+      allInstances.value = []
+      updateCloudMachines()
+    }
+  })
+
   batchAuthDialogVisible.value = false
   batchAuthDevices.value = []
-  
-  ElMessage.info('已取消设备认证')
+
+  ElMessage.info('已取消设备认证，设备已标记为离线')
 }
 
 // 获取V3设备SDK版本信息
@@ -14655,6 +14677,7 @@ const handleAddDevice = (device) => {
     devices.value.push(device)
     devicesStatusCache.value.set(device.id, 'offline')  // ✅ 改为 offline，由心跳检测验证
     devicesLastUpdateTime.value.set(device.id, Date.now())
+    authCancelledDevices.value.delete(device.ip)  // 重新添加设备时清除认证取消标记
 
     saveDevicesToLocalStorage()
     initCloudMachineGroups()
@@ -14708,6 +14731,7 @@ const handleBatchAddDevices = async (devicesToAdd) => {
       devices.value.push(device)
       devicesStatusCache.value.set(device.id, 'offline')  // ✅ 改为 offline，由心跳检测验证
       devicesLastUpdateTime.value.set(device.id, Date.now())
+      authCancelledDevices.value.delete(device.ip)  // 重新添加设备时清除认证取消标记
     }
     
     saveDevicesToLocalStorage()
@@ -17898,6 +17922,8 @@ const fetchAndroidCacheIfUpdated = async () => {
       if (cacheEntry.status === 'error' && !cacheEntry.list) continue
       // 认证失败：弹窗让用户输入密码，输入后更新后端密码并触发重新轮询
       if (cacheEntry.status === 'auth_fail') {
+        // 用户已取消认证的设备不再弹窗
+        if (authCancelledDevices.value.has(ip)) continue
         // 仅在该设备尚未弹出认证对话框时触发
         const alreadyAuthing = batchAuthDevices.value.some(item => item.device.ip === ip)
         if (!alreadyAuthing) {

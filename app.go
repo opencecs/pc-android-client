@@ -2958,13 +2958,14 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 		installCmd := fmt.Sprintf("pm install %s %s", strings.Join(installFlags, " "), installPath)
 		log.Printf("[InstallAPK] 执行安装命令: %s", installCmd)
 		
-		resultFile := "/data/local/tmp/_install_result.txt"
-		scriptFile := "/data/local/tmp/_install.sh"
+		resultFile := fmt.Sprintf("/data/local/tmp/_install_result_%d.txt", time.Now().UnixNano())
+		scriptFile := fmt.Sprintf("/data/local/tmp/_install_%d.sh", time.Now().UnixNano())
+		installID := fmt.Sprintf("_ID_%d_", time.Now().UnixNano())
 		
 		// sd -c 的 ax shell 不支持重定向/&&等操作符
 		// 方案：将安装脚本写入文件，用 sd -c sh 执行脚本
 		// 1) 写入安装脚本（在容器侧直接写，不需要 sd -c）
-		script := fmt.Sprintf("#!/system/bin/sh\n%s > %s 2>&1\n", installCmd, resultFile)
+		script := fmt.Sprintf("#!/system/bin/sh\necho '%s' > %s\n%s >> %s 2>&1\n", installID, resultFile, installCmd, resultFile)
 		// 使用 base64 编码写脚本，避免特殊字符和换行符的转义问题
 		scriptB64 := base64.StdEncoding.EncodeToString([]byte(script))
 		dockerExec(deviceIP, dockerPort, container.ID,
@@ -2983,6 +2984,18 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 		)
 		
 		log.Printf("[InstallAPK] 安装命令已发送, dockerExec返回: err=%v, exitCode=%d, stdout=%s", err, installResult.ExitCode, installResult.Stdout)
+
+		// sd -c 返回空输出且无错误，可能是 sd 服务未就绪，等待一下再执行
+		if err == nil && installResult.ExitCode == 0 && strings.TrimSpace(installResult.Stdout) == "" {
+			log.Printf("[InstallAPK] sd -c 返回空输出，等待2秒后重试...")
+			time.Sleep(2 * time.Second)
+			installResult, err = dockerExec(
+				deviceIP, dockerPort, container.ID,
+				[]string{"sh", "-c", fmt.Sprintf("sd -c 'sh %s'", scriptFile)},
+				password, version,
+			)
+			log.Printf("[InstallAPK] 重试sd -c返回: err=%v, exitCode=%d, stdout=%s", err, installResult.ExitCode, installResult.Stdout)
+		}
 		
 		// sd -c 异步执行，轮询等待结果文件
 		const maxWaitSeconds = 60
@@ -3010,8 +3023,22 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 				continue
 			}
 			
-			installOutput = readOutput
-			log.Printf("[InstallAPK] 读取到安装结果: %s", installOutput)
+			// verify install id marker
+			if installID != "" && !strings.HasPrefix(readOutput, installID) {
+				log.Printf("[InstallAPK] result id mismatch, waiting... (%d/%ds)", (i+1)*2, maxWaitSeconds*2)
+				continue
+			}
+			if installID != "" {
+				lines := strings.SplitN(readOutput, "\n", 2)
+				if len(lines) > 1 {
+					installOutput = strings.TrimSpace(lines[1])
+				} else {
+					installOutput = ""
+				}
+			} else {
+				installOutput = readOutput
+			}
+			log.Printf("[InstallAPK] install result: %s", installOutput)
 			break
 		}
 		
