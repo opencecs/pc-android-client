@@ -39,8 +39,8 @@
         <template #header>
           <div class="card-header">
             <span>{{ $t('common.modelManagement') }}</span>
-            <el-button 
-              type="primary" 
+            <el-button
+              type="primary"
               size="small"
               @click="handleImportModel"
               :loading="importing"
@@ -48,6 +48,9 @@
             >
               {{ $t('common.importModel') }}
             </el-button>
+          </div>
+          <div v-if="importing" class="import-progress-bar">
+            <el-progress :percentage="importPercent" :status="importPercent >= 100 ? 'success' : ''" />
           </div>
         </template>
         
@@ -726,6 +729,8 @@ const localOpenAIConfig = ref({
 const selectedDevice = ref(null)
 const loading = ref(false)
 const importing = ref(false)
+const importProgress = ref(0) // 导入进度 (bytes)
+const importPercent = ref(0)  // 导入进度百分比
 const modelList = ref([])
 const selectedModel = ref(null)
 const selectedModelName = ref('') // 对话模型名称
@@ -2395,50 +2400,68 @@ const handleImportModel = async () => {
   
   // 执行上传
   importing.value = true
-  
+  importProgress.value = 0
+  importPercent.value = 0
+
+  const progressHandler = (event) => {
+    const data = event?.data
+    if (!data) return
+    const stageLabels = {
+      upload: '上传中',
+      unzip: '解压中',
+      fix_nested: '整理目录',
+      cleanup: '清理中',
+      complete: '完成'
+    }
+    if (data.percent !== undefined) {
+      importPercent.value = data.percent
+    }
+    if (data.progress !== undefined) {
+      importProgress.value = data.progress
+    } else if (data.current !== undefined) {
+      importProgress.value = data.current
+    }
+    if (data.stage && data.msg) {
+      const label = stageLabels[data.stage] || data.stage
+      // 兼容 el-message 实时提示（可选），不阻塞主流程
+      console.log(`[Import ${label}] ${data.msg}`)
+    }
+  }
+
   try {
-    ElMessage.info({
-      message: `正在上传模型到 ${deviceIp}，请耐心等待...`,
-      duration: 0,
-      showClose: true
-    })
-    
     console.log('[UploadLLMModel] 调用Go函数上传...')
-    
-    // 使用Go函数上传
+    Events.On('import:progress', progressHandler)
     const uploadResult = await UploadLLMModel(deviceIp, filePath, getDeviceToken(deviceIp))
-    
+    Events.Off('import:progress', progressHandler)
+
     console.log('[UploadLLMModel] 上传结果:', uploadResult)
-    
-    ElMessage.closeAll()
-    
+    const resultMessage = uploadResult.message || uploadResult.msg || ''
+
     if (uploadResult.success || uploadResult.code === 0) {
+      importPercent.value = 100
       ElMessage.success({
         message: '模型导入成功',
         duration: 3000
       })
-      // 上传成功后自动刷新模型列表
       await fetchModelList()
     } else {
       ElMessage.error({
-        message: uploadResult.message || uploadResult.msg || '模型导入失败',
+        message: resultMessage || '模型导入失败',
         duration: 5000,
         showClose: true
       })
     }
   } catch (error) {
     console.error('导入模型失败 - 详细错误:', error)
-    
-    ElMessage.closeAll()
-    
+    Events.Off('import:progress', progressHandler)
+
     let errorMessage = '导入失败: '
-    
     if (error.message) {
       errorMessage += error.message
     } else {
       errorMessage += '未知错误'
     }
-    
+
     ElMessage.error({
       message: errorMessage,
       duration: 5000,
@@ -2446,6 +2469,8 @@ const handleImportModel = async () => {
     })
   } finally {
     importing.value = false
+    importPercent.value = 0
+    importProgress.value = 0
   }
 }
 

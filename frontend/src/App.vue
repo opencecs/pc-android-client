@@ -2240,7 +2240,7 @@ const androidVersionFilteredPhoneModels = computed(() => {
   const ver = createForm.value.androidVersion
   if (!ver) return models
   return models.filter(m => {
-    if (!m.android_version) return true // 无该字段时不过滤
+    if (!m.android_version) return false // 无版本字段的机型在按版本过滤时排除，避免混入非目标版本
     return String(m.android_version) === String(ver)
   })
 })
@@ -2728,9 +2728,9 @@ const updateImageForm = ref({
   customDns: '',
   resolution: 'default',
   customResolution: {
-    width: '720',
-    height: '1280',
-    dpi: '320'
+    width: '',
+    height: '',
+    dpi: ''
   },
   vpcGroupId: '',
   vpcNodeId: '',
@@ -3034,9 +3034,9 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
       containerCustomImageUrl: '',
       containerResolution: '720x1280x320',
       containerCustomResolution: {
-        width: '720',
-        height: '1280',
-        dpi: '320'
+        width: '',
+        height: '',
+        dpi: ''
       },
       containerDns: '223.5.5.5',
       containerCustomDns: '',
@@ -3060,9 +3060,9 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
       ipaddr: '',
       resolution: '720x1280x320',
       customResolution: {
-        width: '720',
-        height: '1280',
-        dpi: '320'
+        width: '',
+        height: '',
+        dpi: ''
       },
       sandboxSize: 28,
       dns: '223.5.5.5',
@@ -3103,9 +3103,9 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
       containerCustomImageUrl: '',
       containerResolution: '720x1280x320',
       containerCustomResolution: {
-        width: '720',
-        height: '1280',
-        dpi: '320'
+        width: '',
+        height: '',
+        dpi: ''
       },
       containerDns: '223.5.5.5',
       containerCustomDns: '',
@@ -3129,9 +3129,9 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
       ipaddr: '',
       resolution: 'default',
       customResolution: {
-        width: '720',
-        height: '1280',
-        dpi: '320'
+        width: '',
+        height: '',
+        dpi: ''
       },
       sandboxSize: 28,
       dns: '223.5.5.5',
@@ -3520,12 +3520,21 @@ const handleSwitchModelTypeChange = async () => {
 }
 
 // 切换云机机型函数
-const switchCloudMachineModel = async (device, containerName, modelId, modelName, countryCode) => {
+const switchCloudMachineModel = async (device, containerName, modelId, modelName, countryCode, androidVersion = '', excludeIds = [], onRandomSelected = null) => {
   if (!device || !containerName || !modelId) {
     console.error('切换机型参数不完整:', device, containerName, modelId, modelName)
     throw new Error('参数不能为空')
   }
-  
+
+  // 按安卓版本过滤的机型池：批量新机传入 androidVersion，避免随机/查找混入其它版本的机型
+  const versionFilteredPhoneModels = (() => {
+    if (!androidVersion) return phoneModels.value
+    return (phoneModels.value || []).filter(m => {
+      if (!m.android_version) return false
+      return String(m.android_version) === String(androidVersion)
+    })
+  })()
+
   // 处理随机机型情况
   let finalModelId = modelId
   let finalModelName = modelName
@@ -3542,21 +3551,29 @@ const switchCloudMachineModel = async (device, containerName, modelId, modelName
        // 尝试获取一下? 或者报错
        // 如果是online且为空，可能还没获取
     }
-    
+
     // 随机选择一个机型
     let list = []
     if (modelType === 'local') list = localPhoneModels.value
     else if (modelType === 'backup') list = backupPhoneModels.value
-    else list = phoneModels.value
-    
+    else list = androidVersion ? versionFilteredPhoneModels : phoneModels.value
+
     if (list.length === 0) {
       console.error('随机机型选择失败：没有可用机型列表')
       throw new Error('随机机型选择失败：没有可用机型列表')
     }
-    
-    const randomIndex = Math.floor(Math.random() * list.length)
-    const randomModel = list[randomIndex]
-    
+
+    // 批量随机时排除已分配的机型，避免重复；若全部已用则回退为允许重复
+    const excludeSet = new Set((excludeIds || []).map(id => String(id)))
+    let candidateList = list
+    if (excludeSet.size > 0) {
+      const filtered = list.filter(m => !excludeSet.has(String(m.id)))
+      if (filtered.length > 0) candidateList = filtered
+    }
+
+    const randomIndex = Math.floor(Math.random() * candidateList.length)
+    const randomModel = candidateList[randomIndex]
+
     if (modelType === 'online') {
       finalModelId = randomModel.id
       finalModelName = randomModel.name
@@ -3564,16 +3581,22 @@ const switchCloudMachineModel = async (device, containerName, modelId, modelName
       finalModelId = randomModel.name
       finalModelName = randomModel.name
     }
-    
-    console.log(`随机选择的机型：${finalModelName} (${finalModelId})`)
+
+    console.log(`随机选择的机型：${finalModelName} (${finalModelId}) 安卓版本：${androidVersion || '未指定'}，已排除：${excludeSet.size}个`)
+
+    // 回调通知调用方本次随机选中的机型 ID，便于批量场景去重
+    if (typeof onRandomSelected === 'function') {
+      try { onRandomSelected(finalModelId) } catch (e) { /* ignore */ }
+    }
   }
-  
+
   // 确保 Online 机型使用的是 ID 而不是 Name
   // 有些情况下 modelId 可能是 name (如果 el-select 绑定的是 id 但数据源里 id=name)
   // 如果是 Online 且 modelId 与某个机型的 name 相同但 id 不同，尝试找到正确的 id
   if (modelType === 'online' && phoneModels.value.length > 0) {
-    // 尝试在列表中查找
-    const foundModel = phoneModels.value.find(m => m.id === finalModelId || m.name === finalModelId)
+    // 优先在按版本过滤的列表中查找，避免跨版本同名机型匹配到错误的 modelId
+    const foundModel = (androidVersion ? versionFilteredPhoneModels : phoneModels.value).find(m => m.id === finalModelId || m.name === finalModelId)
+      || phoneModels.value.find(m => m.id === finalModelId || m.name === finalModelId)
     if (foundModel) {
       // 如果找到了模型，确保使用其 ID
       // 注意：有些后端返回的数据可能 id 和 name 是一样的，这取决于后端实现
@@ -7000,17 +7023,23 @@ const handleClosePassword = async () => {
 
 
 // 清理磁盘数据
-const handleCleanDisk = async () => { 
+const handleCleanDisk = async () => {
    try {
-        await ElMessageBox.confirm(
-            `确定要清理设备"${activeDevice.value.ip}"磁盘数据吗？`,
-            '清理磁盘数据会重启设备，重启时间为5~10分钟，请耐心等待',
+        const { value } = await ElMessageBox.prompt(
+            `确定要清理设备"${activeDevice.value.ip}"磁盘数据吗？\n清理磁盘数据会重启设备，重启时间为5~10分钟，请耐心等待。\n\n请输入“确认执行”以继续：`,
+            '清理磁盘数据',
             {
                 confirmButtonText: '确定',
                 cancelButtonText: '取消',
+                inputPlaceholder: '请输入“确认执行”',
+                inputValidator: (val) => val === '确认执行' || '请输入“确认执行”以确认操作',
                 type: 'warning'
             }
         )
+        if (value !== '确认执行') {
+            ElMessage.warning('输入不匹配，已取消清理')
+            return
+        }
 
         collapseRightSidebar()
 
@@ -9057,10 +9086,10 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
     doboxHeight = ''
     doboxDpi = ''
   } else if (form.resolution === 'custom') {
-    // 自定义分辨率
-    doboxWidth = form.customResolution.width || '720'
-    doboxHeight = form.customResolution.height || '1280'
-    doboxDpi = form.customResolution.dpi || '320'
+    // 自定义分辨率（用户不填则传空，由后端/设备处理）
+    doboxWidth = form.customResolution.width || ''
+    doboxHeight = form.customResolution.height || ''
+    doboxDpi = form.customResolution.dpi || ''
   } else {
     // 预设分辨率
     const parts = (form.resolution || '').split('x')
@@ -9078,11 +9107,23 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
   
   // 从手机型号列表中查找对应的ModelId
   let modelId = ''
-  const model = phoneModels.value.find(m => m.name === modelName)
+  // 优先按 form.androidVersion 过滤后查找，避免同名机型跨版本匹配到错误的 modelId
+  const ver = form.androidVersion
+  const findModelInList = (list) => list.find(m => m.name === modelName)
+  let model = null
+  if (ver) {
+    const filtered = (phoneModels.value || []).filter(m => {
+      if (!m.android_version) return false
+      return String(m.android_version) === String(ver)
+    })
+    model = findModelInList(filtered) || findModelInList(phoneModels.value || [])
+  } else {
+    model = findModelInList(phoneModels.value || [])
+  }
   if (model) {
     modelId = model.id || ''
-  } 
-  
+  }
+
   // 确保ModelId不为空，使用默认值
   if (!modelId) {
     // 使用默认的ModelId，根据api/main.go中的默认型号设置
@@ -9091,24 +9132,25 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
   
   // 处理随机机型分配（从按安卓版本过滤后的机型列表中随机选择）
   if (modelName === 'random' || !modelName) {
-    const versionFilteredModels = androidVersionFilteredPhoneModels.value
-    if (versionFilteredModels && versionFilteredModels.length > 0) {
+    // 优先使用 form.androidVersion（由 formOverride 传入），避免批量任务依赖全局 computed 导致版本错配
+    const ver = form.androidVersion
+    let versionFilteredModels = []
+    if (ver) {
+      versionFilteredModels = (phoneModels.value || []).filter(m => {
+        if (!m.android_version) return false
+        return String(m.android_version) === String(ver)
+      })
+    }
+    if (versionFilteredModels.length > 0) {
       // 从按安卓版本过滤后的机型列表中随机选择一个
       const randomModel = versionFilteredModels[Math.floor(Math.random() * versionFilteredModels.length)]
       modelId = randomModel.id
       modelName = randomModel.name
-      console.log('随机选择的机型:', modelName, 'ID:', modelId)
-    } else if (phoneModels.value && phoneModels.value.length > 0) {
-      // 如果过滤后没有机型，从全部机型中随机选择
-      const randomModel = phoneModels.value[Math.floor(Math.random() * phoneModels.value.length)]
-      modelId = randomModel.id
-      modelName = randomModel.name
-      console.log('按版本过滤后无机型，从全部机型随机选择:', modelName, 'ID:', modelId)
+      console.log('随机选择的机型:', modelName, 'ID:', modelId, '安卓版本:', ver)
     } else {
-      // 如果没有可用机型，使用默认值
-      modelId = '17' // 默认型号ID，对应InfinixX6880
-      modelName = 'InfinixX6880' // 默认型号名称
-      console.log('没有可用机型，使用默认机型:', modelName, 'ID:', modelId)
+      // 过滤后无机型：不回退到全量机型（会导致安卓版本不匹配），抛出错误由调用方处理
+      console.error('[createCloudMachine] 安卓版本过滤后无可用机型，androidVersion=', ver)
+      throw new Error(`安卓机型版本与云机的安卓大版本号不匹配，无可用机型 (androidVersion=${ver})`)
     }
   }
   
@@ -9440,7 +9482,31 @@ const handleCreateSubmit = async () => {
   }
 
   let globalIpIndex = 0
-  
+
+  // 统一校验自定义分辨率（覆盖 container 与非 container 两种 createType）
+  const _checkCustomRes = (res, custom) => {
+    if (res !== 'custom') return null
+    const w = (custom?.width || '').toString().trim()
+    const h = (custom?.height || '').toString().trim()
+    const d = (custom?.dpi || '').toString().trim()
+    if (!w || !h || !d) {
+      return '自定义分辨率时，宽、高和DPI都必须填写'
+    }
+    if (!/^\d+$/.test(w) || !/^\d+$/.test(h) || !/^\d+$/.test(d)) {
+      return '自定义分辨率的宽、高和DPI必须为正整数'
+    }
+    if (Number(w) <= 0 || Number(h) <= 0 || Number(d) <= 0) {
+      return '自定义分辨率的宽、高和DPI必须大于0'
+    }
+    return null
+  }
+  const _resErr = _checkCustomRes(createForm.value.containerResolution, createForm.value.containerCustomResolution)
+    || _checkCustomRes(createForm.value.resolution, createForm.value.customResolution)
+  if (_resErr) {
+    ElMessage.error(_resErr)
+    return
+  }
+
   // 批量创建模式下的容器模式逻辑
   if (createForm.value.createType === 'container') {
     let imageUrl = createForm.value.containerImageSelect
@@ -9467,17 +9533,10 @@ const handleCreateSubmit = async () => {
         containerCustomDns: customDns, 
         containerSandboxMode: sandboxMode, 
         containerDataDiskSize: dataDiskSize, 
-        containerCustomResolution: customResolution 
+        containerCustomResolution: customResolution
       } = createForm.value
-      
-      // 校验自定义分辨率
-      if (resolution === 'custom') {
-        if (!customResolution.width || !customResolution.height || !customResolution.dpi) {
-           ElMessage.error('自定义分辨率时，设备宽、设备长和DPI都必须填写')
-           createLoading.value = false
-           return
-        }
-      }
+
+      // 自定义分辨率校验已在前置统一完成
 
       const targets = []
       
@@ -9652,7 +9711,10 @@ const handleCreateSubmit = async () => {
     if (createMode.value === 'batch' || createMode.value === 'multi-device-batch') {
       // 批量创建 - 使用任务队列系统，支持无限制创建
       const { modelName, count, startSlot, modelType, localModel, modelStatic, selectedSlots } = createForm.value
-      
+
+      // 在循环前对按安卓版本过滤的机型列表取快照，避免循环过程中 computed 重新计算导致随机池变化
+      const versionFilteredModelsSnapshot = androidVersionFilteredPhoneModels.value
+
       // 准备批量创建目标，自动分配可用坑位
       const targets = []
       
@@ -9713,11 +9775,13 @@ const handleCreateSubmit = async () => {
                      // Randomize model selection if 'random' is selected（从按安卓版本过滤后的机型中随机）
                      let targetModelName = modelName
                      if (modelType === 'online' && modelName === 'random') {
-                        const vfModels = androidVersionFilteredPhoneModels.value
-                        const pool = vfModels && vfModels.length > 0 ? vfModels : phoneModels.value
-                        if (pool.length > 0) {
-                          const randomIndex = Math.floor(Math.random() * pool.length)
-                          targetModelName = pool[randomIndex].name
+                        const vfModels = versionFilteredModelsSnapshot
+                        if (vfModels && vfModels.length > 0) {
+                          const randomIndex = Math.floor(Math.random() * vfModels.length)
+                          targetModelName = vfModels[randomIndex].name
+                        } else {
+                          // 过滤后无机型：不回退到全量机型（会导致安卓版本不匹配），保持 'random' 由后续校验拦截
+                          console.warn('[批量创建] 安卓版本过滤后无机型，可能 createForm.androidVersion 与机型数据不匹配')
                         }
                      }
             
@@ -9743,6 +9807,7 @@ const handleCreateSubmit = async () => {
                         deviceIp: device.ip,
                         deviceVersion: device.version,
                         deviceId: device.id,
+                        androidVersion: createForm.value.androidVersion,
                         imageUrl: createForm.value.imageSelect === 'custom' ? createForm.value.customImageUrl : createForm.value.imageSelect,
                         isLocalImage: createForm.value.imageCategory === 'local',
                         localImageUrl: createForm.value.localImageUrl,
@@ -9789,11 +9854,13 @@ const handleCreateSubmit = async () => {
               // Randomize model selection if 'random' is selected（从按安卓版本过滤后的机型中随机）
               let targetModelName = modelName
               if (modelType === 'online' && modelName === 'random') {
-                const vfModels = androidVersionFilteredPhoneModels.value
-                const pool = vfModels && vfModels.length > 0 ? vfModels : phoneModels.value
-                if (pool.length > 0) {
-                  const randomIndex = Math.floor(Math.random() * pool.length)
-                  targetModelName = pool[randomIndex].name
+                const vfModels = versionFilteredModelsSnapshot
+                if (vfModels && vfModels.length > 0) {
+                  const randomIndex = Math.floor(Math.random() * vfModels.length)
+                  targetModelName = vfModels[randomIndex].name
+                } else {
+                  // 过滤后无机型：不回退到全量机型（会导致安卓版本不匹配），保持 'random' 由后续校验拦截
+                  console.warn('[批量创建] 安卓版本过滤后无机型，可能 createForm.androidVersion 与机型数据不匹配')
                 }
               }
       
@@ -9818,6 +9885,7 @@ const handleCreateSubmit = async () => {
                 deviceIp: device.ip,
                 deviceVersion: device.version,
                 deviceId: device.id,
+                androidVersion: createForm.value.androidVersion,
                 imageUrl: createForm.value.imageSelect === 'custom' ? createForm.value.customImageUrl : createForm.value.imageSelect,
                 isLocalImage: createForm.value.imageCategory === 'local',
                 localImageUrl: createForm.value.localImageUrl,
@@ -11619,13 +11687,15 @@ const fetchV3LatestInfo = async (device) => {
 
 
 // 国家提示
-const fetchCountryList =  () => { 
-  // ElMessage.info('支持搜索')
-  // this.$message({
-  //     message: '请选择一个选项',
-  //     type: 'info', // 或者 'success', 'warning', 'error' 等类型
-  // });
+const fetchCountryList = async () => {
   createForm.value.countryCode = ''
+  // 仅在列表为空时触发请求，避免每次 focus 重复请求
+  if (countryList.value.length === 0) {
+    const deviceIP = createDevice.value?.ip || activeDevice.value?.ip || selectedCloudDevice.value?.ip
+    if (deviceIP) {
+      await getCountryList(deviceIP)
+    }
+  }
 }
 
 
@@ -11962,6 +12032,9 @@ onMounted(() => {
     })
     Events.On('upload-complete', (data) => {
       handleUploadComplete(data)
+    })
+    Events.On('sdkUpgrade:progress', (event) => {
+      handleSdkUpdateTask(event)
     })
   }
   
@@ -16219,6 +16292,16 @@ const executeTask = async (taskId) => {
                   // 获取传递的 modelInfo
                   const modelInfo = task.modelInfo || task.modelId
                   const modelName = task.modelName
+
+                  // 批量随机机型去重：按任务维度记录已分配的随机机型 ID
+                  if (!task.usedRandomModelIds) task.usedRandomModelIds = []
+                  const isRandomModel = (modelInfo && modelInfo.value === 'random') || modelInfo === 'random'
+                  const excludeIds = isRandomModel ? [...task.usedRandomModelIds] : []
+                  const onRandomSelected = (selectedId) => {
+                    if (selectedId && !task.usedRandomModelIds.includes(selectedId)) {
+                      task.usedRandomModelIds.push(selectedId)
+                    }
+                  }
                   
                   // V2容器使用一键新机接口，不支持指定机型
                   if (target.androidType === 'V2') {
@@ -16255,7 +16338,19 @@ const executeTask = async (taskId) => {
                     }
                   } else {
                     // 非V2容器使用切换机型接口
-                    await switchCloudMachineModel({ ip: target.deviceIp, version: target.deviceVersion || 'v3' }, containerName, modelInfo, modelName, batchSwitchCountryCode.value)
+                    // 根据容器镜像的 os_ver 推导安卓大版本，避免随机机型跨版本匹配
+                    let switchAndroidVer = ''
+                    try {
+                      const imgUrl = target.image || target.Image
+                      if (imgUrl) {
+                        const img = imageList.value.find(i => i.url === imgUrl)
+                        if (img && img.os_ver) {
+                          const verMatch = img.os_ver.match(/and(\d+)/i)
+                          if (verMatch && verMatch[1]) switchAndroidVer = verMatch[1]
+                        }
+                      }
+                    } catch (e) { /* ignore */ }
+                    await switchCloudMachineModel({ ip: target.deviceIp, version: target.deviceVersion || 'v3' }, containerName, modelInfo, modelName, batchSwitchCountryCode.value, switchAndroidVer, excludeIds, onRandomSelected)
                     return true
                   }
                 }
@@ -16276,6 +16371,7 @@ const executeTask = async (taskId) => {
                     modelType: target.modelType || 'online',
                     localModel: target.localModel || '',
                     modelStatic: target.modelStatic || '',
+                    androidVersion: target.androidVersion || createForm.value.androidVersion,
                     vpcGroupId: target.vpcGroupId || '',
                     vpcNodeId: target.vpcNodeId || '',
                     vpcSelectMode: target.vpcNodeId === 'random' ? 'random' : 'specified',
@@ -16796,7 +16892,9 @@ const confirmBatchSwitchModel = async () => {
         modelName = '随机'
       } else {
         if (!modelSlot.type || modelSlot.type === 'online') {
-          const m = phoneModels.value.find(m => m.id === modelSlot.modelId)
+          // 优先在按安卓版本过滤的机型列表中查找，避免跨版本同名/同 ID 机型匹配错误
+          const m = filteredPhoneModelsForBatch.value.find(m => m.id === modelSlot.modelId)
+            || phoneModels.value.find(m => m.id === modelSlot.modelId)
           if (m) {
             model = { id: m.id, name: m.name }
             modelName = m.name
@@ -18564,6 +18662,57 @@ const clearCache = async () => {
 }
 
 // 批量清理磁盘数据
+// SDK升级任务队列：子组件发起升级时，先在队列里创建条目
+const handleSdkUpgradePushTask = ({ taskId, deviceIP, batch }) => {
+  const task = {
+    id: taskId,
+    type: 'sdkUpgrade',
+    deviceIP,
+    isBatch: !!batch,
+    status: 'pending',
+    progress: 0,
+    currentStage: '',
+    currentMsg: '',
+    logs: [],
+    startTime: new Date(),
+    endTime: null,
+    error: null
+  }
+  taskQueue.value.unshift(task)
+}
+
+// SDK升级任务队列：根据后端 sdkUpgrade:progress 事件更新对应条目
+const handleSdkUpdateTask = (event) => {
+  const data = event?.data
+  if (!data || !data.taskId) return
+  const task = taskQueue.value.find(t => t.id === data.taskId)
+  if (!task) return
+  if (task.status === 'completed' || task.status === 'failed') return
+
+  if (typeof data.progress === 'number') {
+    task.progress = Math.max(task.progress, data.progress)
+    if (data.stage === 'complete') task.progress = 100
+  }
+  if (data.stage) task.currentStage = data.stage
+  if (data.msg) task.currentMsg = data.msg
+  if (data.logs || data.stage === 'log' || data.stage === 'sse') {
+    const line = data.msg || ''
+    if (line) task.logs.push(line)
+    if (task.logs.length > 200) task.logs.splice(0, task.logs.length - 200)
+  }
+  if (task.status === 'pending') task.status = 'running'
+
+  if (data.stage === 'complete') {
+    task.status = 'completed'
+    task.endTime = new Date()
+    task.progress = 100
+  } else if (data.stage === 'failed') {
+    task.status = 'failed'
+    task.endTime = new Date()
+    task.error = data.msg || '升级失败'
+  }
+}
+
 const handleBatchDeleteHosts = async () => {
   if (selectedHostDevices.value.length === 0) {
     ElMessage.warning('请先选择要清理的主机')
@@ -18571,15 +18720,21 @@ const handleBatchDeleteHosts = async () => {
   }
 
   try {
-    await ElMessageBox.confirm(
-        `确定要清理选中的 ${selectedHostDevices.value.length} 个设备的磁盘数据吗？`,
-        '清理磁盘数据会重启设备，重启时间为5~10分钟，请耐心等待',
+    const { value } = await ElMessageBox.prompt(
+        `确定要清理选中的 ${selectedHostDevices.value.length} 个设备的磁盘数据吗？\n清理磁盘数据会重启设备，重启时间为5~10分钟，请耐心等待。\n\n请输入“确认执行”以继续：`,
+        '批量清理磁盘数据',
         {
             confirmButtonText: '确定',
             cancelButtonText: '取消',
+            inputPlaceholder: '请输入“确认执行”',
+            inputValidator: (val) => val === '确认执行' || '请输入“确认执行”以确认操作',
             type: 'warning'
         }
     )
+    if (value !== '确认执行') {
+        ElMessage.warning('输入不匹配，已取消清理')
+        return
+    }
 
     collapseRightSidebar()
 
@@ -18926,7 +19081,7 @@ const handleBindsTest = async () => {
                   <div style="display: flex; justify-content: space-between; align-items: center; text-align: left;">
                     <div style="text-align: left !important;">
                       <span style="font-weight: bold;">
-                {{ task.type === 'restart' ? '批量重启' : task.type === 'reset' ? '批量重置' : task.type === 'shutdown' ? '批量关机' : task.type === 'create' ? '批量创建' : task.type === 'delete' ? '批量删除' : task.type === 'switchModel' ? (task.operation === 'new' ? '批量新机' : '批量切换机型') : task.type === 'uploadFile' ? '批量上传' : task.type === 'uploadImage' ? '批量上传镜像' : task.type === 'downloadImage' ? '下载镜像' : task.type === 'cleanDisk' ? '清理磁盘' : task.type === 'updateImage' ? '批量更新镜像' : task.type === 'copy' ? '复制云机' : '未知任务' }}
+                {{ task.type === 'restart' ? '批量重启' : task.type === 'reset' ? '批量重置' : task.type === 'shutdown' ? '批量关机' : task.type === 'create' ? '批量创建' : task.type === 'delete' ? '批量删除' : task.type === 'switchModel' ? (task.operation === 'new' ? '批量新机' : '批量切换机型') : task.type === 'uploadFile' ? '批量上传' : task.type === 'uploadImage' ? '批量上传镜像' : task.type === 'downloadImage' ? '下载镜像' : task.type === 'cleanDisk' ? '清理磁盘' : task.type === 'sdkUpgrade' ? (task.isBatch ? '批量升级SDK' : '升级SDK') : task.type === 'updateImage' ? '批量更新镜像' : task.type === 'copy' ? '复制云机' : '未知任务' }}
               </span>
                       <el-tooltip :content="getTaskTargetDisplay(task).full.join('\n')" placement="top" :disabled="getTaskTargetDisplay(task).full.length <= 1">
                 <span style="color: #409eff; font-size: 12px; margin-left: 4px; cursor: default;">
@@ -18976,6 +19131,18 @@ const handleBindsTest = async () => {
                     </div>
                     <div v-else style="color: #606266;">
                       设备: {{ task.deviceIP }} | 步骤: {{ task.currentStep }}/{{ task.totalSteps }}
+                    </div>
+                  </div>
+                  <!-- SDK升级任务显示日志与状态 -->
+                  <div v-else-if="task.type === 'sdkUpgrade'" style="margin-top: 5px; font-size: 12px; text-align: left !important; display: block;">
+                    <div style="color: #606266; margin-bottom: 4px;">
+                      设备: {{ task.deviceIP }}<span v-if="task.currentStage"> | 阶段: {{ task.currentStage }}</span>
+                    </div>
+                    <div v-if="task.currentMsg" style="color: #409eff; margin-bottom: 4px; word-break: break-all;">
+                      {{ task.currentMsg }}
+                    </div>
+                    <div v-if="task.logs && task.logs.length > 0" style="max-height: 150px; overflow-y: auto; background: #f5f7fa; padding: 8px; border-radius: 4px; font-size: 11px; color: #606266; font-family: monospace;">
+                      <div v-for="(log, idx) in task.logs" :key="idx" style="margin-bottom: 2px; word-break: break-all;">{{ log }}</div>
                     </div>
                   </div>
                   <!-- 创建任务分步显示进度 -->
@@ -19144,6 +19311,7 @@ const handleBindsTest = async () => {
               @delete-device-group="deleteDeviceGroup"
               @move-device-to-group="moveDeviceToGroup"
               @handle-batch-delete-hosts="handleBatchDeleteHosts"
+              @sdk-upgrade-push-task="handleSdkUpgradePushTask"
             />
           </el-tab-pane>
         <!-- 云机管理 -->
@@ -20545,18 +20713,31 @@ const handleBindsTest = async () => {
             </el-form-item>
             <el-form-item :label="$t('common.resolution')">
               <el-select v-model="createForm.resolution">
+                <el-option :label="$t('common.customResolution')" value="custom"></el-option>
                 <el-option :label="$t('common.defaultResolution')" value="default"></el-option>
                 <el-option label="720x1280x320" value="720x1280x320"></el-option>
                 <el-option label="1080x1920x420" value="1080x1920x420"></el-option>
                 <el-option label="1200x1920x240（平板）" value="1200x1920x240"></el-option>
                 <el-option label="1600x2560x320（平板）" value="1600x2560x320"></el-option>
               </el-select>
-              <div v-if="createForm.resolution === 'custom'" class="custom-resolution-form" style="margin-top: 10px; display: flex; gap: 10px;">
-                <el-input v-model="createForm.customResolution.width" :placeholder="$t('common.width')" style="width: 100px;"></el-input>
-                <span>x</span>
-                <el-input v-model="createForm.customResolution.height" :placeholder="$t('common.height')" style="width: 100px;"></el-input>
-                <span>x</span>
-                <el-input v-model="createForm.customResolution.dpi" placeholder="DPI" style="width: 100px;"></el-input>
+              <div v-if="createForm.resolution === 'custom'" class="custom-resolution-form" style="margin-top: 10px;">
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="width: 60px; color: #606266; flex-shrink: 0;">{{ $t('common.width') }}</label>
+                    <el-input v-model="createForm.customResolution.width" style="flex: 1;"></el-input>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="width: 60px; color: #606266; flex-shrink: 0;">{{ $t('common.height') }}</label>
+                    <el-input v-model="createForm.customResolution.height" style="flex: 1;"></el-input>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="width: 60px; color: #606266; flex-shrink: 0;">DPI</label>
+                    <el-input v-model="createForm.customResolution.dpi" style="flex: 1;"></el-input>
+                  </div>
+                </div>
+                <div style="margin-top: 8px; color: #f56c6c; font-size: 12px;">
+                  请注意，自定义分辨率可能引发样式适配异常
+                </div>
               </div>
             </el-form-item>
             <!-- 地区选择（SDK版本>=25时显示） -->

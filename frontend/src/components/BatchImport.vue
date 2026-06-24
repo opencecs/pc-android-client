@@ -283,12 +283,25 @@
         <div v-if="importStatus === 'running' && importProgress.currentDevice" style="margin-bottom: 20px;">
           <div style="display: flex; align-items: center; gap: 10px; padding: 12px; background: #F0F9FF; border: 1px solid #91D5FF; border-radius: 4px;">
             <el-icon class="is-loading" style="color: #409EFF; font-size: 20px;"><Refresh /></el-icon>
-            <div>
+            <div style="flex: 1;">
               <div style="font-weight: bold; color: #303133;">正在导入...</div>
               <div style="font-size: 13px; color: #606266; margin-top: 4px;">
                 设备: <span style="font-weight: 600;">{{ importProgress.currentDevice }}</span>
                 <span style="margin: 0 8px;">|</span>
                 坑位: <span style="font-weight: 600;">{{ importProgress.currentSlot }}</span>
+              </div>
+              <!-- 大文件上传进度条 -->
+              <div v-if="uploadProgress.active && uploadProgress.total > 0" style="margin-top: 10px;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #606266; margin-bottom: 4px;">
+                  <span>正在上传备份包...</span>
+                  <span>{{ formatBytes(uploadProgress.uploaded) }} / {{ formatBytes(uploadProgress.total) }}</span>
+                </div>
+                <el-progress
+                  :percentage="uploadProgress.percent"
+                  :stroke-width="14"
+                  :text-inside="true"
+                  status="success"
+                />
               </div>
             </div>
           </div>
@@ -409,6 +422,30 @@ const importProgress = ref({
   currentSlot: 0,
   details: []
 })
+
+// 当前上传进度（单个大文件上传期间显示）
+const uploadProgress = ref({
+  deviceIP: '',
+  machineName: '',
+  slot: 0,
+  uploaded: 0,
+  total: 0,
+  percent: 0,
+  active: false
+})
+
+// 格式化字节
+const formatBytes = (bytes) => {
+  if (!bytes || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let i = 0
+  let val = bytes
+  while (val >= 1024 && i < units.length - 1) {
+    val /= 1024
+    i++
+  }
+  return `${val.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
 
 // 轮询定时器
 let pollTimer = null
@@ -858,6 +895,17 @@ const startImport = async () => {
     currentSlot: 0,
     details: []
   }
+
+  // 重置上传进度条
+  uploadProgress.value = {
+    deviceIP: '',
+    machineName: '',
+    slot: 0,
+    uploaded: 0,
+    total: 0,
+    percent: 0,
+    active: false
+  }
   
   console.log('✅ [StartImport] 进度初始化完成:', importProgress.value)
   
@@ -956,11 +1004,14 @@ onMounted(() => {
           currentSlot: progress.current_slot || 0,
           details: progress.details || []
         }
-        
-        const percentage = importProgress.value.totalTasks > 0 
+
+        // 单任务完成后清除上传进度条（设备端返回，此任务的上传阶段已结束）
+        uploadProgress.value.active = false
+
+        const percentage = importProgress.value.totalTasks > 0
           ? Math.floor(((importProgress.value.completedTasks + importProgress.value.failedTasks) / importProgress.value.totalTasks) * 100)
           : 0
-        
+
         console.log('✅ [EVENT] 进度已更新到 Vue state:')
         console.log('  - totalTasks:', importProgress.value.totalTasks)
         console.log('  - completedTasks:', importProgress.value.completedTasks)
@@ -978,6 +1029,22 @@ onMounted(() => {
     
     Events.On('batch-import:progress', progressHandler)
     console.log('✅ [BatchImport] batch-import:progress 监听器已注册')
+
+    // 监听单个大文件上传进度事件（ImportBackupMachine 上传期间持续 emit）
+    const uploadProgressHandler = (data) => {
+      if (!data) return
+      uploadProgress.value = {
+        deviceIP: data.device_ip || '',
+        machineName: data.machine_name || '',
+        slot: data.slot || 0,
+        uploaded: data.uploaded || 0,
+        total: data.total || 0,
+        percent: data.percent || 0,
+        active: true
+      }
+    }
+    Events.On('batch-import:upload-progress', uploadProgressHandler)
+    console.log('✅ [BatchImport] batch-import:upload-progress 监听器已注册')
     
     // 监听完成事件
     const completeHandler = (data) => {
@@ -1007,7 +1074,10 @@ onMounted(() => {
           currentSlot: progress.current_slot || 0,
           details: progress.details || []
         }
-        
+
+        // 整个批量任务完成，清除上传进度条
+        uploadProgress.value.active = false
+
         console.log('✅ [EVENT] 最终进度已更新到 Vue state:')
         console.log('  - totalTasks:', importProgress.value.totalTasks)
         console.log('  - completedTasks:', importProgress.value.completedTasks)

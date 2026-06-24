@@ -2125,8 +2125,8 @@
                                     <div class="protocol-item">vless格式: uuid@server:port?type=ws&security=tls&sni=xxx#remarks</div>
                                     <div class="protocol-item">ss格式: base64(method:password)@server:port#remarks (SIP002)</div>
                                     <div class="protocol-item">trojan格式: password@server:port?type=tcp&security=tls&sni=xxx#remarks</div>
-                                    <div class="protocol-item">socks格式: server/port/user/password/remarks/   （用户名和密码可不填）</div>
-                                    <div class="protocol-item">http格式: server/port/user/password/remarks/  （用户名和密码可不填）</div>
+                                    <div class="protocol-item">socks格式: server/port/user/password/remarks/   （用户名和密码可不填，分隔符支持/、:或空格）</div>
+                                    <div class="protocol-item">http格式: server/port/user/password/remarks/  （用户名和密码可不填，分隔符支持/、:或空格）</div>
                                     <div class="protocol-item">wireguard格式: privateKey@server:port?publickey=xxx&address=xxx&mtu=xxx#remarks</div>
                                     <div class="protocol-item">hysteria2格式: auth@server:port?sni=xxx&insecure=1&obfs-password=xxx#remarks</div>
                                     <div class="protocol-item">sstp格式: username:password@server:port?sni=xxx&insecure=1#remarks （用户名和密码可不填）</div>
@@ -3392,20 +3392,42 @@ const handleSubmit = async () => {
                 const protocolPrefix = formData.protocol === '5' ? 'socks' : 'http'
                 
                 // 将socks/http地址转换为标准格式
+                // 兼容三种字段分隔符：/ : 空格，不强制要求结尾/
                 addresses = addresses.map(address => {
                     const trimmedAddress = address.trim()
+                    if (!trimmedAddress) return trimmedAddress
 
-                    if (!trimmedAddress.endsWith('/')) {
-                        return trimmedAddress
+                    // 去掉结尾多余的分隔符
+                    const cleaned = trimmedAddress.replace(/[/\s]+$/, '')
+
+                    // 按优先级尝试不同分隔符：/ → 连续空格 → :
+                    let parts = []
+                    if (cleaned.includes('/')) {
+                        parts = cleaned.split('/').map(p => p.trim()).filter(Boolean)
+                    } else if (/\s+/.test(cleaned)) {
+                        parts = cleaned.split(/\s+/).map(p => p.trim()).filter(Boolean)
+                    } else if (cleaned.includes(':')) {
+                        // 用:分割：第一段可能是"ip:port"（split后第一个元素就是完整ip），需特殊处理
+                        const colonParts = cleaned.split(':').map(p => p.trim()).filter(Boolean)
+                        if (colonParts.length >= 2) {
+                            // 前两段合并为 ip:port
+                            parts = [`${colonParts[0]}:${colonParts[1]}`, ...colonParts.slice(2)]
+                        }
                     }
 
-                    const parts = trimmedAddress.split('/').filter(p => p)
                     if (parts.length < 2) {
                         return trimmedAddress
                     }
 
-                    const ip = parts[0]
-                    const port = parts[1]
+                    // 第一段可能是 ip 或 ip:port，统一拆出 ip 和 port
+                    let ip = parts[0]
+                    let port = parts[1]
+                    const firstColon = ip.indexOf(':')
+                    if (firstColon > 0) {
+                        port = ip.slice(firstColon + 1)
+                        ip = ip.slice(0, firstColon)
+                    }
+
                     const username = parts[2] || ''
                     const password = parts[3] || ''
                     const remarks = parts[4] || `${protocolPrefix}_${Math.random().toString(36).substring(2, 8)}`
@@ -4552,23 +4574,30 @@ const validateAddressFormat = (address, protocol) => {
 
     // socks 和 http 使用相同的格式验证
     if (protocol === '5' || protocol === '6') {
-        if (!trimmedAddress.endsWith('/')) {
-            return { 
-                valid: false, 
-                message: '地址必须以 / 结尾' 
+        // 去掉结尾多余的分隔符（/ : 或空白）
+        const cleaned = trimmedAddress.replace(/[/:\s]+$/, '')
+
+        // 按优先级尝试不同分隔符：/ → 连续空格 → :
+        let parts = []
+        if (cleaned.includes('/')) {
+            parts = cleaned.split('/').map(p => p.trim()).filter(Boolean)
+        } else if (/\s+/.test(cleaned)) {
+            parts = cleaned.split(/\s+/).map(p => p.trim()).filter(Boolean)
+        } else if (cleaned.includes(':')) {
+            const colonParts = cleaned.split(':').map(p => p.trim()).filter(Boolean)
+            if (colonParts.length >= 2) {
+                parts = [`${colonParts[0]}:${colonParts[1]}`, ...colonParts.slice(2)]
             }
         }
-        
-        const parts = trimmedAddress.split('/').filter(p => p)
-        
+
         if (parts.length < 2) {
-            return { 
-                valid: false, 
-                message: '格式错误，请按照: IP/端口/用户名/密码/节点别名 格式输入' 
+            return {
+                valid: false,
+                message: '格式错误，请按照: IP/端口/用户名/密码/节点别名 格式输入（分隔符支持/、:或空格）'
             }
         }
     }
-    
+
     return { valid: true, message: '格式正确' }
 }
 
@@ -4616,8 +4645,8 @@ const validateBatchAddresses = (addresses, protocol) => {
         '2': 'vless://uuid@server:port?type=ws&security=tls',
         '3': 'ss://base64(method:password)@server:port',
         '4': 'trojan://password@server:port?type=tcp&security=tls',
-        '5': 'IP/端口/用户名/密码/节点别名',
-        '6': 'IP/端口/用户名/密码/节点别名',
+        '5': 'IP/端口/用户名/密码/节点别名（分隔符支持/、:或空格）',
+        '6': 'IP/端口/用户名/密码/节点别名（分隔符支持/、:或空格）',
         '7': 'wireguard://privateKey@server:port',
         '8': 'hysteria2://auth@server:port',
         '9': 'sstp://username:password@server:port'

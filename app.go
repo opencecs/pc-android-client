@@ -1680,6 +1680,12 @@ func (a *App) emitEvent(eventName string, data interface{}) {
 
 // NewApp creates a new App application struct
 func NewApp() *App {
+	// 全局禁用 100-Continue：设备端 GoFrame 不响应 100，会导致大文件上传阻塞/异常。
+	// 同时影响 DefaultTransport（局部 &http.Client{} 默认走它）。
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		t.ExpectContinueTimeout = 0
+	}
+
 	// ========== 大规模设备优化 HTTP Client 配置 ==========
 	// 设计目标: 支持 5000+ 设备同时在线
 	// 核心策略: 连接池复用 + Keep-Alive + 并发控制
@@ -1702,7 +1708,7 @@ func NewApp() *App {
 		
 		// 超时配置
 		ResponseHeaderTimeout: 10 * time.Second, // 等待响应头超时
-		ExpectContinueTimeout: 1 * time.Second,  // 100-Continue 超时
+		ExpectContinueTimeout: 0,                // 禁用 100-Continue（设备端 GoFrame 不响应 100，会导致大文件上传阻塞/异常）
 		
 		// 性能优化
 		DisableCompression:    false,          // 启用压缩节省带宽
@@ -2365,162 +2371,243 @@ func (a *App) UploadFileToCloudMachine(deviceIP string, version string, containe
 }
 
 // UpgradeSDK 升级SDK
-func (a *App) UpgradeSDK(deviceIP string, password string) map[string]interface{} {
-	log.Printf("[IPC] 收到 UpgradeSDK 调用")
-	log.Printf("[IPC] 参数: deviceIP=%s, password=%s", deviceIP, password)
-
-	// 构造SDK升级URL
-	url := fmt.Sprintf("http://%s/server/upgrade", deviceAddr(deviceIP))
-
-	// 创建HTTP请求
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return map[string]interface{}{
-			"success": false,
-			"message": fmt.Sprintf("创建请求失败: %v", err),
+// upgradeDeviceViaServerUpgrade 通过 GET /server/upgrade 触发设备自取升级。
+// 单设备与批量升级统一走该接口（设备端自行停服务、下载、写入，避免 text file busy）。
+// taskId 用于关联前端任务队列；每读到一条 SSE 行就 emit "sdkUpgrade:progress" 事件，
+// 让前端实时显示进度。返回 (success, message, errorType)，供 UpgradeSDK 与 BatchUpgradeDevices 复用。
+func (a *App) upgradeDeviceViaServerUpgrade(deviceIP string, password string, taskId string) (bool, string, string) {
+	if taskId == "" {
+		taskId = fmt.Sprintf("sdkUpgrade_%d_%s", time.Now().UnixNano(), randText(6))
+	}
+	// 节流：普通进度事件至少间隔 250ms 才推送一次，避免高频 SSE 把前端主线程卡住
+	var lastEmitAt int64
+	emitProgress := func(stage string, progress int, msg string, extra map[string]interface{}) {
+		now := time.Now().UnixNano()
+		isTerminal := stage == "complete" || stage == "failed" || stage == "start"
+		if !isTerminal && now-lastEmitAt < int64(250*time.Millisecond) {
+			return
 		}
+		lastEmitAt = now
+		payload := map[string]interface{}{
+			"taskId":   taskId,
+			"deviceIP": deviceIP,
+			"stage":    stage,
+			"progress": progress,
+			"msg":      msg,
+		}
+		for k, v := range extra {
+			payload[k] = v
+		}
+		a.emitEvent("sdkUpgrade:progress", payload)
 	}
 
-	// 添加认证头
+	emitProgress("start", 0, "开始升级", nil)
+
+	upgradeURL := fmt.Sprintf("http://%s/server/upgrade", deviceAddr(deviceIP))
+
+	req, err := http.NewRequest("GET", upgradeURL, nil)
+	if err != nil {
+		emitProgress("failed", 0, fmt.Sprintf("创建请求失败: %v", err), nil)
+		return false, fmt.Sprintf("创建请求失败: %v", err), "request_failed"
+	}
+
 	if password != "" {
 		req.SetBasicAuth("admin", password)
 	}
 
-	// 发送HTTP请求
-	client := &http.Client{
-		Timeout: 60 * time.Second, // 增加超时时间，因为SDK升级可能需要较长时间
-	}
+	// 不设整体超时：升级可能持续数分钟，依赖流式读超时
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("调用SDK升级API失败: %v", err)
-		return map[string]interface{}{
-			"success": false,
-			"message": fmt.Sprintf("调用SDK升级API失败: %v", err),
-		}
+		log.Printf("[UpgradeSDK] 设备 %s 调用 /server/upgrade 失败: %v", deviceIP, err)
+		emitProgress("failed", 0, fmt.Sprintf("调用SDK升级API失败: %v", err), nil)
+		return false, fmt.Sprintf("调用SDK升级API失败: %v", err), "request_failed"
 	}
 	defer resp.Body.Close()
 
-	// 检查响应状态码
+	if resp.StatusCode == http.StatusUnauthorized {
+		emitProgress("failed", 0, "认证失败，请输入正确的设备密码", map[string]interface{}{"errorType": "auth_required"})
+		return false, "认证失败，请输入正确的设备密码", "auth_required"
+	}
 	if resp.StatusCode != http.StatusOK {
-		// 读取响应内容以获取更多信息
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("SDK升级API返回错误状态码: %d, 响应: %s", resp.StatusCode, string(body))
-		return map[string]interface{}{
-			"success":    false,
-			"message":    fmt.Sprintf("SDK升级API返回错误: 状态码 %d", resp.StatusCode),
-			"statusCode": resp.StatusCode,
-			"response":   string(body),
-		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		msg := fmt.Sprintf("SDK升级API返回错误: 状态码 %d, 响应: %s", resp.StatusCode, string(body))
+		emitProgress("failed", 0, msg, nil)
+		return false, msg, "http_error"
 	}
 
-	// 读取响应数据
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("读取SDK升级API响应失败: %v", err)
-		return map[string]interface{}{
-			"success": false,
-			"message": fmt.Sprintf("读取SDK升级API响应失败: %v", err),
-		}
-	}
-
-	log.Printf("SDK升级API响应: %s", string(body))
-
-	// 处理Server-Sent Events (SSE)格式的响应
-	lines := strings.Split(string(body), "\n")
-	var completeData string
+	// 流式读取 SSE，逐行解析并转发（仅对 data: 行推送进度，event:/纯文本行不单独 emit，避免高频）
+	reader := bufio.NewReader(resp.Body)
 	var event string
+	var completeData string
+	var lastParsed map[string]interface{}
 
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "event:") {
-			event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-		} else if strings.HasPrefix(line, "data:") {
-			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-			if data != "" {
+	for {
+		line, err := reader.ReadString('\n')
+		if line != "" {
+			trimmed := strings.TrimRight(line, "\r\n")
+			if strings.HasPrefix(trimmed, "event:") {
+				event = strings.TrimSpace(strings.TrimPrefix(trimmed, "event:"))
+			} else if strings.HasPrefix(trimmed, "data:") {
+				data := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
+				if data == "" {
+					if err != nil {
+						break
+					}
+					continue
+				}
+				var obj map[string]interface{}
+				parseOK := json.Unmarshal([]byte(data), &obj) == nil
+				if parseOK {
+					lastParsed = obj
+				}
+				prog := 0
+				stageName := event
+				if parseOK {
+					if p, ok := obj["progress"].(float64); ok {
+						prog = int(p)
+					} else if p, ok := obj["percent"].(float64); ok {
+						prog = int(p)
+					}
+					if s, ok := obj["stage"].(string); ok && s != "" {
+						stageName = s
+					}
+					if m, ok := obj["msg"].(string); ok && m != "" {
+						emitProgress(stageName, prog, m, obj)
+					} else {
+						emitProgress(stageName, prog, data, obj)
+					}
+				} else {
+					emitProgress(stageName, prog, data, nil)
+				}
 				if event == "complete" {
 					completeData = data
-					break
 				}
 			}
 		}
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("[UpgradeSDK] 设备 %s 读取SSE失败: %v", deviceIP, err)
+			}
+			break
+		}
 	}
 
-	// 解析完整事件的数据
+	// 解析结果
 	if completeData != "" {
 		var result map[string]interface{}
 		if err := json.Unmarshal([]byte(completeData), &result); err != nil {
-			log.Printf("解析SDK升级完成事件失败: %v, 数据: %s", err, completeData)
-			return map[string]interface{}{
-				"success":  false,
-				"message":  fmt.Sprintf("解析SDK升级完成事件失败: %v", err),
-				"response": string(body),
-			}
+			log.Printf("[UpgradeSDK] 解析完成事件失败: %v, 数据: %s", err, completeData)
+			emitProgress("failed", 0, fmt.Sprintf("解析SDK升级完成事件失败: %v", err), nil)
+			return false, fmt.Sprintf("解析SDK升级完成事件失败: %v", err), "parse_failed"
 		}
-
-		// 检查升级是否成功
 		if msg, ok := result["msg"].(string); ok && msg == "success" {
-			return map[string]interface{}{
-				"success": true,
-				"message": "SDK升级成功",
-				"data":    result,
-			}
+			emitProgress("complete", 100, "SDK升级成功", result)
+			return true, "SDK升级成功", ""
 		}
-
-		return map[string]interface{}{
-			"success": true,
-			"message": "SDK升级请求成功，正在进行升级...",
-			"data":    result,
-		}
+		emitProgress("complete", 100, "SDK升级请求成功，正在进行升级...", result)
+		return true, "SDK升级请求成功，正在进行升级...", ""
 	}
 
-	// 尝试直接解析响应体（兼容旧格式）
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		log.Printf("解析SDK升级API响应失败: %v, 响应内容: %s", err, string(body))
-		// 即使解析失败，如果响应包含"success"，也认为升级成功
-		if strings.Contains(string(body), "success") {
-			return map[string]interface{}{
-				"success": true,
-				"message": "SDK升级成功",
-			}
-		}
-		return map[string]interface{}{
-			"success":  false,
-			"message":  fmt.Sprintf("解析SDK升级API响应失败: %v", err),
-			"response": string(body),
-		}
-	}
-
-	// 检查V3 API响应格式
-	if code, ok := result["code"].(float64); ok {
-		if code != 0 {
+	// 兼容旧格式（整段非 SSE JSON）
+	if lastParsed != nil {
+		if code, ok := lastParsed["code"].(float64); ok && code != 0 {
 			message := "未知错误"
-			if msg, ok := result["message"].(string); ok {
+			if msg, ok := lastParsed["message"].(string); ok {
 				message = msg
 			}
-			log.Printf("SDK升级API返回错误: code=%f, message=%s", code, message)
-			return map[string]interface{}{
-				"success": false,
-				"message": fmt.Sprintf("SDK升级失败: %s", message),
-				"code":    code,
-			}
+			emitProgress("failed", 0, fmt.Sprintf("SDK升级失败: %s", message), nil)
+			return false, fmt.Sprintf("SDK升级失败: %s", message), "api_error"
 		}
+		emitProgress("complete", 100, "SDK升级请求成功，正在进行升级...", lastParsed)
+		return true, "SDK升级请求成功，正在进行升级...", ""
 	}
 
-	return map[string]interface{}{
-		"success": true,
-		"message": "SDK升级请求成功，正在进行升级...",
-		"data":    result,
-	}
+	// 没有任何 SSE 数据，按请求成功处理
+	emitProgress("complete", 100, "SDK升级请求成功，正在进行升级...", nil)
+	return true, "SDK升级请求成功，正在进行升级...", ""
 }
 
-// UpgradeDevice 升级设备
-func (a *App) UpgradeDevice(deviceIP string, version string, password string) map[string]interface{} {
-	log.Printf("[IPC] 收到 UpgradeDevice 调用")
-	log.Printf("[IPC] 参数: deviceIP=%s, version=%s, password=%s", deviceIP, version, password)
+// randText 生成 n 位随机小写字母数字串，用于 taskId 后缀
+func randText(n int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = charset[mathRandInt(len(charset))]
+	}
+	return string(b)
+}
 
-	// 直接调用现有的UpgradeSDK方法，忽略version参数（因为升级逻辑对所有版本相同）
-	return a.UpgradeSDK(deviceIP, password)
+func mathRandInt(n int) int {
+	// 使用 crypto/rand 避免引入 math/rand 全局状态冲突
+	var buf [4]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return 0
+	}
+	v := int(buf[0])<<24 | int(buf[1])<<16 | int(buf[2])<<8 | int(buf[3])
+	if n <= 0 {
+		return 0
+	}
+	return int(uint(v) % uint(n))
+}
+
+// UpgradeSDK 单设备升级SDK（GET /server/upgrade），新增 taskId 参数用于关联前端任务队列。
+func (a *App) UpgradeSDK(deviceIP string, password string, taskId string) map[string]interface{} {
+	log.Printf("[IPC] 收到 UpgradeSDK 调用, deviceIP=%s, taskId=%s", deviceIP, taskId)
+
+	success, message, errorType := a.upgradeDeviceViaServerUpgrade(deviceIP, password, taskId)
+	result := map[string]interface{}{
+		"success": success,
+		"message": message,
+		"taskId":  taskId,
+	}
+	if errorType != "" {
+		result["errorType"] = errorType
+	}
+
+	// 升级成功后异步轮询刷新设备版本（设备升级后会重启，/info 暂时不可达）
+	if success {
+		go a.retryRefreshDeviceVersion(deviceIP)
+	}
+	return result
+}
+
+// retryRefreshDeviceVersion 升级成功后带重试地刷新设备 /info 版本信息。
+// 设备升级后会重启，单次查询多半失败，因此轮询直到拿到新版本或超时。
+func (a *App) retryRefreshDeviceVersion(deviceIP string) {
+	const maxRetry = 30
+	const retryInterval = 5 * time.Second
+	time.Sleep(3 * time.Second)
+
+	for attempt := 1; attempt <= maxRetry; attempt++ {
+		a.deviceStatusMutex.Lock()
+		if status := a.deviceStatusMap[deviceIP]; status != nil {
+			status.LastAPICheckTime = time.Time{}
+			status.LastStorageCheckTime = time.Time{}
+		}
+		a.deviceStatusMutex.Unlock()
+
+		a.checkDeviceAPIVersion(deviceIP)
+		a.checkDeviceStorage(deviceIP)
+
+		a.deviceStatusMutex.RLock()
+		st := a.deviceStatusMap[deviceIP]
+		ready := st != nil && st.APIVersion != "" && st.APIVersion != "0"
+		a.deviceStatusMutex.RUnlock()
+
+		if ready {
+			log.Printf("[UpgradeSDK] ✅ 设备 %s 版本已刷新 (第%d次尝试)", deviceIP, attempt)
+			return
+		}
+		time.Sleep(retryInterval)
+	}
+	log.Printf("[UpgradeSDK] ⚠️ 设备 %s 在 %v 内未刷新版本(可能仍在重启)", deviceIP, maxRetry*retryInterval)
+}
+
+// UpgradeDevice 升级设备（兼容旧签名，内部转调 UpgradeSDK，taskId 由后端生成）
+func (a *App) UpgradeDevice(deviceIP string, version string, password string) map[string]interface{} {
+	log.Printf("[IPC] 收到 UpgradeDevice 调用, deviceIP=%s, version=%s", deviceIP, version)
+	return a.UpgradeSDK(deviceIP, password, "")
 }
 
 // DockerExecResult docker exec执行结果
@@ -5823,7 +5910,18 @@ func (a *App) ImportBackupModel(deviceIP, modelName string) map[string]interface
 	apiURL := fmt.Sprintf("http://%s/android/backup/modelImport", deviceAddr(deviceIP))
 	log.Printf("[ImportBackupModel] 请求URL: %s", apiURL)
 
-	client := &http.Client{}
+	// 自定义 Transport：关闭 100-continue、HTTP/1.1、超时延长，避免大文件上传被截断
+	transport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		ForceAttemptHTTP2:     false,
+		ExpectContinueTimeout: 0,
+		IdleConnTimeout:       90 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Minute,
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Minute,
+	}
 
 	log.Printf("[ImportBackupModel] 创建表单数据")
 	body, contentType := createMultipartFormData(modelName, file, fileStat)
@@ -5846,7 +5944,13 @@ func (a *App) ImportBackupModel(deviceIP, modelName string) map[string]interface
 		}
 	}
 	req.Header.Set("Content-Type", contentType)
-	
+	// 显式设置 Content-Length，避免 chunked 编码导致设备端文件边界判断错误
+	if buf, ok := body.(*bytes.Buffer); ok {
+		req.ContentLength = int64(buf.Len())
+	}
+	// 禁用 100-continue（设备端 GoFrame 不响应 100 会导致大文件 body 发送阻塞/异常）
+	req.Header.Set("Expect", "")
+
 	// 添加认证头（如果有密码）
 	if password != "" {
 		req.SetBasicAuth("admin", password)
@@ -6312,38 +6416,96 @@ func (a *App) ImportBackupMachine(deviceIP, deviceName, machineName string, slot
 	apiURL := fmt.Sprintf("http://%s%s", deviceAddr(deviceIP), importPath)
 	log.Printf("[ImportBackupMachine] 请求URL: %s", apiURL)
 
-	client := &http.Client{}
+	// 自定义 Transport：
+	// 1) ExpectContinueTimeout=0 彻底关闭 100-continue 握手（设备端 GoFrame 不响应 100，
+	//    会导致大文件 body 发送阻塞/连接提前关闭，进而上传文件被截断、tar 校验失败）
+	// 2) 显式 HTTP/1.1，避免任何 HTTP/2 协商分歧
+	// 3) 超时给足 30 分钟，避免大文件上传中途超时断流
+	transport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		ForceAttemptHTTP2:     false,
+		ExpectContinueTimeout: 0,
+		IdleConnTimeout:       90 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Minute,
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Minute,
+	}
 
-	pr, pw := io.Pipe()
-	writer := multipart.NewWriter(pw)
+	// 预先用 bytes.Buffer 构造完整 multipart body，以便设置准确的 Content-Length。
+	// 若用 io.Pipe 流式上传，Go HTTP client 走 chunked 编码，设备端 GoFrame 可能无法
+	// 准确判断文件边界，导致备份包解压不完整、tar/zip 校验返回 exit status 2。
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
 
-	go func() {
-		defer pw.Close()
-		defer writer.Close()
-
-		formFile, err := writer.CreateFormFile("file", fileStat.Name())
-		if err != nil {
-			log.Printf("[ImportBackupMachine] 创建表单文件失败: %v", err)
-			return
+	formFile, err := writer.CreateFormFile("file", fileStat.Name())
+	if err != nil {
+		log.Printf("[ImportBackupMachine] 创建表单文件失败: %v", err)
+		return map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("创建表单文件失败: %v", err),
 		}
+	}
 
-		if _, err := io.Copy(formFile, file); err != nil {
-			log.Printf("[ImportBackupMachine] 复制文件内容失败: %v", err)
-			return
+	if _, err := io.Copy(formFile, file); err != nil {
+		log.Printf("[ImportBackupMachine] 复制文件内容失败: %v", err)
+		return map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("复制文件内容失败: %v", err),
 		}
+	}
 
-		if err := writer.WriteField("name", machineName); err != nil {
-			log.Printf("[ImportBackupMachine] 写入name字段失败: %v", err)
-			return
+	if err := writer.WriteField("name", machineName); err != nil {
+		log.Printf("[ImportBackupMachine] 写入name字段失败: %v", err)
+		return map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("写入name字段失败: %v", err),
 		}
+	}
 
-		if err := writer.WriteField("indexNum", strconv.Itoa(slot)); err != nil {
-			log.Printf("[ImportBackupMachine] 写入indexNum字段失败: %v", err)
-			return
+	if err := writer.WriteField("indexNum", strconv.Itoa(slot)); err != nil {
+		log.Printf("[ImportBackupMachine] 写入indexNum字段失败: %v", err)
+		return map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("写入indexNum字段失败: %v", err),
 		}
-	}()
+	}
 
-	req, err := http.NewRequest("POST", apiURL, pr)
+	if err := writer.Close(); err != nil {
+		log.Printf("[ImportBackupMachine] 关闭multipart writer失败: %v", err)
+		return map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("关闭multipart writer失败: %v", err),
+		}
+	}
+
+	totalSize := int64(body.Len())
+	log.Printf("[ImportBackupMachine] multipart body 总大小: %d bytes", totalSize)
+
+	// 用进度追踪 Reader 包装已构造好的 body，便于上传期间持续 emit 进度事件。
+	// 由于 body 已经在内存中构造完毕，可以同时设置 ContentLength（不会走 chunked），
+	// 也能在上传时获取已发送字节数。
+	progressReader := &progressReader{
+		reader: bytes.NewReader(body.Bytes()),
+		total:  totalSize,
+		emit: func(written int64) {
+			percent := int(float64(written) / float64(totalSize) * 100)
+			if percent > 100 {
+				percent = 100
+			}
+			a.emitEvent("batch-import:upload-progress", map[string]interface{}{
+				"device_ip":    deviceIP,
+				"machine_name": machineName,
+				"slot":         slot,
+				"uploaded":     written,
+				"total":        totalSize,
+				"percent":      percent,
+			})
+		},
+	}
+
+	req, err := http.NewRequest("POST", apiURL, progressReader)
 	if err != nil {
 		log.Printf("[ImportBackupMachine] 创建请求失败: %v", err)
 		return map[string]interface{}{
@@ -6352,6 +6514,10 @@ func (a *App) ImportBackupMachine(deviceIP, deviceName, machineName string, slot
 		}
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	// 显式设置 Content-Length，避免 chunked 编码导致设备端文件边界判断错误
+	req.ContentLength = int64(body.Len())
+	// 禁用 100-continue（设备端 GoFrame 不响应 100 会导致大文件 body 发送阻塞/异常）
+	req.Header.Set("Expect", "")
 	
 	// 添加认证头（如果有密码）
 	if password != "" {
@@ -6481,31 +6647,34 @@ func (a *App) DeleteLocalBackupMachine(machineName string) map[string]interface{
 }
 
 func createMultipartFormData(modelName string, file *os.File, fileStat os.FileInfo) (io.Reader, string) {
-	pr, pw := io.Pipe()
-	writer := multipart.NewWriter(pw)
+	// 预先用 bytes.Buffer 构造完整 multipart body，以便设置准确的 Content-Length。
+	// 若用 io.Pipe 流式上传，Go HTTP client 走 chunked 编码，设备端可能无法准确判断
+	// 文件边界，导致备份包解压不完整、校验失败。
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
 
-	go func() {
-		defer pw.Close()
-		defer writer.Close()
+	formFile, err := writer.CreateFormFile("file", fileStat.Name())
+	if err != nil {
+		log.Printf("[createMultipartFormData] 创建表单文件失败: %v", err)
+		return nil, ""
+	}
 
-		formFile, err := writer.CreateFormFile("file", fileStat.Name())
-		if err != nil {
-			log.Printf("[createMultipartFormData] 创建表单文件失败: %v", err)
-			return
-		}
+	if _, err := io.Copy(formFile, file); err != nil {
+		log.Printf("[createMultipartFormData] 复制文件内容失败: %v", err)
+		return nil, ""
+	}
 
-		if _, err := io.Copy(formFile, file); err != nil {
-			log.Printf("[createMultipartFormData] 复制文件内容失败: %v", err)
-			return
-		}
+	if err := writer.WriteField("name", modelName); err != nil {
+		log.Printf("[createMultipartFormData] 写入name字段失败: %v", err)
+		return nil, ""
+	}
 
-		if err := writer.WriteField("name", modelName); err != nil {
-			log.Printf("[createMultipartFormData] 写入name字段失败: %v", err)
-			return
-		}
-	}()
+	if err := writer.Close(); err != nil {
+		log.Printf("[createMultipartFormData] 关闭multipart writer失败: %v", err)
+		return nil, ""
+	}
 
-	return pr, writer.FormDataContentType()
+	return body, writer.FormDataContentType()
 }
 
 // TemplateInfo 模板信息结构体
@@ -7352,6 +7521,7 @@ type BatchUpgradeRequest struct {
 	DeviceIP      string `json:"deviceIP"`
 	LatestVersion string `json:"latestVersion"`
 	Password      string `json:"password"`
+	TaskID        string `json:"taskId,omitempty"` // 前端生成的任务ID，用于关联任务队列
 }
 
 // BatchUpgradeResult 批量升级结果
@@ -7400,24 +7570,11 @@ func (a *App) BatchUpgradeDevices(devices interface{}) map[string]interface{} {
 	}
 	
 	log.Printf("[批量升级] 开始批量升级 %d 个设备", len(upgradeRequests))
-	
-	// ========== 2. 预下载SDK包到本地(只下载一次,所有设备共享) ==========
-	// 假设所有设备升级到同一个版本
-	latestVersion := upgradeRequests[0].LatestVersion
-	zipFilePath, err := a.downloadSDKPackage(latestVersion)
-	if err != nil {
-		log.Printf("[批量升级] ❌ 预下载SDK包失败: %v", err)
-		return map[string]interface{}{
-			"success": false,
-			"message": fmt.Sprintf("预下载SDK包失败: %v", err),
-		}
-	}
-	log.Printf("[批量升级] ✅ SDK包预下载成功: %s", zipFilePath)
-	
-	// ========== 3. 并发上传升级包到各个设备 ==========
-	// 🚀 根据设备数量动态调整并发数(支持5000台设备)
+
+	// ========== 2. 并发触发设备升级（统一走 GET /server/upgrade） ==========
+	// 设备端自行拉包、停服务、写入，避免 text file busy。不再预下载 SDK zip、不再上传。
 	maxConcurrency := calculateOptimalConcurrency(len(upgradeRequests))
-	
+
 	log.Printf("[批量升级] 使用 %d 个并发处理 %d 个设备", maxConcurrency, len(upgradeRequests))
 	
 	// 创建结果切片和互斥锁
@@ -7448,9 +7605,19 @@ func (a *App) BatchUpgradeDevices(devices interface{}) map[string]interface{} {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 			
-			// 上传SDK包到设备
-			result := a.uploadSDKToDevice(request.DeviceIP, request.Password, zipFilePath)
-			
+			// 触发设备升级（设备自取，无文件上传）
+			taskId := request.TaskID
+			if taskId == "" {
+				taskId = fmt.Sprintf("sdkUpgrade_%d_%s_%d", time.Now().UnixNano(), request.DeviceIP, index)
+			}
+			ok, msg, errType := a.upgradeDeviceViaServerUpgrade(request.DeviceIP, request.Password, taskId)
+			result := BatchUpgradeResult{
+				DeviceIP:  request.DeviceIP,
+				Success:   ok,
+				Message:   msg,
+				ErrorType: errType,
+			}
+
 			// 保存结果
 			resultsMutex.Lock()
 			results[index] = result
@@ -7490,38 +7657,82 @@ func (a *App) BatchUpgradeDevices(devices interface{}) map[string]interface{} {
 	log.Printf("[批量升级] 总耗时: %.2f秒", totalTime)
 	log.Printf("[批量升级] 成功: %d, 失败: %d", successCount, failCount)
 	
-	// ========== 4. 刷新成功设备的心跳状态(立即触发/info查询) ==========
+	// ========== 4. 刷新成功设备的心跳状态(带重试轮询，等待设备重启恢复) ==========
 	go func() {
-		time.Sleep(2 * time.Second) // 等待2秒让设备升级完成
-		log.Printf("[批量升级] 开始刷新成功设备的心跳状态...")
-		
-		// 🚀 批量重置心跳状态(避免5000台设备逐个加锁)
+		log.Printf("[批量升级] 开始刷新成功设备的心跳状态(带重试轮询)...")
+
 		successDevices := make([]string, 0, len(results))
 		for _, result := range results {
 			if result.Success {
 				successDevices = append(successDevices, result.DeviceIP)
 			}
 		}
-		
-		// 批量重置LastAPICheckTime
+		if len(successDevices) == 0 {
+			return
+		}
+
+		// 立即重置心跳检查时间，让下次心跳能查询版本
 		a.deviceStatusMutex.Lock()
 		for _, deviceIP := range successDevices {
 			if status := a.deviceStatusMap[deviceIP]; status != nil {
-				status.LastAPICheckTime = time.Time{}      // 重置为零值
-				status.LastStorageCheckTime = time.Time{} // 重置存储查询时间
+				status.LastAPICheckTime = time.Time{}
+				status.LastStorageCheckTime = time.Time{}
 			}
 		}
 		a.deviceStatusMutex.Unlock()
-		
-		// log.Printf("[批量升级] ✅ 已批量重置 %d 个成功设备的心跳状态", len(successDevices))
-		
-		// 🔧 立即触发API版本检查(不等待TCP Ping心跳)
-		// log.Printf("[批量升级] 开始立即查询成功设备的API版本...")
-		for _, deviceIP := range successDevices {
-			a.checkDeviceAPIVersion(deviceIP)
-			a.checkDeviceStorage(deviceIP)
+
+		// 升级后设备会重启，/info 可能暂时不可达，需轮询重试
+		const maxRetry = 30
+		const retryInterval = 5 * time.Second
+		remaining := make(map[string]bool, len(successDevices))
+		for _, ip := range successDevices {
+			remaining[ip] = true
 		}
-		// log.Printf("[批量升级] ✅ 已触发 %d 个成功设备的API版本查询", len(successDevices))
+
+		// 升级刚完成，先等几秒再开始轮询
+		time.Sleep(3 * time.Second)
+
+		for attempt := 1; attempt <= maxRetry; attempt++ {
+			if len(remaining) == 0 {
+				break
+			}
+			var done []string
+			for ip := range remaining {
+				// 每次重置 LastAPICheckTime 绕过 60 秒节流
+				a.deviceStatusMutex.Lock()
+				if status := a.deviceStatusMap[ip]; status != nil {
+					status.LastAPICheckTime = time.Time{}
+				}
+				a.deviceStatusMutex.Unlock()
+
+				a.checkDeviceAPIVersion(ip)
+				a.checkDeviceStorage(ip)
+
+				// 检查是否已拿到新版本（APIVersion 非空且非零）
+				a.deviceStatusMutex.RLock()
+				st := a.deviceStatusMap[ip]
+				ready := false
+				if st != nil && st.APIVersion != "" && st.APIVersion != "0" {
+					ready = true
+				}
+				a.deviceStatusMutex.RUnlock()
+				if ready {
+					done = append(done, ip)
+					log.Printf("[批量升级] ✅ 设备 %s 版本已刷新 (第%d次尝试)", ip, attempt)
+				}
+			}
+			for _, ip := range done {
+				delete(remaining, ip)
+			}
+			if len(remaining) == 0 {
+				break
+			}
+			log.Printf("[批量升级] ⏳ 第%d次轮询后仍有 %d 台设备未刷新版本，%v 后重试", attempt, len(remaining), retryInterval)
+			time.Sleep(retryInterval)
+		}
+		if len(remaining) > 0 {
+			log.Printf("[批量升级] ⚠️ %d 台设备在 %v 内未刷新版本(可能仍在重启): %v", len(remaining), maxRetry*retryInterval, remaining)
+		}
 	}()
 	
 	// 返回结果
@@ -13389,7 +13600,45 @@ func (a *App) SetDeviceGPS(host string, port int, deviceIP string, language stri
 	return nil
 }
 
+// progressWriter 带进度追踪的 io.Writer 包装器
+type progressWriter struct {
+	writer io.Writer
+	total  int64
+	emit   func(written int64)
+	written int64
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	n, err := pw.writer.Write(p)
+	pw.written += int64(n)
+	pw.emit(pw.written)
+	return n, err
+}
+
+// progressReader 带进度追踪的 io.Reader 包装器
+// 用于上传场景：底层 reader 已可提供准确 Content-Length（如 *bytes.Reader），
+// 包装后既能保持 Content-Length（非 chunked），又能在上传时持续 emit 进度。
+type progressReader struct {
+	reader  io.Reader
+	total   int64
+	emit    func(written int64)
+	written int64
+	last    int64 // 上次 emit 的字节数，用于节流
+}
+
+func (pr *progressReader) Read(p []byte) (int, error) {
+	n, err := pr.reader.Read(p)
+	pr.written += int64(n)
+	// 节流：至少每 1% 或每 1MB 才 emit 一次，避免高频事件卡 UI
+	if pr.written-pr.last >= pr.total/100 || pr.written == pr.total || pr.last == 0 {
+		pr.last = pr.written
+		pr.emit(pr.written)
+	}
+	return n, err
+}
+
 // UploadLLMModel 上传LLM模型到设备
+// 新流程：/lm/upload（octet-stream 流式上传 + SSE进度）→ /lm/extract（SSE解压进度）
 func (a *App) UploadLLMModel(deviceIP string, filePath string, token string) map[string]interface{} {
 	log.Printf("[UploadLLMModel] 开始上传模型: deviceIP=%s, filePath=%s", deviceIP, filePath)
 
@@ -13402,7 +13651,6 @@ func (a *App) UploadLLMModel(deviceIP string, filePath string, token string) map
 		}
 	}
 
-	// 获取文件大小
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		log.Printf("[UploadLLMModel] 获取文件信息失败: %v", err)
@@ -13414,41 +13662,53 @@ func (a *App) UploadLLMModel(deviceIP string, filePath string, token string) map
 	fileSize := fileInfo.Size()
 	log.Printf("[UploadLLMModel] 文件大小: %d bytes (%.2f MB)", fileSize, float64(fileSize)/1024/1024)
 
-	// 使用 io.Pipe 流式上传，避免将整个文件读入内存
-	pr, pw := io.Pipe()
-	writer := multipart.NewWriter(pw)
+	filename := filepath.Base(filePath)
 
-	// 在后台 goroutine 中流式写入文件内容，写完后关闭 pw
+	// ---- 阶段1：/lm/upload 流式上传（octet-stream，文件名走 query 参数）----
+	pr, pw := io.Pipe()
+
 	go func() {
 		var gErr error
 		defer func() {
-			writer.Close()       // 写完 multipart 结尾边界
-			pw.CloseWithError(gErr) // 通知 HTTP 发送端：写入结束（或出错）
+			pw.CloseWithError(gErr)
 		}()
 
-		part, err := writer.CreateFormFile("file", filepath.Base(filePath))
-		if err != nil {
-			gErr = fmt.Errorf("创建multipart字段失败: %v", err)
-			return
-		}
-		// 打开文件
 		file, err := os.Open(filePath)
 		if err != nil {
 			gErr = fmt.Errorf("打开文件失败: %v", err)
 			return
 		}
 		defer file.Close()
-		// 流式拷贝，内存占用仅为 io.Copy 的默认 buffer（32KB）
-		if _, err = io.Copy(part, file); err != nil {
+
+		var lastEmitBytes int64
+		progressPart := &progressWriter{
+			writer: pw,
+			total:  fileSize,
+			emit: func(written int64) {
+				if written-lastEmitBytes < fileSize/100 && written-lastEmitBytes < 1024*1024 && written < fileSize {
+					return
+				}
+				lastEmitBytes = written
+				a.emitEvent("import:progress", map[string]interface{}{
+					"stage":    "upload",
+					"progress": written,
+					"current":  written,
+					"total":    fileSize,
+					"percent":  int(float64(written) / float64(fileSize) * 100),
+					"speed":    0,
+					"msg":      "正在上传文件",
+				})
+			},
+		}
+		if _, err = io.Copy(progressPart, file); err != nil {
 			gErr = fmt.Errorf("拷贝文件内容失败: %v", err)
+			return
 		}
 	}()
 
-	// 构建URL
-	uploadURL := fmt.Sprintf("http://%s/lm/import", deviceAddr(deviceIP))
+	uploadURL := fmt.Sprintf("http://%s/lm/upload?filename=%s", deviceAddr(deviceIP), url.QueryEscape(filename))
 	log.Printf("[UploadLLMModel] 上传URL: %s", uploadURL)
 
-	// 创建请求（body 为流式 pipe，无需等待文件全部读取）
 	req, err := http.NewRequest("POST", uploadURL, pr)
 	if err != nil {
 		pr.CloseWithError(err)
@@ -13458,72 +13718,147 @@ func (a *App) UploadLLMModel(deviceIP string, filePath string, token string) map
 			"message": fmt.Sprintf("创建上传请求失败: %v", err),
 		}
 	}
-
-	// 设置请求头
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	// 添加认证头
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("X-Filename", filename)
+	// 显式设置 Content-Length，避免 Go HTTP client 走 chunked 编码
+	// （设备端在 chunked 模式下可能无法准确判断文件边界，导致 zip 损坏 EOF）
+	req.ContentLength = fileSize
 	if token != "" {
 		req.Header.Set("Authorization", token)
-		log.Printf("[UploadLLMModel] 已添加认证头")
 	}
 
-	// 发送请求（不设置超时，适合大文件）
-	client := &http.Client{
-		Timeout: 0, // 不设置超时
-	}
-	
-	log.Printf("[UploadLLMModel] 开始发送请求...")
+	client := &http.Client{Timeout: 0}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("[UploadLLMModel] 发送请求失败: %v", err)
+		log.Printf("[UploadLLMModel] 发送上传请求失败: %v", err)
 		return map[string]interface{}{
 			"success": false,
-			"message": fmt.Sprintf("发送请求失败: %v", err),
+			"message": fmt.Sprintf("发送上传请求失败: %v", err),
 		}
 	}
-	defer resp.Body.Close()
 
-	// 读取响应
-	respBody, err := io.ReadAll(resp.Body)
+	// 设备以 SSE 形式回传进度，同时也会在结尾给出上传结果
+	uploadResult, uploadErr := a.consumeSSEProgress(resp, "upload")
+	resp.Body.Close()
+	if uploadErr != nil {
+		log.Printf("[UploadLLMModel] 上传阶段失败: %v", uploadErr)
+		return map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("上传失败: %v", uploadErr),
+		}
+	}
+	log.Printf("[UploadLLMModel] 上传阶段完成: %s", uploadResult)
+
+	// ---- 阶段2：/lm/extract 触发解压（SSE 进度）----
+	extractBody := fmt.Sprintf(`{"filename":%q}`, filename)
+	extractURL := fmt.Sprintf("http://%s/lm/extract", deviceAddr(deviceIP))
+	log.Printf("[UploadLLMModel] 解压URL: %s", extractURL)
+
+	extractReq, err := http.NewRequest("POST", extractURL, strings.NewReader(extractBody))
 	if err != nil {
-		log.Printf("[UploadLLMModel] 读取响应失败: %v", err)
 		return map[string]interface{}{
 			"success": false,
-			"message": fmt.Sprintf("读取响应失败: %v", err),
+			"message": fmt.Sprintf("创建解压请求失败: %v", err),
+		}
+	}
+	extractReq.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		extractReq.Header.Set("Authorization", token)
+	}
+
+	extractResp, err := client.Do(extractReq)
+	if err != nil {
+		return map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("发送解压请求失败: %v", err),
+		}
+	}
+	defer extractResp.Body.Close()
+
+	extractResult, extractErr := a.consumeSSEProgress(extractResp, "extract")
+	if extractErr != nil {
+		log.Printf("[UploadLLMModel] 解压阶段失败: %v", extractErr)
+		return map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("解压失败: %v", extractErr),
 		}
 	}
 
-	log.Printf("[UploadLLMModel] 响应状态码: %d, 响应内容: %s", resp.StatusCode, string(respBody))
+	log.Printf("[UploadLLMModel] 解压阶段完成: %s", extractResult)
+	a.emitEvent("import:progress", map[string]interface{}{
+		"stage":   "complete",
+		"percent": 100,
+		"msg":     "导入完成",
+	})
 
-	// 解析JSON响应
-	var result map[string]interface{}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		// 如果无法解析为JSON，根据状态码判断成功与否
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return map[string]interface{}{
-				"success": true,
-				"message": "模型上传成功",
-				"code":    0,
+	return map[string]interface{}{
+		"success": true,
+		"message": "模型导入成功",
+		"code":    0,
+	}
+}
+
+// consumeSSEProgress 消费设备返回的 SSE 流，逐条转发为 import:progress 事件。
+// SSE 行格式：
+//   data: {...json...}
+//   event: progress|complete
+// 任一阶段成功完成后返回最后一条 data 内容；若流中出现错误或 HTTP 非 2xx，返回 error。
+func (a *App) consumeSSEProgress(resp *http.Response, stage string) (string, error) {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	var lastData string
+	var currentEvent string
+
+	for {
+		line, err := reader.ReadString('\n')
+		if line != "" {
+			trimmed := strings.TrimRight(line, "\r\n")
+			if strings.HasPrefix(trimmed, "event:") {
+				currentEvent = strings.TrimSpace(strings.TrimPrefix(trimmed, "event:"))
+			} else if strings.HasPrefix(trimmed, "data:") {
+				payload := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
+				if payload == "" {
+					continue
+				}
+				lastData = payload
+				var obj map[string]interface{}
+				if json.Unmarshal([]byte(payload), &obj) == nil {
+					if s, ok := obj["stage"].(string); ok && s != "" {
+						stage = s
+					}
+					obj["stage"] = stage
+					if _, ok := obj["percent"]; !ok {
+						if cur, ok2 := obj["current"].(float64); ok2 {
+							if total, ok3 := obj["total"].(float64); ok3 && total > 0 {
+								obj["percent"] = int(cur / total * 100)
+							}
+						}
+					}
+					a.emitEvent("import:progress", obj)
+				} else {
+					a.emitEvent("import:progress", map[string]interface{}{
+						"stage": stage,
+						"msg":   payload,
+					})
+				}
 			}
 		}
-		return map[string]interface{}{
-			"success": false,
-			"message": fmt.Sprintf("服务器返回错误 (状态码: %d): %s", resp.StatusCode, string(respBody)),
-			"code":    resp.StatusCode,
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return lastData, fmt.Errorf("读取SSE失败: %w", err)
 		}
 	}
 
-	// 检查返回的code字段
-	if code, ok := result["code"]; ok {
-		if codeInt, ok := code.(float64); ok && codeInt == 0 {
-			result["success"] = true
-		}
-	} else if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		result["success"] = true
+	if currentEvent == "complete" || stage == "complete" {
+		return lastData, nil
 	}
-
-	return result
+	return lastData, nil
 }
 
 

@@ -1344,6 +1344,7 @@ const emit = defineEmits([
   'showAddDeviceDialog',
   'clearCache',
   'handleBatchDeleteHosts',
+  'sdk-upgrade-push-task',
   'logOut',
   'handleHostDeviceSelectionChange',
   'showDeviceDetails',
@@ -2089,15 +2090,20 @@ const startBatchUpgrade = async () => {
       type: 'warning'
     })
     
-    // 🔧 构建批量升级请求参数
+    // 🔧 构建批量升级请求参数（每台设备生成独立 taskId 关联任务队列）
     const upgradeRequests = devicesToUpgrade.map(device => {
       const versionInfo = props.deviceVersionInfo.get(device.id)
       const password = device.password || getDevicePassword(device.ip) || ''
-      
+      const taskId = `sdkUpgrade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${device.ip}`
+
+      // 在父级任务队列创建条目
+      emit('sdk-upgrade-push-task', { taskId, deviceIP: device.ip, batch: true })
+
       return {
         deviceIP: device.ip,
         latestVersion: String(versionInfo.latestVersion), // 转换为字符串
-        password: password
+        password: password,
+        taskId: taskId
       }
     })
     
@@ -2244,10 +2250,13 @@ const handleUpgradeDevice = async (device, isBatchUpgrade = false) => {
     }
     
     // 🔧 统一使用批量升级接口(单设备也走批量逻辑)
+    const taskId = `sdkUpgrade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${device.ip}`
+    emit('sdk-upgrade-push-task', { taskId, deviceIP: device.ip, batch: false })
     const upgradeRequests = [{
       deviceIP: device.ip,
       latestVersion: String(versionInfo.latestVersion), // 转换为字符串
-      password: password || ''
+      password: password || '',
+      taskId: taskId
     }]
     
     console.log('[单设备升级] 准备升级:', upgradeRequests)
@@ -2324,9 +2333,9 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
       ipaddr: '',
       resolution: 'default',
       customResolution: {
-        width: '720',
-        height: '1280',
-        dpi: '320'
+        width: '',
+        height: '',
+        dpi: ''
       },
       sandboxSize: 28,
       dns: '223.5.5.5',
@@ -2357,9 +2366,9 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
       ipaddr: '',
       resolution: 'default',
       customResolution: {
-        width: '720',
-        height: '1280',
-        dpi: '320'
+        width: '',
+        height: '',
+        dpi: ''
       },
       sandboxSize: 28,
       dns: '223.5.5.5',
@@ -3526,27 +3535,32 @@ const handleClosePassword = async () => {
 }
 const upgradeSDK = async () => {
   if (!activeDevice.value || activeDevice.value.version !== 'v3') return
-  
+
   try {
     upgrading.value = true
     ElMessage.info('开始升级SDK...')
-    
+
     // 先检查本地存储的密码
     const savedPassword = getDevicePassword(activeDevice.value.ip)
     console.log('升级SDK - 本地存储的密码:', savedPassword)
-    
+
+    // 生成 taskId 并在任务队列里创建条目
+    const taskId = `sdkUpgrade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    emit('sdk-upgrade-push-task', { taskId, deviceIP: activeDevice.value.ip, batch: false })
+
     // 使用authRetry处理认证
     await authRetry(activeDevice.value, async (password) => {
       try {
         console.log('升级SDK - 收到的密码:', password)
         console.log('升级SDK - 设备IP:', activeDevice.value.ip)
-        
-        // 使用Wails IPC调用后端UpgradeSDK函数
+
+        // 使用Wails IPC调用后端UpgradeSDK函数（传入 taskId 关联任务队列）
         const result = await UpgradeSDK(
           activeDevice.value.ip,
-          password || ''
+          password || '',
+          taskId
         )
-        
+
         if (result.success) {
           ElMessage.success('SDK升级请求成功，正在进行升级...')
           // 重新获取设备信息
@@ -3714,9 +3728,9 @@ const showUpdateImageDialog = async (container) => {
     customDns: '',
     resolution: 'default',
     customResolution: {
-      width: '720',
-      height: '1280',
-      dpi: '320'
+      width: '',
+      height: '',
+      dpi: ''
     },
     longitud: '',
     latitude: ''

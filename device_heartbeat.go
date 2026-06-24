@@ -526,18 +526,18 @@ func (a *App) tcpPingSingleDevice(deviceIP string) {
 	now := time.Now()
 	
 	// ========== 3. 处理Ping结果 ==========
-	// 延迟阈值500ms，局域网正常时远不会触发，容忍网络抖动
-	if err != nil || latency > 500 {
-		// ========== TCP失败或延迟>150ms处理 ==========
+	// 延迟阈值2000ms，兼容公网/跨地域高延迟场景，避免误判为离线
+	if err != nil || latency > 2000 {
+		// ========== TCP失败或延迟>2000ms处理 ==========
 		status.ConsecutiveSuccesses = 0      // 清零成功计数
 		status.ConsecutiveFailures++         // 增加失败计数
 		status.LastCheckAt = now
 		status.LastHTTPVerifyTime = now      // 记录HTTP验证时间
-		
+
 		if err != nil {
 			log.Printf("[TCP Ping] ❌ 设备 %s (%s) TCP连接失败 (连续失败%d次): %v", deviceIP, a.getDeviceName(deviceIP), status.ConsecutiveFailures, err)
 		} else {
-			log.Printf("[TCP Ping] ⚠️ 设备 %s (%s) 延迟过高: %dms > 150ms (连续失败%d次)", deviceIP, a.getDeviceName(deviceIP), latency, status.ConsecutiveFailures)
+			log.Printf("[TCP Ping] ⚠️ 设备 %s (%s) 延迟过高: %dms > 2000ms (连续失败%d次)", deviceIP, a.getDeviceName(deviceIP), latency, status.ConsecutiveFailures)
 			status.ResponseTime = latency
 		}
 		
@@ -554,7 +554,7 @@ func (a *App) tcpPingSingleDevice(deviceIP string) {
 			status.ResponseTime = status.LastSuccessLatency
 		}
 	} else {
-		// ========== TCP Ping成功且延迟≤500ms ==========
+		// ========== TCP Ping成功且延迟≤2000ms ==========
 
 		// 优化: 稳定在线设备降频HTTP验证（每30秒验证一次），大幅减少网络请求
 		// 条件: 已在线 + 连续成功>=4次 + 上次HTTP验证在30秒内
