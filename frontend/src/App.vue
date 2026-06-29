@@ -9107,19 +9107,7 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
   
   // 从手机型号列表中查找对应的ModelId
   let modelId = ''
-  // 优先按 form.androidVersion 过滤后查找，避免同名机型跨版本匹配到错误的 modelId
-  const ver = form.androidVersion
-  const findModelInList = (list) => list.find(m => m.name === modelName)
-  let model = null
-  if (ver) {
-    const filtered = (phoneModels.value || []).filter(m => {
-      if (!m.android_version) return false
-      return String(m.android_version) === String(ver)
-    })
-    model = findModelInList(filtered) || findModelInList(phoneModels.value || [])
-  } else {
-    model = findModelInList(phoneModels.value || [])
-  }
+  const model = phoneModels.value.find(m => m.name === modelName)
   if (model) {
     modelId = model.id || ''
   }
@@ -9129,28 +9117,27 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
     // 使用默认的ModelId，根据api/main.go中的默认型号设置
     modelId = '17' // 默认型号ID，对应InfinixX6880
   }
-  
+
   // 处理随机机型分配（从按安卓版本过滤后的机型列表中随机选择）
   if (modelName === 'random' || !modelName) {
-    // 优先使用 form.androidVersion（由 formOverride 传入），避免批量任务依赖全局 computed 导致版本错配
-    const ver = form.androidVersion
-    let versionFilteredModels = []
-    if (ver) {
-      versionFilteredModels = (phoneModels.value || []).filter(m => {
-        if (!m.android_version) return false
-        return String(m.android_version) === String(ver)
-      })
-    }
-    if (versionFilteredModels.length > 0) {
+    const versionFilteredModels = androidVersionFilteredPhoneModels.value
+    if (versionFilteredModels && versionFilteredModels.length > 0) {
       // 从按安卓版本过滤后的机型列表中随机选择一个
       const randomModel = versionFilteredModels[Math.floor(Math.random() * versionFilteredModels.length)]
       modelId = randomModel.id
       modelName = randomModel.name
-      console.log('随机选择的机型:', modelName, 'ID:', modelId, '安卓版本:', ver)
+      console.log('随机选择的机型:', modelName, 'ID:', modelId)
+    } else if (phoneModels.value && phoneModels.value.length > 0) {
+      // 如果过滤后没有机型，从全部机型中随机选择
+      const randomModel = phoneModels.value[Math.floor(Math.random() * phoneModels.value.length)]
+      modelId = randomModel.id
+      modelName = randomModel.name
+      console.log('按版本过滤后无机型，从全部机型随机选择:', modelName, 'ID:', modelId)
     } else {
-      // 过滤后无机型：不回退到全量机型（会导致安卓版本不匹配），抛出错误由调用方处理
-      console.error('[createCloudMachine] 安卓版本过滤后无可用机型，androidVersion=', ver)
-      throw new Error(`安卓机型版本与云机的安卓大版本号不匹配，无可用机型 (androidVersion=${ver})`)
+      // 如果没有可用机型，使用默认值
+      modelId = '17' // 默认型号ID，对应InfinixX6880
+      modelName = 'InfinixX6880' // 默认型号名称
+      console.log('没有可用机型，使用默认机型:', modelName, 'ID:', modelId)
     }
   }
   
