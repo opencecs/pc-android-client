@@ -641,7 +641,232 @@
                     </el-dialog>
                 </el-tab-pane>
 
+                <!-- 中转管理标签页 -->
+                <el-tab-pane :label="$t('network.domainRoute')" name="domain-route">
+                    <div class="vpc-content">
+                        <div class="left-panel">
+                            <div class="panel-header"
+                                style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>{{ $t('network.deviceList') }}</span>
+                                <el-select v-model="localGroupFilter" size="small" style="width: 90px;"
+                                    :placeholder="$t('common.selectGroupPlaceholder')">
+                                    <el-option :label="$t('common.all')" value="全部"></el-option>
+                                    <el-option v-for="group in deviceGroups" :key="group" :label="group"
+                                        :value="group"></el-option>
+                                </el-select>
+                            </div>
+                            <div class="device-list">
+                                <div v-for="device in deviceList" :key="device.ip"
+                                    :class="['device-item', { active: selectedDeviceIP === device.ip }]"
+                                    @click="selectDevice(device)">
+                                    <span class="device-ip">{{ device.ip }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="right-panel" style="padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
+                            <el-empty v-if="!selectedDeviceIP" :description="$t('network.selectDeviceFirst')" :image-size="60" style="margin: auto;" />
+                            <template v-else>
+                                <!-- 顶部操作按钮区 -->
+                                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                    <el-button type="primary" @click="openDomainRouteDialog">{{ $t('network.setDomainRoute') }}</el-button>
+                                    <el-button
+                                        v-if="domainRouteList.length > 0"
+                                        type="danger"
+                                        plain
+                                        @click="clearDomainRoute"
+                                    >{{ $t('network.clearDomainRoute') }}</el-button>
+                                </div>
 
+                                <el-divider style="margin: 0;" />
+
+                                <!-- 查询行：容器下拉 -->
+                                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                    <span style="font-weight: 600; color: #303133; font-size: 14px; white-space: nowrap; flex-shrink: 0;">{{ $t('network.queryContainerDomainRoute') }}</span>
+                                    <el-select
+                                        v-model="domainRouteContainerID"
+                                        :placeholder="$t('network.selectContainer')"
+                                        style="flex: 1; min-width: 220px; max-width: 380px;"
+                                        filterable
+                                        clearable
+                                        :loading="domainRouteVpcLoading"
+                                        @change="onDomainRouteContainerChange"
+                                        @clear="onDomainRouteContainerClear"
+                                    >
+                                        <el-option
+                                            v-for="ct in domainRouteVpcContainers"
+                                            :key="ct.containerName"
+                                            :label="ct.containerName"
+                                            :value="ct.containerName"
+                                        >
+                                            <span>{{ ct.containerName }}</span>
+                                        </el-option>
+                                        <template #empty>
+                                            <div style="padding: 8px 12px; color: #909399; font-size: 13px; text-align: center;">
+                                                {{ $t(domainRouteVpcLoading ? 'common.loading' : 'network.noVpcContainers') }}
+                                            </div>
+                                        </template>
+                                    </el-select>
+                                    <el-tag v-if="domainRouteContainerID" type="primary" size="small">{{ domainRouteContainerID }}</el-tag>
+                                </div>
+
+                                <!-- 中转路由列表 -->
+                                <el-table
+                                    :data="domainRouteList"
+                                    v-loading="domainRouteLoading"
+                                    stripe
+                                    style="width: 100%;"
+                                    :empty-text="$t(domainRouteContainerID ? 'network.noDomainRouteRules' : 'network.selectContainerToQuery')"
+                                >
+                                    <el-table-column type="index" :label="$t('network.index')" width="80" align="center" />
+                                    <el-table-column :label="$t('network.routeDomains')" align="center">
+                                        <template #default="{ row }">
+                                            <div style="display: flex; flex-wrap: wrap; gap: 4px; justify-content: center;">
+                                                <el-tag v-for="(d, i) in row.domains" :key="i" size="small" style="font-family: monospace;">{{ d }}</el-tag>
+                                            </div>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column :label="$t('network.targetVpcNode')" width="260" align="center">
+                                        <template #default="{ row }">
+                                            <span style="font-family: monospace;">{{ formatVpcNode(row.vpcID) }}</span>
+                                        </template>
+                                    </el-table-column>
+                                </el-table>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- 设置中转路由弹窗 -->
+                    <el-dialog
+                        v-model="showDomainRouteDialog"
+                        :title="$t('network.setDomainRoute')"
+                        width="780px"
+                        :close-on-click-modal="false"
+                        @closed="resetDomainRouteDialog"
+                    >
+                        <el-form label-width="90px" style="padding-right: 10px;">
+                            <!-- 选择容器 -->
+                            <el-form-item :label="$t('network.selectContainer')" required>
+                                <el-select
+                                    v-model="domainRouteForm.containerID"
+                                    :placeholder="$t('network.selectVpcContainer')"
+                                    style="width: 100%;"
+                                    filterable
+                                    :loading="domainRouteVpcLoading || domainRouteFormLoading"
+                                    @change="onDomainRouteFormContainerChange"
+                                >
+                                    <el-option
+                                        v-for="ct in domainRouteVpcContainers"
+                                        :key="ct.containerName"
+                                        :label="ct.containerName"
+                                        :value="ct.containerName"
+                                    >
+                                        <span>{{ ct.containerName }}</span>
+                                        <span style="color: #909399; font-size: 12px; margin-left: 8px;">{{ ct.containerIP }}</span>
+                                    </el-option>
+                                    <template #empty>
+                                        <div style="padding: 8px 12px; color: #909399; font-size: 13px; text-align: center;">
+                                            {{ $t(domainRouteVpcLoading ? 'common.loading' : 'network.noVpcContainers') }}
+                                        </div>
+                                    </template>
+                                </el-select>
+                            </el-form-item>
+
+                            <!-- 路由条目列表 -->
+                            <el-form-item :label="$t('network.domainRules')" required>
+                                <div style="width: 100%;">
+                                    <div
+                                        v-for="(route, rIdx) in domainRouteForm.routes"
+                                        :key="rIdx"
+                                        style="border: 1px solid #ebeef5; border-radius: 6px; padding: 12px; margin-bottom: 12px; background: #fafafa;"
+                                    >
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                            <span style="font-weight: 600; color: #303133; font-size: 13px;">#{{ rIdx + 1 }}</span>
+                                            <el-button
+                                                :icon="Delete"
+                                                circle
+                                                size="small"
+                                                type="danger"
+                                                plain
+                                                :disabled="domainRouteForm.routes.length === 1"
+                                                @click="domainRouteForm.routes.splice(rIdx, 1)"
+                                            />
+                                        </div>
+                                        <!-- 域名规则编辑器 -->
+                                        <div style="margin-bottom: 8px;">
+                                            <div
+                                                v-for="(rule, idx) in route.rules"
+                                                :key="idx"
+                                                style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;"
+                                            >
+                                                <el-select v-model="rule.prefix" style="width: 180px;" size="default">
+                                                    <el-option label="domain:（子域名、IP）" value="domain:" />
+                                                    <el-option label="full:（完整域名、IP）" value="full:" />
+                                                    <el-option label="keyword:（关键字）" value="keyword:" />
+                                                </el-select>
+                                                <el-input
+                                                    v-model="rule.value"
+                                                    :placeholder="domainRulePlaceholder(rule.prefix)"
+                                                    style="flex: 1;"
+                                                    size="default"
+                                                />
+                                                <el-button
+                                                    :icon="Delete"
+                                                    circle
+                                                    size="small"
+                                                    type="danger"
+                                                    plain
+                                                    :disabled="route.rules.length === 1"
+                                                    @click="route.rules.splice(idx, 1)"
+                                                />
+                                            </div>
+                                            <el-button size="small" @click="route.rules.push({ prefix: 'domain:', value: '' })">+ {{ $t('network.addRule') }}</el-button>
+                                        </div>
+                                        <!-- 目标 VPC 节点 -->
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-size: 13px; color: #606266; white-space: nowrap; flex-shrink: 0;">{{ $t('network.targetVpcNode') }}</span>
+                                            <el-select
+                                                v-model="route.vpcID"
+                                                :placeholder="$t('network.selectVpcNode')"
+                                                style="flex: 1;"
+                                                filterable
+                                            >
+                                                <el-option
+                                                    v-for="n in existingNodes"
+                                                    :key="n.id"
+                                                    :label="n.label"
+                                                    :value="n.id"
+                                                />
+                                                <template #empty>
+                                                    <div style="padding: 8px 12px; color: #909399; font-size: 13px; text-align: center;">
+                                                        {{ $t('network.noVpcNodes') }}
+                                                    </div>
+                                                </template>
+                                            </el-select>
+                                        </div>
+                                    </div>
+                                    <el-button size="small" type="primary" plain @click="addDomainRouteEntry">+ {{ $t('network.addRoute') }}</el-button>
+                                </div>
+                            </el-form-item>
+
+                            <!-- 规则说明 -->
+                            <el-form-item>
+                                <div style="background: #f5f7fa; border-radius: 4px; padding: 10px 12px; font-size: 12px; color: #606266; line-height: 1.9; width: 100%;">
+                                    <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:</code> {{ $t('network.domainRuleDesc') }}</div>
+                                    <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:</code> {{ $t('network.fullRuleDesc') }}</div>
+                                    <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:</code> {{ $t('network.keywordRuleDesc') }}</div>
+                                </div>
+                            </el-form-item>
+                        </el-form>
+                        <template #footer>
+                            <el-button @click="showDomainRouteDialog = false">{{ $t('common.cancel') }}</el-button>
+                            <el-button
+                                type="primary"
+                                :loading="domainRouteSubmitLoading"
+                                @click="submitDomainRoute"
+                            >{{ $t('common.confirm') }}</el-button>
+                        </template>
+                    </el-dialog>
+                </el-tab-pane>
 
                  <el-tab-pane :label="$t('network.privateNic')" name="private-nic">
                     <!-- 功能说明 -->
@@ -2651,6 +2876,292 @@ const clearDomainDirect = async () => {
     }
 }
 
+// 中转管理（domainRoute）
+const domainRouteContainerID = ref('')
+const domainRouteList = ref([])
+const domainRouteLoading = ref(false)
+const domainRouteVpcContainers = ref([])
+const domainRouteVpcLoading = ref(false)
+
+const showDomainRouteDialog = ref(false)
+const domainRouteSubmitLoading = ref(false)
+const domainRouteFormLoading = ref(false)
+const domainRouteForm = reactive({
+    containerID: '',
+    routes: [{ rules: [{ prefix: 'domain:', value: '' }], vpcID: null }]
+})
+
+const onDomainRouteContainerChange = async (val) => {
+    console.log('[DomainRoute] onContainerChange val =', val, 'current containerID =', domainRouteContainerID.value)
+    if (!val) return
+    await fetchDomainRouteList()
+}
+const onDomainRouteContainerClear = () => {
+    console.log('[DomainRoute] onContainerClear')
+    domainRouteList.value = []
+}
+
+const formatVpcNode = (vpcID) => {
+    if (vpcID == null) return ''
+    const node = existingNodes.value.find(n => n.id === vpcID)
+    return node ? `${vpcID} (${node.label})` : String(vpcID)
+}
+
+const onDomainRouteFormContainerChange = async (val) => {
+    console.log('[DomainRoute] formContainerChange val =', val)
+    if (!val) {
+        domainRouteForm.routes = [{ rules: [{ prefix: 'domain:', value: '' }], vpcID: null }]
+        return
+    }
+    domainRouteFormLoading.value = true
+    try {
+        const url = `http://${getDeviceAddr(selectedDeviceIP.value)}/mytVpc/domainRoute?containerID=${encodeURIComponent(val)}`
+        console.log('[DomainRoute] formContainerChange url =', url)
+        const response = await fetch(url, { headers: getAuthHeaders(selectedDeviceIP.value) })
+        console.log('[DomainRoute] formContainerChange status =', response.status)
+        if (response.ok) {
+            const data = await response.json()
+            console.log('[DomainRoute] formContainerChange data =', data)
+            if (data.code === 0) {
+                const routes = data.data?.routes || []
+                if (routes.length > 0) {
+                    domainRouteForm.routes = routes.map(r => {
+                        const domains = r.domains || []
+                        const vpcID = r.vpcID ?? r.vpc_id ?? r.vpcId ?? r.VpcID
+                        return {
+                            rules: domains.length > 0
+                                ? domains.map(d => parseDomainRule(d))
+                                : [{ prefix: 'domain:', value: '' }],
+                            vpcID: vpcID != null ? Number(vpcID) : null
+                        }
+                    })
+                } else {
+                    domainRouteForm.routes = [{ rules: [{ prefix: 'domain:', value: '' }], vpcID: null }]
+                }
+            } else {
+                ElMessage.error(data.message || '查询失败')
+                domainRouteForm.routes = [{ rules: [{ prefix: 'domain:', value: '' }], vpcID: null }]
+            }
+        } else if (response.status === 404) {
+            const sdkOk = await checkAndWarnSDKVersion(selectedDeviceIP.value, selectedDeviceVersion.value)
+            if (sdkOk) {
+                ElMessage.warning('设备端未实现中转管理接口（/mytVpc/domainRoute），请升级设备 SDK')
+            }
+            domainRouteForm.routes = [{ rules: [{ prefix: 'domain:', value: '' }], vpcID: null }]
+        } else {
+            ElMessage.error('接口请求失败')
+            domainRouteForm.routes = [{ rules: [{ prefix: 'domain:', value: '' }], vpcID: null }]
+        }
+    } catch (error) {
+        console.error('[DomainRoute] 弹窗查询中转路由失败:', error)
+        ElMessage.error('查询失败，请检查网络连接')
+        domainRouteForm.routes = [{ rules: [{ prefix: 'domain:', value: '' }], vpcID: null }]
+    } finally {
+        domainRouteFormLoading.value = false
+    }
+}
+
+const openDomainRouteDialog = () => {
+    domainRouteForm.containerID = domainRouteContainerID.value || ''
+    domainRouteForm.routes = [{ rules: [{ prefix: 'domain:', value: '' }], vpcID: null }]
+    showDomainRouteDialog.value = true
+    // 若主页面已选容器，主动查询回显
+    if (domainRouteForm.containerID) {
+        onDomainRouteFormContainerChange(domainRouteForm.containerID)
+    }
+}
+const resetDomainRouteDialog = () => {
+    domainRouteForm.containerID = ''
+    domainRouteForm.routes = [{ rules: [{ prefix: 'domain:', value: '' }], vpcID: null }]
+}
+
+const addDomainRouteEntry = () => {
+    domainRouteForm.routes.push({ rules: [{ prefix: 'domain:', value: '' }], vpcID: null })
+}
+
+const parseDomainRule = (raw) => {
+    if (raw == null) return { prefix: 'domain:', value: '' }
+    const s = String(raw)
+    const prefixes = ['domain:', 'full:', 'keyword:', 'regexp:']
+    for (const p of prefixes) {
+        if (s.startsWith(p)) {
+            return { prefix: p, value: s.slice(p.length) }
+        }
+    }
+    return { prefix: 'domain:', value: s }
+}
+
+const fetchDomainRouteVpcContainers = async () => {
+    if (!selectedDeviceIP.value) return
+    domainRouteVpcLoading.value = true
+    try {
+        const response = await fetch(
+            `http://${getDeviceAddr(selectedDeviceIP.value)}/mytVpc/containerRule`,
+            { headers: getAuthHeaders(selectedDeviceIP.value) }
+        )
+        if (response.ok) {
+            const data = await response.json()
+            if (data.code === 0) {
+                domainRouteVpcContainers.value = data.data?.list || []
+            } else {
+                domainRouteVpcContainers.value = []
+            }
+        } else {
+            domainRouteVpcContainers.value = []
+        }
+    } catch (e) {
+        console.error('获取VPC容器列表失败:', e)
+        domainRouteVpcContainers.value = []
+    } finally {
+        domainRouteVpcLoading.value = false
+    }
+}
+
+const fetchDomainRouteList = async () => {
+    console.log('[DomainRoute] fetchList called, selectedDeviceIP =', selectedDeviceIP.value, 'containerID =', domainRouteContainerID.value)
+    if (!selectedDeviceIP.value || !domainRouteContainerID.value) {
+        domainRouteList.value = []
+        return
+    }
+    domainRouteLoading.value = true
+    try {
+        const url = `http://${getDeviceAddr(selectedDeviceIP.value)}/mytVpc/domainRoute?containerID=${encodeURIComponent(domainRouteContainerID.value)}`
+        console.log('[DomainRoute] fetchList url =', url)
+        const response = await fetch(url, { headers: getAuthHeaders(selectedDeviceIP.value) })
+        console.log('[DomainRoute] fetchList response.status =', response.status)
+        if (response.ok) {
+            const data = await response.json()
+            console.log('[DomainRoute] fetchList response =', data)
+            if (data.code === 0) {
+                domainRouteList.value = data.data?.routes || []
+                console.log('[DomainRoute] fetchList domainRouteList =', JSON.parse(JSON.stringify(domainRouteList.value)))
+            } else {
+                ElMessage.error(data.message || '查询失败')
+                domainRouteList.value = []
+            }
+        } else if (response.status === 404) {
+            const sdkOk = await checkAndWarnSDKVersion(selectedDeviceIP.value, selectedDeviceVersion.value)
+            if (sdkOk) {
+                ElMessage.warning('设备端未实现中转管理接口（/mytVpc/domainRoute），请升级设备 SDK')
+            }
+            domainRouteList.value = []
+        } else {
+            ElMessage.error('接口请求失败')
+            domainRouteList.value = []
+        }
+    } catch (error) {
+        console.error('查询中转路由列表失败:', error)
+        ElMessage.error('查询失败，请检查网络连接')
+        domainRouteList.value = []
+    } finally {
+        domainRouteLoading.value = false
+    }
+}
+
+const submitDomainRoute = async () => {
+    if (!domainRouteForm.containerID) {
+        ElMessage.warning('请选择容器')
+        return
+    }
+    const routes = domainRouteForm.routes
+        .map(r => ({
+            domains: (r.rules || [])
+                .filter(rule => rule.value && rule.value.trim())
+                .map(rule => rule.prefix + rule.value.trim()),
+            vpcID: r.vpcID
+        }))
+        .filter(r => r.domains.length > 0 && r.vpcID != null)
+    if (!routes.length) {
+        ElMessage.warning('请至少填写一条完整路由（域名 + 目标节点）')
+        return
+    }
+    domainRouteSubmitLoading.value = true
+    try {
+        const response = await fetch(
+            `http://${getDeviceAddr(selectedDeviceIP.value)}/mytVpc/domainRoute`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getAuthHeaders(selectedDeviceIP.value)
+                },
+                body: JSON.stringify({
+                    containerID: domainRouteForm.containerID,
+                    routes: routes
+                })
+            }
+        )
+        if (response.ok) {
+            const data = await response.json()
+            if (data.code === 0) {
+                ElMessage.success('设置成功')
+                showDomainRouteDialog.value = false
+                if (domainRouteContainerID.value === domainRouteForm.containerID) {
+                    await fetchDomainRouteList()
+                }
+            } else {
+                ElMessage.error(data.message || '设置失败')
+            }
+        } else if (response.status === 404) {
+            const sdkOk = await checkAndWarnSDKVersion(selectedDeviceIP.value, selectedDeviceVersion.value)
+            if (sdkOk) {
+                ElMessage.warning('设备端未实现中转管理接口（/mytVpc/domainRoute），请升级设备 SDK')
+            }
+        } else {
+            ElMessage.error('接口请求失败')
+        }
+    } catch (error) {
+        console.error('设置中转路由失败:', error)
+        ElMessage.error('设置失败，请检查网络连接')
+    } finally {
+        domainRouteSubmitLoading.value = false
+    }
+}
+
+const clearDomainRoute = async () => {
+    if (!domainRouteContainerID.value) {
+        ElMessage.warning('请先选择容器')
+        return
+    }
+    try {
+        await ElMessageBox.confirm(
+            `确定清除容器 "${domainRouteContainerID.value}" 的所有中转路由吗？`,
+            '确认清除',
+            { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+        )
+    } catch {
+        return
+    }
+    try {
+        const response = await fetch(
+            `http://${getDeviceAddr(selectedDeviceIP.value)}/mytVpc/domainRoute?containerID=${encodeURIComponent(domainRouteContainerID.value.trim())}`,
+            {
+                method: 'DELETE',
+                headers: getAuthHeaders(selectedDeviceIP.value)
+            }
+        )
+        if (response.ok) {
+            const data = await response.json()
+            if (data.code === 0) {
+                ElMessage.success('清除成功')
+                domainRouteList.value = []
+            } else {
+                ElMessage.error(data.message || '清除失败')
+            }
+        } else if (response.status === 404) {
+            const sdkOk = await checkAndWarnSDKVersion(selectedDeviceIP.value, selectedDeviceVersion.value)
+            if (sdkOk) {
+                ElMessage.warning('设备端未实现中转管理接口（/mytVpc/domainRoute），请升级设备 SDK')
+            }
+        } else {
+            ElMessage.error('接口请求失败')
+        }
+    } catch (error) {
+        console.error('清除中转路由失败:', error)
+        ElMessage.error('清除失败，请检查网络连接')
+    }
+}
+
 // Private NIC variables
 const privateNicList = ref([])
 const privateNicLoading = ref(false)
@@ -3534,6 +4045,10 @@ const selectDevice = async (device) => {
         domainDirectContainerID.value = ''
         domainDirectList.value = []
         await fetchDomainDirectVpcContainers()
+    } else if (activeTab.value === 'domain-route') {
+        domainRouteContainerID.value = ''
+        domainRouteList.value = []
+        await fetchDomainRouteVpcContainers()
     }
 }
 
@@ -3645,6 +4160,12 @@ const handleTabChange = async (tab) => {
         domainDirectContainerID.value = ''
         if (selectedDeviceIP.value) {
             await fetchDomainDirectVpcContainers()
+        }
+    } else if (tab === 'domain-route') {
+        domainRouteList.value = []
+        domainRouteContainerID.value = ''
+        if (selectedDeviceIP.value) {
+            await fetchDomainRouteVpcContainers()
         }
     }
 }

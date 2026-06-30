@@ -6,98 +6,106 @@
           <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
             <div style="flex: 1;"></div>
             <div style="display: flex; gap: 8px;">
-              <el-button 
+              <el-button
                 v-if="localSelectedHostDevices.length > 0"
-                type="danger" 
-                size="small" 
-                @click="$emit('handleBatchDeleteDevices')" 
+                type="danger"
+                size="small"
+                @click="$emit('handleBatchDeleteDevices')"
                 class="delete-button"
               >
                 <el-icon><Delete /></el-icon> {{ t('common.deleteSelected') }}
               </el-button>
-              <el-button 
-                type="primary" 
-                size="small" 
-                @click="debouncedRefresh" 
+              <el-button
+                type="primary"
+                size="small"
+                @click="debouncedRefresh"
                 class="refresh-button"
-                :disabled="loading"
+                :disabled="loading || isOfflineView"
               >
                 <el-icon :class="{ 'is-rotating': loading }"><Refresh /></el-icon> {{ t('common.refresh') }}
               </el-button>
-               <el-button 
-                type="primary" 
-                size="small" 
+               <el-button
+                type="primary"
+                size="small"
                 v-if="!token"
                 @click="$emit('showSyncAuthDialog')"
                 class="sync-auth-button"
+                :disabled="isOfflineView"
               >
                 <el-icon><List /></el-icon> {{ t('common.syncAuth') }}
               </el-button>
-               <el-button 
-                type="success" 
-                size="small" 
+               <el-button
+                type="success"
+                size="small"
                 v-else
                 class="sync-auth-button"
                 @click="$emit('handleSyncAuthorization')"
+                :disabled="isOfflineView"
               >
                 <el-icon><HelpFilled /></el-icon> {{ uname }} | {{ t('common.syncAuth') }}
               </el-button>
-               <el-button 
-                type="success" 
-                size="small" 
+               <el-button
+                type="success"
+                size="small"
                 @click="handleBindHost"
                 class="sync-auth-button"
+                :disabled="isOfflineView"
               >
                 <el-icon><HelpFilled /></el-icon> {{ t('common.bindHost') }}
               </el-button>
-               <el-button 
-                type="warning" 
-                size="small" 
+               <el-button
+                type="warning"
+                size="small"
                 @click="handleUnbindHost"
                 class="sync-auth-button"
+                :disabled="isOfflineView"
               >
                {{ t('common.unbindHost') }}
               </el-button>
-              <el-button 
-                type="success" 
-                size="small" 
+              <el-button
+                type="success"
+                size="small"
                 @click="showAddDeviceDialog"
                 class="add-device-button"
+                :disabled="isOfflineView"
               >
                 <el-icon><Plus /></el-icon>
                 <span>{{ t('common.addDevice') }}</span>
               </el-button>
-              <el-button 
-                type="primary" 
-                size="small" 
-                @click="startBatchUpgrade" 
-                :disabled="isBatchUpgrading"
+              <el-button
+                type="primary"
+                size="small"
+                @click="startBatchUpgrade"
+                :disabled="isBatchUpgrading || isOfflineView"
                 class="batch-upgrade-button"
               >
                 <el-icon><Download /></el-icon> {{ t('common.batchUpgradeAPI') }}
               </el-button>
-              <el-button 
-                type="warning" 
-                size="small" 
+              <el-button
+                type="warning"
+                size="small"
                 @click="$emit('clearCache')"
                 class="clear-cache-button"
+                :disabled="isOfflineView"
               >
                 <el-icon><Delete /></el-icon> {{ t('common.clearClientData') }}
               </el-button>
-              <el-button 
-                type="danger" 
-                size="small" 
+              <el-button
+                type="danger"
+                size="small"
                 @click="$emit('handleBatchDeleteHosts')"
                 class="clear-cache-button"
+                :disabled="isOfflineView"
               >
                 <el-icon><Delete /></el-icon> {{ t('common.batchCleanDisk') }}
               </el-button>
-              <el-button 
-                type="danger" 
-                size="small" 
+              <el-button
+                type="danger"
+                size="small"
                 @click="$emit('logOut')"
                 class="clear-cache-button"
                 v-if="token"
+                :disabled="isOfflineView"
               >
                 <el-icon><CloseBold /></el-icon> {{ t('common.logout') }}
               </el-button>
@@ -286,9 +294,9 @@
           <el-table-column :label="t('common.operation')" width="300" fixed="right" align="center" v-if="localDeviceFilter === 'online'">
             <template #default="scope">
               <el-space size="small">
-                <el-button 
-                  size="small" 
-                  type="primary" 
+                <el-button
+                  size="small"
+                  type="primary"
                   @click="$emit('showDeviceDetails', scope.row)"
                 >
                   {{ t('common.view') }}
@@ -300,9 +308,9 @@
                   </el-button>
                   <template #dropdown>
                     <el-dropdown-menu>
-                      <el-dropdown-item 
-                        v-for="group in deviceGroups" 
-                        :key="group" 
+                      <el-dropdown-item
+                        v-for="group in deviceGroups"
+                        :key="group"
                         :command="group"
                         :disabled="scope.row.group === group"
                       >
@@ -311,8 +319,8 @@
                       <el-dropdown-item divided command="add-group">
                         <el-icon><Plus /></el-icon> {{ t('common.addNewGroup') }}
                       </el-dropdown-item>
-                      <el-dropdown-item 
-                        command="delete-group" 
+                      <el-dropdown-item
+                        command="delete-group"
                         :disabled="scope.row.group === '默认分组' || !scope.row.group"
                       >
                         <el-icon><Delete /></el-icon> {{ t('common.deleteCurrentGroup') }}
@@ -320,16 +328,16 @@
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
-                <el-button 
-                  size="small" 
-                  type="text" 
+                <el-button
+                  size="small"
+                  type="text"
                   :icon="Plus"
                   @click="$emit('showCreateDialog', scope.row, 'batch')"
                   :title="t('common.create')"
                 ></el-button>
-                <!-- <el-button 
-                  size="small" 
-                  type="danger" 
+                <!-- <el-button
+                  size="small"
+                  type="danger"
                   @click="$emit('handleDeleteDevice', scope.row)"
                 >
                   {{ $t('common.delete') }}
@@ -1393,6 +1401,9 @@ const localSelectedHostDevices = ref([]);
 const localSelectedImageCategory = ref('online');
 // 本地存储设备过滤条件，避免直接修改props
 const localDeviceFilter = ref(props.deviceFilter);
+
+// 离线设备视图下，除删除外的操作按钮统一禁用
+const isOfflineView = computed(() => localDeviceFilter.value === 'offline');
 
 // IP搜索
 const searchIP = ref('');

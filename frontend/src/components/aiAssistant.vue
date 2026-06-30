@@ -2627,6 +2627,23 @@ const startLLMService = async (showMessage = true) => {
         vocab: chatFiles.vocabPath,
       }
     } else if (isVLM) {
+      // 根据模型名匹配 img token，避免非 Qwen 系模型输出乱码
+      // 参考 vlm_img_token_table.md：
+      //   - Qwen 系：vision_start/vision_end/image_pad
+      //   - 非 Qwen 系：im_start/im_end/image
+      //   - Janus-Pro-1B 特例：img-content 用 <image_placeholder>
+      const vlmName = (selectedModelName.value || '').toLowerCase()
+      const isQwenVLM = /qwen/.test(vlmName) && /vl|omni/.test(vlmName)
+      const isJanus = /janus/.test(vlmName)
+      const imgStart = isQwenVLM ? "<|vision_start|>" : "<|im_start|>"
+      const imgEnd = isQwenVLM ? "<|vision_end|>" : "<|im_end|>"
+      const imgContent = isJanus ? "<image_placeholder>"
+        : isQwenVLM ? "<|image_pad|>"
+        : "<image>"
+      console.log('[startLLMService] VLM img token:', { model: selectedModelName.value, isQwenVLM, isJanus, imgStart, imgEnd, imgContent })
+      if (showMessage) {
+        ElMessage({ message: `VLM img token: ${imgStart} / ${imgEnd} / ${imgContent} (isQwenVLM=${isQwenVLM}, isJanus=${isJanus})`, type: 'info', duration: 5000 })
+      }
       modelConfig.models[selectedModelName.value] = {
         ...baseModelConfig,
         model: chatFiles.modelPath,
@@ -2635,7 +2652,7 @@ const startLLMService = async (showMessage = true) => {
         weight2: chatFiles.weight2Path,
         vocab: chatFiles.vocabPath,
         embed: chatFiles.embedPath,
-        "img-start": "<|vision_start|>", "img-end": "<|vision_end|>", "img-content": "<|image_pad|>",
+        "img-start": imgStart, "img-end": imgEnd, "img-content": imgContent,
         "img-width": 392, "img-height": 392,
       }
     } else {
