@@ -202,7 +202,7 @@
           v-model:selection="localSelectedHostDevices"
           @selection-change="handleDirectSelectionChange"
         >
-          <el-table-column v-if="!isViewingDeviceDetails" type="selection" width="55" :reserve-selection="true"></el-table-column>
+          <el-table-column v-if="!isViewingDeviceDetails" type="selection" width="55"></el-table-column>
           <el-table-column :label="t('common.device')" width="250" align="center">
             <template #default="scope">
               <div class="device-info-cell" style="display: flex; align-items: center; justify-content: center;">
@@ -1654,12 +1654,22 @@ watch(
   { deep: true }
 );
 
-// 监听displayDevices变化（定时刷新会导致数据对象引用更新），恢复表格选中状态
+// 监听displayDevices变化（定时刷新或筛选变化都会触发）：
+// 1. 收敛选中集合到当前可见范围，避免“全选后切分组，选中仍为全部”的越界问题
+// 2. 恢复表格勾选状态（数据对象引用更新后勾选可能失同步）
 watch(
   () => displayDevices.value,
   (newDevices) => {
-    if (!deviceTableRef.value || localSelectedHostDevices.value.length === 0) return;
-    const selectedIds = new Set(localSelectedHostDevices.value.map(d => d.id));
+    if (!deviceTableRef.value) return;
+    const visibleIds = new Set(newDevices.map(d => d.id));
+    // 收敛：只保留仍在当前可见范围内的选中项
+    const kept = localSelectedHostDevices.value.filter(d => visibleIds.has(d.id));
+    if (kept.length !== localSelectedHostDevices.value.length) {
+      // 数组变化会触发下方 watch 自动 emit 给父组件，保持父子同步
+      localSelectedHostDevices.value = kept;
+    }
+    if (kept.length === 0) return;
+    const selectedIds = new Set(kept.map(d => d.id));
     nextTick(() => {
       newDevices.forEach(row => {
         if (selectedIds.has(row.id)) {

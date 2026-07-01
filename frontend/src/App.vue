@@ -6665,9 +6665,10 @@ const handleDownloadProgress = (event) => {
       return
     }
     
-    const newProgress = Math.round(data.progress)
+    // 钳制到0~100，防止后端异常进度值导致进度超过100%
+    const newProgress = Math.max(0, Math.min(100, Math.round(data.progress)))
     const currentProgress = currentTask.progress || 0
-    
+
     // 严格的进度验证逻辑
     // 1. 如果新进度比当前进度小超过3%，视为异常（可能是旧任务）
     if (newProgress < currentProgress - 3) {
@@ -11989,7 +11990,8 @@ onMounted(() => {
       }
       
       // 防止进度回退和异常跳跃
-      const newProgress = Math.round(progress)
+      // 钳制到0~100，防止后端异常进度值导致进度超过100%
+      const newProgress = Math.max(0, Math.min(100, Math.round(progress)))
       const currentProgress = currentTask.progress || 0
       
       // 回退检测
@@ -18090,24 +18092,25 @@ const fetchDevicesStatusFromBackend = async () => {
         if (statusInfo.apiVersion && statusInfo.apiVersion !== '') {
           const currentVersionInfo = deviceVersionInfo.value.get(device.id) || {};
           
-          // 🔧 智能更新策略: 只有当新版本号更大时才更新,避免覆盖升级后的最新版本
+          // 🔧 智能更新策略: 只要新版本是有效正数就更新，避免升级中读到 "0"/旧值被"只增不减"锁永久锁死
           const currentApiVersion = parseInt(currentVersionInfo.currentVersion || '0');
           const newApiVersion = parseInt(statusInfo.apiVersion || '0');
-          
-          // 如果新版本号更大或相等,或者没有现有版本信息,则更新
-          if (newApiVersion >= currentApiVersion || !currentVersionInfo.currentVersion) {
+          const isValidNewVersion = !Number.isNaN(newApiVersion) && newApiVersion > 0;
+
+          // 新版本为有效正数即更新（不比大小），确保升级后新版本能正常同步上来
+          if (isValidNewVersion) {
             deviceVersionInfo.value.set(device.id, {
               ...currentVersionInfo,
               currentVersion: statusInfo.apiVersion,
               latestVersion: statusInfo.latestVersion || currentVersionInfo.latestVersion,
               lastUpdateTime: Date.now()
             });
-            
-            if (newApiVersion > currentApiVersion) {
+
+            if (newApiVersion !== currentApiVersion) {
               // console.log(`[心跳] 📈 设备 ${ip} API版本更新: ${currentVersionInfo.currentVersion} -> ${statusInfo.apiVersion}`);
             }
           } else {
-            // console.log(`[心跳] ⏸️ 设备 ${ip} API版本未更新(新=${statusInfo.apiVersion}, 当前=${currentVersionInfo.currentVersion})`);
+            // console.log(`[心跳] ⏸️ 设备 ${ip} API版本无效，跳过更新(新=${statusInfo.apiVersion})`);
           }
         }
         

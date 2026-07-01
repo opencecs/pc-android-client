@@ -485,26 +485,42 @@ func (a *App) checkSingleDeviceStatus(deviceIP string) {
 
 // tcpPingSingleDevice 对单个设备执行TCP Ping+HTTP验证并更新状态
 // 实现状态机逻辑:
-//   - 先进行TCP Ping检测端口连通性和延迟
+//   - 先进行TCP Ping检测端口连通性和延迟(超时5s,失败后立即重试1次)
 //   - TCP成功后进行HTTP /info验证确认是我们的设备服务
-//   - 连续4次失败(TCP失败或HTTP验证失败) → 标记为离线
-//   - 连续2次成功(TCP<50ms且HTTP验证通过) → 标记为在线
+//   - 连续8次失败(TCP失败或HTTP验证失败) → 标记为离线
+//   - 连续2次成功(TCP≤5000ms且HTTP验证通过) → 标记为在线
 //   - 状态变化(离线→在线)时检查401认证,通过后触发API版本检查和存储查询
 func (a *App) tcpPingSingleDevice(deviceIP string) {
 	// ========== 1. 执行TCP Ping ==========
-	// TCP连接超时设置为2000ms，容忍局域网抖动和公网延迟
+	// TCP连接超时5s：让内核有3次SYN机会(t=0/1/3)，直接覆盖跨网段瞬时丢包
+	// 跨网段首次DialTimeout失败后立即重试1次，相当于把单次探测的SYN次数翻倍(最多6次SYN)
 	addr := deviceAddr(deviceIP)
-	start := time.Now()
-	conn, tcpErr := net.DialTimeout("tcp", addr, 2000*time.Millisecond)
-	var latency int64
+	const (
+		tcpDialTimeout = 5000 * time.Millisecond // 单次TCP连接超时
+		maxFailCount   = 8                       // 连续失败多少次后判定离线（跨网段恢复容忍期）
+	)
+	probeStart := time.Now()
+
+	// dialTCP 执行一次TCP连接尝试，返回连接、本次耗时和错误
+	dialTCP := func() (net.Conn, int64, error) {
+		dialStart := time.Now()
+		conn, derr := net.DialTimeout("tcp", addr, tcpDialTimeout)
+		return conn, time.Since(dialStart).Milliseconds(), derr
+	}
+
+	conn, latency, tcpErr := dialTCP()
+	if tcpErr != nil {
+		// 跨网段瞬时丢包: 首次失败后立即重试1次
+		conn, latency, tcpErr = dialTCP()
+	}
+	probeCost := time.Since(probeStart).Milliseconds()
+
 	var err error
 	if tcpErr != nil {
 		err = tcpErr
 	} else {
-		latency = time.Since(start).Milliseconds()
 		conn.Close()
 	}
-	_ = latency
 	
 	// ========== 2. 并发安全 - 获取并更新设备状态 ==========
 	a.deviceStatusMutex.Lock()
@@ -526,23 +542,23 @@ func (a *App) tcpPingSingleDevice(deviceIP string) {
 	now := time.Now()
 	
 	// ========== 3. 处理Ping结果 ==========
-	// 延迟阈值2000ms，兼容公网/跨地域高延迟场景，避免误判为离线
-	if err != nil || latency > 2000 {
-		// ========== TCP失败或延迟>2000ms处理 ==========
+	// 延迟阈值5000ms，与TCP连接超时一致，兼容公网/跨网段/跨地域高延迟场景，避免误判为离线
+	if err != nil || latency > 5000 {
+		// ========== TCP失败或延迟>5000ms处理 ==========
 		status.ConsecutiveSuccesses = 0      // 清零成功计数
 		status.ConsecutiveFailures++         // 增加失败计数
 		status.LastCheckAt = now
 		status.LastHTTPVerifyTime = now      // 记录HTTP验证时间
 
 		if err != nil {
-			log.Printf("[TCP Ping] ❌ 设备 %s (%s) TCP连接失败 (连续失败%d次): %v", deviceIP, a.getDeviceName(deviceIP), status.ConsecutiveFailures, err)
+			log.Printf("[TCP Ping] ❌ 设备 %s (%s) TCP连接失败 (耗时%dms, 连续失败%d次): %v", deviceIP, a.getDeviceName(deviceIP), probeCost, status.ConsecutiveFailures, err)
 		} else {
-			log.Printf("[TCP Ping] ⚠️ 设备 %s (%s) 延迟过高: %dms > 2000ms (连续失败%d次)", deviceIP, a.getDeviceName(deviceIP), latency, status.ConsecutiveFailures)
+			log.Printf("[TCP Ping] ⚠️ 设备 %s (%s) 延迟过高: %dms > 5000ms (连续失败%d次)", deviceIP, a.getDeviceName(deviceIP), latency, status.ConsecutiveFailures)
 			status.ResponseTime = latency
 		}
 		
-		// 连续6次失败 → 标记离线（容忍短暂抖动，约6秒）
-		if status.ConsecutiveFailures >= 6 {
+		// 连续maxFailCount次失败 → 标记离线（跨网段恢复容忍期，3秒间隔下约24秒）
+		if status.ConsecutiveFailures >= maxFailCount {
 			if status.Status != "offline" {
 				status.Status = "offline"
 				log.Printf("[TCP Ping] ❌ 设备 %s (%s) 离线 (连续%d次失败, 原因: %v)", deviceIP, a.getDeviceName(deviceIP), status.ConsecutiveFailures, err)
@@ -554,7 +570,7 @@ func (a *App) tcpPingSingleDevice(deviceIP string) {
 			status.ResponseTime = status.LastSuccessLatency
 		}
 	} else {
-		// ========== TCP Ping成功且延迟≤2000ms ==========
+		// ========== TCP Ping成功且延迟≤5000ms ==========
 
 		// 优化: 稳定在线设备降频HTTP验证（每30秒验证一次），大幅减少网络请求
 		// 条件: 已在线 + 连续成功>=4次 + 上次HTTP验证在30秒内
@@ -598,8 +614,8 @@ func (a *App) tcpPingSingleDevice(deviceIP string) {
 
 			log.Printf("[TCP Ping] ❌ 设备 %s (%s) HTTP验证失败 (端口可能被占用, 连续失败%d次)", deviceIP, a.getDeviceName(deviceIP), status.ConsecutiveFailures)
 
-			// 连续6次失败 → 标记离线
-			if status.ConsecutiveFailures >= 6 {
+			// 连续maxFailCount次失败 → 标记离线
+			if status.ConsecutiveFailures >= maxFailCount {
 				if status.Status != "offline" {
 					status.Status = "offline"
 					log.Printf("[TCP Ping] ❌ 设备 %s (%s) 离线 (HTTP验证失败, 连续%d次)", deviceIP, a.getDeviceName(deviceIP), status.ConsecutiveFailures)

@@ -7269,6 +7269,56 @@ func (a *App) UpgradeDeviceWithNewAPI(deviceIP interface{}, latestVersion interf
 		passwordStr = fmt.Sprintf("%v", password)
 	}
 
+	// waitForUpgradeComplete 升级上传成功后轮询设备 /info，等待真正切换到新版本。
+	// 与批量升级(BatchUpgrade)的轮询范式一致：先等3s给设备解压/重启，再最多30次×5s轮询，
+	// 每次重置 LastAPICheckTime 绕过心跳60s节流，直到 APIVersion 等于目标版本(或非空非零)。
+	// 返回最终拿到的版本号(可能为空，表示超时未确认)。
+	waitForUpgradeComplete := func(deviceIP string, targetVersion string) string {
+		const maxRetry = 30
+		const retryInterval = 5 * time.Second
+		// 先等几秒，给设备解压/重启时间
+		time.Sleep(3 * time.Second)
+
+		finalVersion := ""
+		for attempt := 1; attempt <= maxRetry; attempt++ {
+			// 每次重置 LastAPICheckTime 绕过 60s 节流
+			a.deviceStatusMutex.Lock()
+			if status := a.deviceStatusMap[deviceIP]; status != nil {
+				status.LastAPICheckTime = time.Time{}
+			}
+			a.deviceStatusMutex.Unlock()
+
+			a.checkDeviceAPIVersion(deviceIP)
+
+			a.deviceStatusMutex.RLock()
+			st := a.deviceStatusMap[deviceIP]
+			ready := false
+			if st != nil && st.APIVersion != "" && st.APIVersion != "0" {
+				if targetVersion != "" {
+					// 达到目标版本即认为升级完成
+					if st.APIVersion == targetVersion {
+						ready = true
+						finalVersion = st.APIVersion
+					}
+				} else {
+					// 兜底：未拿到目标版本号时，只要变成非零有效值就算
+					ready = true
+					finalVersion = st.APIVersion
+				}
+			}
+			a.deviceStatusMutex.RUnlock()
+
+			if ready {
+				log.Printf("[单设备升级] ✅ 设备 %s 版本已刷新为 %s (第%d次轮询)", deviceIP, finalVersion, attempt)
+				return finalVersion
+			}
+			log.Printf("[单设备升级] ⏳ 第%d次轮询，设备 %s 未就绪，继续等待", attempt, deviceIP)
+			time.Sleep(retryInterval)
+		}
+		log.Printf("[单设备升级] ⚠️ 设备 %s 在 %v 内未确认新版本(可能仍在重启)", deviceIP, maxRetry*retryInterval)
+		return finalVersion
+	}
+
 	// 1. 调用API获取下载URL
 	log.Printf("调用API获取下载URL，版本: %s", latestVersionStr)
 	sdkURL := fmt.Sprintf("https://newapi.moyunteng.com/api/v1/sdk/download-url?version=%s&filename=myt-sdk.zip&sdk_type=box_sdk", latestVersionStr)
@@ -7458,10 +7508,13 @@ func (a *App) UpgradeDeviceWithNewAPI(deviceIP interface{}, latestVersion interf
 	if err := json.Unmarshal(uploadRespBody, &uploadResult); err != nil {
 		// 如果无法解析JSON，直接返回成功，因为有些设备可能返回非JSON响应
 		log.Printf("解析上传响应失败，但状态码为200，可能是设备返回非JSON响应: %v", err)
+		// 上传成功，轮询等待设备真正切换到新版本
+		finalVer := waitForUpgradeComplete(deviceIPStr, latestVersionStr)
 		return map[string]interface{}{
-			"success":     true,
-			"message":     "SDK包上传成功，设备正在升级中...",
-			"rawResponse": string(uploadRespBody),
+			"success":      true,
+			"message":       "SDK包上传成功，设备升级完成",
+			"rawResponse":   string(uploadRespBody),
+			"finalVersion":  finalVer,
 		}
 	}
 
@@ -7482,10 +7535,13 @@ func (a *App) UpgradeDeviceWithNewAPI(deviceIP interface{}, latestVersion interf
 	}
 
 	log.Printf("设备升级成功")
+	// 上传成功，轮询等待设备真正切换到新版本
+	finalVer := waitForUpgradeComplete(deviceIPStr, latestVersionStr)
 	return map[string]interface{}{
-		"success": true,
-		"message": "设备升级成功",
-		"data":    uploadResult,
+		"success":      true,
+		"message":      "设备升级成功",
+		"data":         uploadResult,
+		"finalVersion": finalVer,
 	}
 }
 
@@ -11329,7 +11385,7 @@ func (a *App) DownloadImage(metadata interface{}) map[string]interface{} {
 	// 创建取消标志位,确保取消日志只输出一次
 	var cancelLogged int32 = 0
 	
-	// 设置进度回调函数，将真实下载进度通过Wails事件发送给前端
+	// 设置下载阶段进度回调：原始 progress 0~100 映射到 10%~85%
 	dgetClient.SetProgressCallback(func(progress float64) {
 		// 检查是否已取消
 		select {
@@ -11341,14 +11397,39 @@ func (a *App) DownloadImage(metadata interface{}) map[string]interface{} {
 			return
 		default:
 		}
-		
-		// 更新全局进度，限制在0-95%之间，95-100%留作后续处理
-		a.progressMutex.Lock()
-		if progress < 95 {
-			a.downloadProgress = progress
-		} else {
-			a.downloadProgress = 95
+
+		// 下载阶段映射到 10%~85%，留 85%~99% 给打包阶段
+		mapped := 10 + (progress * 0.75)
+		if mapped > 85 {
+			mapped = 85
 		}
+		a.progressMutex.Lock()
+		a.downloadProgress = mapped
+		currentProgress := a.downloadProgress
+		a.progressMutex.Unlock()
+
+		// 发送下载进度事件给前端
+		a.emitEvent("download-progress", map[string]interface{}{
+			"progress": currentProgress,
+		})
+	})
+
+	// 设置打包阶段进度回调：原始 progress 0~100 映射到 85%~99%
+	dgetClient.SetPackageCallback(func(progress float64) {
+		// 检查是否已取消
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		// 打包tar.gz阶段映射到 85%~99%，100% 留给最终完成
+		mapped := 85 + (progress * 0.14)
+		if mapped > 99 {
+			mapped = 99
+		}
+		a.progressMutex.Lock()
+		a.downloadProgress = mapped
 		currentProgress := a.downloadProgress
 		a.progressMutex.Unlock()
 
@@ -11478,16 +11559,8 @@ func (a *App) DownloadImage(metadata interface{}) map[string]interface{} {
 		}
 	}
 
-	// 更新进度为95%，表示下载完成，正在处理文件
-	a.progressMutex.Lock()
-	a.downloadProgress = 95
-	progress := a.downloadProgress
-	a.progressMutex.Unlock()
-
-	// 发送下载进度事件给前端
-	a.emitEvent("download-progress", map[string]interface{}{
-		"progress": progress,
-	})
+	// InstallWithTargetDir 返回时下载+打包已完成，打包回调已将进度推进到~99%。
+	// 这里不再硬设95%（避免覆盖打包回调、导致进度倒退），保持当前进度，直接进入后续保存阶段。
 
 	// 检查tar.gz文件是否存在
 	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
@@ -11539,7 +11612,7 @@ func (a *App) DownloadImage(metadata interface{}) map[string]interface{} {
 	// 更新进度为100%
 	a.progressMutex.Lock()
 	a.downloadProgress = 100
-	progress = a.downloadProgress
+	progress := a.downloadProgress
 	a.progressMutex.Unlock()
 
 	// 发送下载进度事件给前端

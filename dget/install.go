@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/docker/distribution/manifest/manifestlist"
@@ -73,7 +74,12 @@ type PackageConfig struct {
 
 type Client struct {
 	c                *http.Client
-	progressCallback func(progress float64) // 进度回调函数
+	progressCallback func(progress float64) // 下载阶段进度回调
+	packageCallback  func(progress float64) // 打包tar.gz阶段进度回调
+	// 全局下载进度聚合器（多层并发时按全局已读/全局总算百分比，单调递增不跳跃）
+	globalRead   int64 // 原子累加：所有层已读字节数（增量上报）
+	globalTotal  int64 // 原子累加：所有层总字节数（从Content-Length获取）
+	lastEmitTime int64 // 上次发送进度事件的时间戳(ms)，用于节流
 }
 
 // ProgressReader 进度跟踪reader包装器
@@ -81,15 +87,25 @@ type ProgressReader struct {
 	r        io.Reader
 	total    int64
 	read     int64
-	callback func(progress float64)
+	callback func(progress float64) // per-layer百分比回调（向后兼容）
+	onBytes  func(n int)            // 新增：本次读取字节数上报给全局聚合器
 }
 
 // Read 实现io.Reader接口，同时跟踪读取进度
 func (pr *ProgressReader) Read(p []byte) (n int, err error) {
 	n, err = pr.r.Read(p)
 	pr.read += int64(n)
+	// 全局聚合：把本次读取字节数上报给聚合器（增量累加，并发安全）
+	if pr.onBytes != nil && n > 0 {
+		pr.onBytes(n)
+	}
 	if pr.total > 0 && pr.callback != nil {
 		progress := float64(pr.read) / float64(pr.total) * 100
+		// 钳制到0~100：total取自Content-Length(压缩后大小)，而read是gzip解压后字节数，
+		// 压缩比会导致read>total从而progress>100，必须钳制避免前端进度超过100%
+		if progress > 100 {
+			progress = 100
+		}
 		pr.callback(progress)
 	}
 	return
@@ -111,8 +127,17 @@ func (m *Client) SetProgressCallback(callback func(progress float64)) {
 	m.progressCallback = callback
 }
 
+// SetPackageCallback 设置打包tar.gz阶段的进度回调函数
+func (m *Client) SetPackageCallback(callback func(progress float64)) {
+	m.packageCallback = callback
+}
+
 // InstallWithTargetDir 使用指定的目标目录安装镜像
 func (m *Client) InstallWithTargetDir(syncCount int, _registry, d, tag string, arch string, printInfo bool, onlyGetTag bool, username string, password string, targetDir string) (err error) {
+	// 重置全局进度聚合器，确保本次下载从0开始统计
+	atomic.StoreInt64(&m.globalRead, 0)
+	atomic.StoreInt64(&m.globalTotal, 0)
+	atomic.StoreInt64(&m.lastEmitTime, 0)
 	var authUrl = _authUrl
 	var regService = _regService
 	resp, err := m.c.Get(fmt.Sprintf("https://%s/v2/", _registry))
@@ -423,7 +448,7 @@ func (m *Client) downloadWithTargetDir(syncCount int, _registry, d, tag string, 
 		if err == nil {
 			// 直接在目标目录中创建tar.gz文件
 			tarPath := targetDir + ".tar.gz"
-			err = writeDirToTarGz(targetDir, tarPath)
+			err = writeDirToTarGz(targetDir, tarPath, m.packageCallback)
 			if err == nil {
 				fmt.Println("write tar success", tarPath)
 			} else {
@@ -553,7 +578,7 @@ func (m *Client) download(syncCount int, _registry, d, tag string, digest digest
 		}
 	maketar:
 		if err == nil {
-			err = writeDirToTarGz(tmpDir, tmpDir+"-img.tar.gz")
+			err = writeDirToTarGz(tmpDir, tmpDir+"-img.tar.gz", m.packageCallback)
 			if err == nil {
 				fmt.Println("write tar success", tmpDir+"-img.tar.gz")
 			} else {
@@ -590,7 +615,7 @@ func (m *Client) getAuthHead(a, r, d string) (string, error) {
 	return "", err
 }
 
-func writeDirToTarGz(sourcedir, destinationfile string) error {
+func writeDirToTarGz(sourcedir, destinationfile string, progressCallback func(progress float64)) error {
 	// create tar file
 	gzFile, err := os.Create(destinationfile)
 	gf := gzip.NewWriter(gzFile)
@@ -604,8 +629,22 @@ func writeDirToTarGz(sourcedir, destinationfile string) error {
 			gzFile.Close()
 		}()
 
-		// get list of files
-		return filepath.Walk(sourcedir, func(path string, info os.FileInfo, err error) error {
+		// 预扫描统计总字节数（仅在有回调时），用于精确字节进度
+		var totalBytes, writtenBytes int64
+		if progressCallback != nil {
+			filepath.Walk(sourcedir, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				if !info.IsDir() {
+					totalBytes += info.Size()
+				}
+				return nil
+			})
+			progressCallback(0)
+		}
+
+		walkErr := filepath.Walk(sourcedir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -631,8 +670,40 @@ func writeDirToTarGz(sourcedir, destinationfile string) error {
 					if err != nil {
 						return err
 					}
-					if _, err := io.Copy(tw, data); err != nil {
-						return err
+					defer data.Close()
+
+					// 有回调时分块读写并累加字节数，精确推进度；无回调时走原 io.Copy 路径
+					if progressCallback != nil {
+						buf := make([]byte, 256*1024)
+						var lastEmit int64 // 上次发送进度的时间戳(ms)，500ms节流
+						for {
+							nr, er := data.Read(buf)
+							if nr > 0 {
+								nw, ew := tw.Write(buf[:nr])
+								writtenBytes += int64(nw)
+								// 500ms节流：避免打包阶段也刷屏
+								if totalBytes > 0 {
+									now := time.Now().UnixMilli()
+									if now-lastEmit >= 500 {
+										lastEmit = now
+										progressCallback(float64(writtenBytes) / float64(totalBytes) * 100)
+									}
+								}
+								if ew != nil {
+									return ew
+								}
+							}
+							if er == io.EOF {
+								break
+							}
+							if er != nil {
+								return er
+							}
+						}
+					} else {
+						if _, err := io.Copy(tw, data); err != nil {
+							return err
+						}
 					}
 				}
 				return nil
@@ -640,6 +711,11 @@ func writeDirToTarGz(sourcedir, destinationfile string) error {
 			return err
 		})
 
+		// 打包完成后回调100%
+		if walkErr == nil && progressCallback != nil {
+			progressCallback(100)
+		}
+		return walkErr
 	}
 	return err
 }
@@ -700,11 +776,33 @@ func (m *Client) downloadLayer(fakeLayerId string, layer *Layer, layerInfo *Laye
 						// 获取文件总大小
 						totalSize, _ := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
 
-						// 创建进度跟踪reader
+						// 注册本层总大小到全局聚合器（原子累加，多层并发安全）
+						atomic.AddInt64(&m.globalTotal, totalSize)
+
+						// 创建进度跟踪reader：onBytes 上报本次读取字节数到全局聚合器，
+						// 按 globalRead/globalTotal 算全局百分比并200ms节流回调，避免per-layer 0~100反复跳和刷屏
 						pr := &ProgressReader{
-							r:        greader,
-							total:    totalSize,
-							callback: m.progressCallback,
+							r:     greader,
+							total: totalSize,
+							onBytes: func(n int) {
+								atomic.AddInt64(&m.globalRead, int64(n))
+								// 时间节流：距上次发送≥200ms才回调
+								now := time.Now().UnixMilli()
+								last := atomic.LoadInt64(&m.lastEmitTime)
+								if now-last >= 200 {
+									if atomic.CompareAndSwapInt64(&m.lastEmitTime, last, now) {
+										total := atomic.LoadInt64(&m.globalTotal)
+										read := atomic.LoadInt64(&m.globalRead)
+										if total > 0 && m.progressCallback != nil {
+											p := float64(read) / float64(total) * 100
+											if p > 100 {
+												p = 100
+											}
+											m.progressCallback(p)
+										}
+									}
+								}
+							},
 						}
 
 						// 使用进度跟踪reader进行复制
