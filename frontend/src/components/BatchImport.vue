@@ -452,7 +452,7 @@ let pollTimer = null
 
 // 获取设备的坑位数量
 const getDeviceSlotCount = (device) => {
-  if (device.name && device.name.toLowerCase().includes('p1')) {
+  if (device.id && device.id.toLowerCase().startsWith('p')) {
     return 24
   }
   return 12

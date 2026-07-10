@@ -1813,7 +1813,7 @@ watch(batchDeviceTypeFilter, (newVal) => {
 // 过滤后的设备列表（用于批量设备创建）
 const filteredBatchDevices = computed(() => {
   return devices.value.filter(device => {
-    const isPSeries = device.name && device.name.toLowerCase().includes('p1')
+    const isPSeries = device.id && device.id.toLowerCase().startsWith('p')
     if (batchDeviceTypeFilter.value === 'p_series') {
       return isPSeries
     } else {
@@ -1824,7 +1824,7 @@ const filteredBatchDevices = computed(() => {
 
 const isPSeriesOrBatchP = computed(() => {
   if (createDevice.value) {
-    return createDevice.value.name && createDevice.value.name.toLowerCase().includes('p1')
+    return createDevice.value.id && createDevice.value.id.toLowerCase().startsWith('p')
   }
   if (createMode.value === 'multi-device-batch') {
     return batchDeviceTypeFilter.value === 'p_series'
@@ -1842,7 +1842,7 @@ const filteredLocalCachedImages = computed(() => {
       // 无型号信息的镜像不过滤，保持兼容
       return true
     }
-    const hasPModel = models.some(m => m && m.toLowerCase().includes('p1'))
+    const hasPModel = models.some(m => m && m.toLowerCase().startsWith('p'))
     return isP ? hasPModel : !hasPModel
   })
 })
@@ -1893,6 +1893,7 @@ const createForm = ref({
   containerAndroidVersion: '10', // 10, 12, 14
   containerSandboxMode: true,
   containerEnforce: true, // 安全模式，默认开启
+  containerCompatMode: false, // 兼容模式，默认关闭
   containerDataDiskSize: '16G',
   containerName: 'T000',
   containerCount: 1,
@@ -1912,7 +1913,7 @@ const createForm = ref({
 
   // Simulator mode (shared/original) fields
   name: 'T000',
-  androidVersion: '14', // 安卓版本：11, 13, 14, 15, 16
+  androidVersion: '14', // 安卓版本：11, 13, 14, 15, 16, 17
   modelName: 'random',
   count: 1,
   startSlot: 1,
@@ -1946,6 +1947,7 @@ const createForm = ref({
   enableMagisk: false,
   enableGMS: false,
   enforce: true, // 安全模式，默认开启
+  compatMode: false, // 兼容模式，默认关闭。开启后创建容器时删除机型包中的 cpuinfo 文件
   longitud: '',  // 经度
   latitude: '',  // 纬度
   lockScreenPassword: '',  // 锁屏密码
@@ -2096,10 +2098,8 @@ const imageFilters = reactive({
 
 // 计算属性：根据筛选条件过滤后的镜像列表
 const isPSeries = computed(() => {
-  if (!createDevice.value || !createDevice.value.name) return false
-  const name = createDevice.value.name.toLowerCase()
-  // 假设 P 系列以 p 开头 (e.g. p1, p2)
-  return name.startsWith('p')
+  if (!createDevice.value || !createDevice.value.id) return false
+  return createDevice.value.id.toLowerCase().startsWith('p')
 })
 
 const filteredContainerImages = computed(() => {
@@ -2683,7 +2683,7 @@ const batchUpdateImageGroups = ref([])
 // 根据设备名称判断是否P系列
 const isBatchImagePSeries = (deviceName) => {
   const n = (deviceName || '').toLowerCase()
-  return n.includes('p1') || n.startsWith('p')
+  return n.startsWith('p')
 }
 
 // 为某个分组获取 V3 镜像列表
@@ -3015,7 +3015,7 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
     let previousSelectedSlots = savedSlots ? JSON.parse(savedSlots) : []
     
     // 根据当前设备类型过滤坑位：非P设备只允许 1-12 的坑位
-    const currentDeviceIsP = device && device.name && device.name.toLowerCase().startsWith('p')
+    const currentDeviceIsP = device && device.id && device.id.toLowerCase().startsWith('p')
     const maxSlotForDevice = currentDeviceIsP ? 24 : 12
     previousSelectedSlots = previousSelectedSlots.filter(s => s >= 1 && s <= maxSlotForDevice)
     
@@ -3045,7 +3045,7 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
       containerMacVlanIp: '', // 容器模式的 MacVlan IP
 
       name: 'T000',
-      androidVersion: '14', // 安卓版本：11, 13, 14, 15, 16
+      androidVersion: '14', // 安卓版本：11, 13, 14, 15, 16, 17
       modelName: 'random', // 默认随机机型
       modelType: mode === 'multi-device-batch' ? 'online' : 'online', // 默认在线机型
       count: 1,
@@ -3080,6 +3080,7 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
       enableMagisk: false,
       enableGMS: false,
       enforce: true, // 安全模式，默认开启
+      compatMode: false, // 兼容模式，默认关闭
       adbPort: 5555, // ADB端口，默认555，设置0不开启ADB
       // 网络管理分组
       vpcGroupId: '', // 选择的分组ID
@@ -3114,7 +3115,7 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
       containerMacVlanIp: '', // 容器模式的 MacVlan IP
 
       name: 'T000',
-      androidVersion: '14', // 安卓版本：11, 13, 14, 15, 16
+      androidVersion: '14', // 安卓版本：11, 13, 14, 15, 16, 17
       modelName: 'random', // 默认随机机型
       modelType: 'online', // 默认在线机型
       count: 1,
@@ -3149,6 +3150,7 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
       enableMagisk: false,
       enableGMS: false,
       enforce: true, // 安全模式，默认开启
+      compatMode: false, // 兼容模式，默认关闭
       adbPort: 5555, // ADB端口，默认5555，设置0不开启ADB
       // 网络管理分组
       vpcGroupId: '', // 选择的分组ID
@@ -8130,8 +8132,8 @@ const findAvailableSlot = (device, startSlot = 1, count = 1) => {
   
   // 根据设备型号确定最大坑位数
   let maxSlots = 12 // 默认12个坑位
-  if (device.name && device.name.toLowerCase().includes('p1')) {
-    maxSlots = 24 // P1型号24个坑位
+  if (device.id && device.id.toLowerCase().startsWith('p')) {
+    maxSlots = 24 // P系列24个坑位
   }
   
   // 获取当前设备的所有容器
@@ -9189,6 +9191,8 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
       indexNum: slot,
       start: shouldStart,
       sandboxSize: (form.containerSandboxMode === false) ? '' : `${diskSizeNum}GB`,  // ✅ 使用正确的容器数据盘大小
+      enforce: form.containerEnforce !== false, // 安全模式，默认开启
+      compatMode: form.containerCompatMode ? '1' : '0', // 兼容模式，0-关，1-开
       // offset: 0
     }
 
@@ -9241,6 +9245,7 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
       Gmsenable: form.enableGMS ? '1' : '0', // 0-关，1-开
       enforce: form.enforce !== false, // 安全模式，默认开启
       adbPort: (form.enforce !== false && form.adbPort !== undefined) ? Number(form.adbPort) : 0, // ADB端口，安全模式下生效，0不开启ADB
+      compatMode: form.compatMode ? '1' : '0', // 兼容模式，0-关，1-开。开启后创建容器时删除机型包中的 cpuinfo 文件
       PINCode: form.lockScreenPassword, // 锁屏密码
       randomFile: form.randomFile || false, // 随机系统文件
      // VpcID: form.vpcNodeId || '', // VPC节点ID
@@ -9919,7 +9924,7 @@ const handleCreateSubmit = async () => {
       
       // 检查当前运行中的容器数量是否已达到上限
       let maxSlots = 12
-      if (createDevice.value.name && createDevice.value.name.toLowerCase().includes('p1')) {
+      if (createDevice.value.id && createDevice.value.id.toLowerCase().startsWith('p')) {
         maxSlots = 24
       }
       
@@ -12537,20 +12542,52 @@ const parseAndFillSocks5Url = (url) => {
   if (!url) {
     return false;
   }
-  
-  const socks5Regex = /^socks5:\/\/(?:([^:]+):([^@]+)@)?([^:]+):(\d+)$/;
-  let match = url.match(socks5Regex);
-  if (match) {
-      // 根据匹配结果提取各部分信息
-      // match[1] = username, match[2] = password, match[3] = host, match[4] = port
-      s5ProxyForm.value.username = match[1] || '';
-      s5ProxyForm.value.password = match[2] || '';
-      s5ProxyForm.value.s5ServerAddress = match[3] || '';
-      s5ProxyForm.value.s5Port = match[4] || '';
-      
-      return true;
+
+  // socks5://[user:pass@]host:port
+  // 密码可能含 @，必须以最后一个 @ 切分 user-info 与 host，正则的 [^@] 无法处理含 @ 的密码
+  const prefix = 'socks5://';
+  if (!url.startsWith(prefix)) return false;
+  const rest = url.slice(prefix.length);
+
+  let userInfo = '';
+  let hostPart = rest;
+  const atIdx = rest.lastIndexOf('@');
+  if (atIdx !== -1) {
+    userInfo = rest.slice(0, atIdx);
+    hostPart = rest.slice(atIdx + 1);
   }
-  return false;
+
+  let username = '';
+  let password = '';
+  if (userInfo) {
+    const colonIdx = userInfo.indexOf(':');
+    if (colonIdx === -1) {
+      username = userInfo;
+    } else {
+      username = userInfo.slice(0, colonIdx);
+      password = userInfo.slice(colonIdx + 1);
+    }
+  }
+
+  // host:port —— host 可能是 IPv6（含冒号），但 S5 代理场景一般用 IPv4/域名，按最后一个冒号切 port
+  let s5ServerAddress = '';
+  let s5Port = '';
+  const lastColon = hostPart.lastIndexOf(':');
+  if (lastColon !== -1) {
+    s5ServerAddress = hostPart.slice(0, lastColon);
+    s5Port = hostPart.slice(lastColon + 1);
+  } else {
+    s5ServerAddress = hostPart;
+  }
+
+  if (!s5ServerAddress || !s5Port) return false;
+
+  s5ProxyForm.value.username = username || '';
+  s5ProxyForm.value.password = password || '';
+  s5ProxyForm.value.s5ServerAddress = s5ServerAddress;
+  s5ProxyForm.value.s5Port = s5Port;
+
+  return true;
 }
 
 // 解析S5信息并自动填写
@@ -12736,7 +12773,7 @@ const moveInstanceCurrentSlot = ref(0)
 const moveInstanceAvailableSlots = computed(() => {
   const device = activeDevice.value
   let maxSlots = 12
-  if (device && device.name && device.name.toLowerCase().startsWith('p')) {
+  if (device && device.id && device.id.toLowerCase().startsWith('p')) {
     maxSlots = 24
   }
   const slots = []
@@ -14479,7 +14516,7 @@ const groupedInstances = computed(() => {
   const slotCountMap = new Map()
   
   let maxSlots = 12
-  if (selectedCloudDevice.value && selectedCloudDevice.value.name && selectedCloudDevice.value.name.toLowerCase().includes('p1')) {
+  if (selectedCloudDevice.value && selectedCloudDevice.value.id && selectedCloudDevice.value.id.toLowerCase().startsWith('p')) {
     maxSlots = 24
   }
   
@@ -14608,7 +14645,7 @@ const deviceDetailGroupedInstances = computed(() => {
   const keyword = deviceDetailSearchKeyword.value.trim().toLowerCase()
   
   let maxSlots = 12
-  if (activeDevice.value && activeDevice.value.name && activeDevice.value.name.toLowerCase().includes('p1')) {
+  if (activeDevice.value && activeDevice.value.id && activeDevice.value.id.toLowerCase().startsWith('p')) {
     maxSlots = 24
   }
   
@@ -19436,7 +19473,7 @@ const handleBindsTest = async () => {
                            <el-radio-group v-model="containerAndroidVersion" size="small">
                              <el-radio :label="10">Android 10</el-radio>
                              <!-- Q1 支持 Android 12，P1 不支持 -->
-                             <el-radio v-if="model === 'Q1'" :label="12">Android 12</el-radio>
+                             <el-radio v-if="model !== 'P1'" :label="12">Android 12</el-radio>
                              <el-radio :label="14">Android 14</el-radio>
                            </el-radio-group>
                         </div>
@@ -19449,6 +19486,7 @@ const handleBindsTest = async () => {
                              <el-radio :label="14">Android 14</el-radio>
                              <el-radio :label="15">Android 15</el-radio>
                              <el-radio :label="16">Android 16</el-radio>
+                             <el-radio :label="17">Android 17</el-radio>
                            </el-radio-group>
                         </div>
                       </div>
@@ -20395,9 +20433,14 @@ const handleBindsTest = async () => {
             </el-form-item>
           </div>
 
+          <div style="display: flex; gap: 20px; align-items: center;">
             <el-form-item :label="$t('common.secureMode')" style="flex: 1;">
                <el-switch v-model="createForm.containerEnforce" :active-text="$t('common.enable')" :inactive-text="$t('common.disable')" inline-prompt></el-switch>
             </el-form-item>
+            <el-form-item :label="$t('common.compatMode')" style="flex: 1;">
+              <el-switch v-model="createForm.containerCompatMode" :active-text="$t('common.enable')" :inactive-text="$t('common.disable')" inline-prompt></el-switch>
+            </el-form-item>
+          </div>
 
           <div v-if="createMode !== 'multi-device-batch'" style="display: flex; gap: 20px; align-items: center;">
             <el-form-item :label="$t('common.networkManagement')" style="flex: 1;">
@@ -20573,6 +20616,7 @@ const handleBindsTest = async () => {
                 <el-option label="Android 14" value="14"></el-option>
                 <el-option v-if="createDeviceApiVersionNumber === null || createDeviceApiVersionNumber >= 99" label="Android 15" value="15"></el-option>
                 <el-option v-if="createDeviceApiVersionNumber === null || createDeviceApiVersionNumber >= 99" label="Android 16" value="16"></el-option>
+                <el-option v-if="createDeviceApiVersionNumber === null || createDeviceApiVersionNumber >= 99" label="Android 17" value="17"></el-option>
               </el-select>
             </el-form-item>
             <!-- 镜像分类 -->
@@ -20654,9 +20698,14 @@ const handleBindsTest = async () => {
               <el-input v-model="createForm.lockScreenPassword" :placeholder="$t('common.noLockScreen')" style="width: 100%;"></el-input>
             </el-form-item>
 
-             <el-form-item :label="$t('common.secureMode')">
-              <el-switch v-model="createForm.enforce" :active-text="$t('common.enable')" :inactive-text="$t('common.disable')" inline-prompt></el-switch>
-            </el-form-item>
+            <div style="display: flex; gap: 20px; align-items: center;">
+              <el-form-item :label="$t('common.secureMode')" style="flex: 1;">
+                <el-switch v-model="createForm.enforce" :active-text="$t('common.enable')" :inactive-text="$t('common.disable')" inline-prompt></el-switch>
+              </el-form-item>
+              <el-form-item :label="$t('common.compatMode')" style="flex: 1;">
+                <el-switch v-model="createForm.compatMode" :active-text="$t('common.enable')" :inactive-text="$t('common.disable')" inline-prompt></el-switch>
+              </el-form-item>
+            </div>
 
             <!-- ADB端口（安全模式下显示） -->
             <el-form-item v-if="createForm.enforce" label="ADB端口">

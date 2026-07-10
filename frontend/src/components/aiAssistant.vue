@@ -722,7 +722,7 @@ const getDeviceToken = (deviceIP) => {
 const localOpenAIConfig = ref({
   model: 'qwen2.5-3b',
   temperature: 0.7,
-  maxTokens: 2000
+  maxTokens: -1
 })
 
 // 响应式数据

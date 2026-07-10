@@ -1046,7 +1046,7 @@ const fetchCloudMachines = async () => {
         loadCloudImageList()
     }
     // 根据设备类型设置坑位范围
-    const isP1V3 = selectedDevice.version == 'v3' && selectedDevice.name?.toLowerCase()?.includes('p1')
+    const isP1V3 = selectedDevice.version == 'v3' && selectedDevice.id?.toLowerCase()?.startsWith('p')
     const maxSlot = isP1V3 ? 24 : 12
     cloudManageSlotOptions.value = Array.from({ length: maxSlot }, (_, i) => i + 1)
     if (cloudManageSlot.value > maxSlot) cloudManageSlot.value = 1
@@ -1611,7 +1611,7 @@ const handleImportBackupDeviceChange = async (deviceIP) => {
     console.log('handleImportBackupDeviceChange', device)
     if (device) {
         // importBackupDeviceName.value = device.name || device.ip
-        const isP1V3 = device.version == 'v3' && device.name?.toLowerCase()?.includes('p1')
+        const isP1V3 = device.version == 'v3' && device.id?.toLowerCase()?.startsWith('p')
         const maxSlot = isP1V3 ? 24 : 12
         importBackupSlotList.value = Array.from({ length: maxSlot }, (_, i) => i + 1)
         importBackupSlot.value = 1
@@ -1625,7 +1625,7 @@ const handleConfirmImportBackupMachine = async () => {
     }
 
     const device = props.devices.find(d => d.ip === importBackupDeviceIP.value)
-    const isP1V3 = device?.version == 'v3' && device?.name?.toLowerCase()?.includes('p1')
+    const isP1V3 = device?.version == 'v3' && device?.id?.toLowerCase()?.startsWith('p')
     const maxSlot = isP1V3 ? 24 : 12
     if (importBackupSlot.value < 1 || importBackupSlot.value > maxSlot) {
         ElMessage.warning(`坑位号必须在 1-${maxSlot} 之间`)

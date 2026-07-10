@@ -293,7 +293,7 @@
           >
             <!-- 根据设备型号生成不同数量的坑位 -->
                     <el-card 
-                      v-for="i in (props.selectedCloudDevice && props.selectedCloudDevice.name && props.selectedCloudDevice.name.toLowerCase().includes('p1') ? 24 : 12)" 
+                      v-for="i in (props.selectedCloudDevice && props.selectedCloudDevice.id && props.selectedCloudDevice.id.toLowerCase().startsWith('p') ? 24 : 12)"
                       :key="i"
               shadow="hover"
               class="cloud-machine-card"
@@ -803,7 +803,7 @@
         <el-input-number
           v-model="copyForm.indexNum"
           :min="1"
-          :max="props.selectedCloudDevice && props.selectedCloudDevice.name && props.selectedCloudDevice.name.toLowerCase().includes('p1') ? 24 : 12"
+          :max="props.selectedCloudDevice && props.selectedCloudDevice.id && props.selectedCloudDevice.id.toLowerCase().startsWith('p') ? 24 : 12"
           controls-position="right"
           style="width: 100%;"
         />
@@ -1187,7 +1187,7 @@ const existingDeviceIds = ref(new Set())
 
 // 计算属性
 const isSlotCloudMachinesIndeterminate = computed(() => {
-  const maxSlots = props.selectedCloudDevice && props.selectedCloudDevice.name && props.selectedCloudDevice.name.toLowerCase().includes('p1') ? 24 : 12
+  const maxSlots = props.selectedCloudDevice && props.selectedCloudDevice.id && props.selectedCloudDevice.id.toLowerCase().startsWith('p') ? 24 : 12
   return selectedSlotCloudMachines.value.length > 0 && selectedSlotCloudMachines.value.length < maxSlots
 })
 
@@ -1203,7 +1203,7 @@ const groupedInstances = computed(() => {
   
   // 根据设备型号确定显示的坑位数
   let maxSlots = 12
-  if (props.selectedCloudDevice && props.selectedCloudDevice.name && props.selectedCloudDevice.name.toLowerCase().includes('p1')) {
+  if (props.selectedCloudDevice && props.selectedCloudDevice.id && props.selectedCloudDevice.id.toLowerCase().startsWith('p')) {
     maxSlots = 24
   }
   
@@ -1951,7 +1951,7 @@ const handleBatchAction = (action) => {
 const handleSlotCloudMachinesSelectAll = (val) => {
   // 处理坑位云机全选
   if (val && props.selectedCloudDevice) {
-    selectedSlotCloudMachines.value = Array.from({ length: (props.selectedCloudDevice.name?.toLowerCase().includes('p1') ? 24 : 12) }, (_, i) => i + 1)
+    selectedSlotCloudMachines.value = Array.from({ length: (props.selectedCloudDevice.id?.toLowerCase().startsWith('p') ? 24 : 12) }, (_, i) => i + 1)
   } else {
     selectedSlotCloudMachines.value = []
   }

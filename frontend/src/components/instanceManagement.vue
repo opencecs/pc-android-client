@@ -398,10 +398,11 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Loading, Cellphone, Lock as LockIcon, WarningFilled } from '@element-plus/icons-vue'
 import { GetUserRabbetListWithToken, GetPackage, CreateOrder, QueryOrderStatus, GetPhoneVCode, Register, GetUserAtt, ScoreExchangeTermTime } from '../../bindings/edgeclient/app'
 import CryptoJS from 'crypto-js'
+import { getDeviceAddr, getDevicePassword } from '../services/api.js'
 
 const props = defineProps({
     devices: {
@@ -758,12 +759,76 @@ const handleBatchBuy = async () => {
         return
     }
 
+    // 续费前校验：调用设备端 /info/device 接口获取实际设备ID
+    // 与客户端缓存的 device.id 比对，不一致说明缓存过期（例如换机占用了同IP），阻止续费
+    const rabbetToCheck = new Set(selected.map(item => item.hostRabbet))
+    const mismatched = []
+    const offlineDevices = []
+    for (const rabbet of rabbetToCheck) {
+        const device = props.devices.find(d => String(d.id) === String(rabbet))
+        if (!device) {
+            mismatched.push({ rabbet, ip: rabbet, reason: '设备未在主机列表中找到' })
+            continue
+        }
+        try {
+            const actualId = await fetchDeviceActualId(device)
+            if (actualId === null) {
+                offlineDevices.push(device)
+            } else if (String(actualId) !== String(device.id)) {
+                mismatched.push({ rabbet, ip: device.ip, cachedId: device.id, actualId, reason: '设备ID不匹配' })
+            }
+        } catch (e) {
+            offlineDevices.push(device)
+        }
+    }
+
+    if (mismatched.length > 0) {
+        const detail = mismatched.map(m =>
+            `IP ${m.ip}：缓存ID ${m.cachedId || '(未找到)'}，实际ID ${m.actualId || '(未找到)'}`
+        ).join('\n')
+        ElMessageBox.alert(
+            `检测到 ${mismatched.length} 台设备的缓存ID与实际ID不一致，请清理客户端缓存后再续费：\n\n${detail}`,
+            '设备ID不匹配',
+            { confirmButtonText: '知道了', type: 'warning' }
+        )
+        return
+    }
+
+    if (offlineDevices.length > 0) {
+        const ips = offlineDevices.map(d => d.ip).join('、')
+        ElMessage.warning(`以下设备无法访问，请确认在线后再续费：${ips}`)
+        return
+    }
+
     selectedInstances.value = selected
     packageDialogVisible.value = true
     selectedPackage.value = null
     payMethod.value = 'zfb'
 
     await Promise.all([fetchPackages(), fetchUserScore()])
+}
+
+// 调用设备端 /info/device 接口获取实际设备ID
+// 返回 deviceId 字符串；设备无法访问返回 null
+const fetchDeviceActualId = async (device) => {
+    try {
+        const password = getDevicePassword(device.ip)
+        const headers = {}
+        if (password) {
+            headers['Authorization'] = 'Basic ' + btoa(`admin:${password}`)
+        }
+        const url = `http://${getDeviceAddr(device.ip)}/info/device`
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), 5000)
+        const resp = await fetch(url, { method: 'GET', headers, signal: ctrl.signal })
+        clearTimeout(timer)
+        if (!resp.ok) return null
+        const json = await resp.json()
+        if (json.code !== 0) return null
+        return (json.data && json.data.deviceId) || null
+    } catch (e) {
+        return null
+    }
 }
 
 // 取消选中单个实例

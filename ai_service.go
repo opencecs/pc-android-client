@@ -197,9 +197,9 @@ func (a *App) doAIStream(req AIChatRequest, sess *aiSession) error {
 		temperature = 0.7
 	}
 	maxTokens := req.MaxTokens
-	if maxTokens == 0 {
-		maxTokens = 4096
-	}
+	// if maxTokens == 0 {
+	// 	maxTokens = 4096
+	// }
 
 	payload := map[string]interface{}{
 		"model":       req.Model,

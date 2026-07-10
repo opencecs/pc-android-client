@@ -95,6 +95,7 @@
             <el-radio-button label="14">Android 14</el-radio-button>
             <el-radio-button label="15">Android 15</el-radio-button>
             <el-radio-button label="16">Android 16</el-radio-button>
+            <el-radio-button label="17">Android 17</el-radio-button>
           </el-radio-group>
           <el-input v-model="searchKeyword" :placeholder="$t('model.searchPlaceholder')" clearable size="medium"
             style="width: 300px"></el-input>

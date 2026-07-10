@@ -3934,14 +3934,19 @@ const handleSubmit = async () => {
                     let ip = parts[0]
                     let port = parts[1]
                     const firstColon = ip.indexOf(':')
+                    let userStartIdx = 1
                     if (firstColon > 0) {
                         port = ip.slice(firstColon + 1)
                         ip = ip.slice(0, firstColon)
+                        userStartIdx = 1
+                    } else {
+                        // parts[0] 是 ip、parts[1] 是 port，用户名从 parts[2] 开始
+                        userStartIdx = 2
                     }
 
-                    const username = parts[2] || ''
-                    const password = parts[3] || ''
-                    const remarks = parts[4] || `${protocolPrefix}_${Math.random().toString(36).substring(2, 8)}`
+                    const username = parts[userStartIdx] || ''
+                    const password = parts[userStartIdx + 1] || ''
+                    const remarks = parts[userStartIdx + 2] || `${protocolPrefix}_${Math.random().toString(36).substring(2, 8)}`
 
                     if (username && password) {
                         return `${protocolPrefix}://${username}:${password}@${ip}:${port}#${remarks}`
