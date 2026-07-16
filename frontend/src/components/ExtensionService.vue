@@ -330,6 +330,7 @@ const LATEST_FIRMWARE_VERSIONS = {
   'c1_v3': 'v0.5.7',
   'r1s_v3': 'v0.4.6',
   'p1_v3': 'v0.8.0',
+  'r1p_v3': 'v0.8.0',
 }
 
 // 状态

@@ -222,7 +222,7 @@
                     marginRight: '8px'
                   }"
                 >
-                  {{ scope.row.name.charAt(0).toUpperCase() }}
+                  {{ getDeviceTypeLabel(scope.row.name) }}
                 </div>
                 <div style="display: flex; flex-direction: column; align-items: flex-start;">
                   <span class="device-ip">{{ scope.row.ip }}</span>
@@ -1706,6 +1706,13 @@ const getDeviceTypeName = (deviceName) => {
   return parts[0] || '';
 };
 
+// 设备分类标签字母：r1p 归入 P 类，其余取 name 首字母大写
+const getDeviceTypeLabel = (deviceName) => {
+  const deviceType = getDeviceTypeName(deviceName);
+  if (deviceType === 'r1p') return 'P';
+  return (deviceName || '').charAt(0).toUpperCase();
+};
+
 const getDeviceTypeColor = (deviceName) => {
   const deviceType = getDeviceTypeName(deviceName);
   const colorMap = {
@@ -1715,7 +1722,8 @@ const getDeviceTypeColor = (deviceName) => {
     'v3': '#F56C6C', // 红色
     'm48': '#E6A23C', // 黄色
     'c1': '#F56C6C', // 红色
-    'a1': '#909399' // 灰色
+    'a1': '#909399', // 灰色
+    'r1p': '#67C23A' // 归入 P 类，使用绿色
   };
   return colorMap[deviceType] || '#909399'; // 默认灰色
 };

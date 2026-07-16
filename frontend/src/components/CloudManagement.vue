@@ -101,7 +101,7 @@
                         marginRight: '8px'
                       }"
                     >
-                      {{ getDeviceTypeName(device.name).charAt(0).toUpperCase() }}
+                      {{ getDeviceTypeLabel(device.name) }}
                     </div>
                     <span class="device-ip">{{ device.ip }}</span>
                     <!-- 批量创建按钮 -->
@@ -120,68 +120,70 @@
           </div>
         </div>
         
-        <!-- 批量模式：分组树形结构 -->
+        <!-- 批量模式：分组折叠列表（自渲染，避免 el-tree 数据引用频繁变化导致展开状态丢失） -->
         <div v-else class="batch-mode-container">
-          <!-- 移除el-scrollbar，直接使用原生滚动 -->
           <div class="native-scroll-container">
-            <el-tree 
-              :data="filteredCloudMachineGroups" 
-              :props="{
-                label: (data) => {
-                  if (data.cloudMachines) {
-                    // 设备IP节点
-                    return data.ip
-                  } else if (data.screenshot) {
-                    // 云机节点
-                    return data.name
-                  } else {
-                    // 分组节点
-                    return data.name
-                  }
-                },
-                children: (data) => {
-                  if (data.devices) {
-                    return data.devices
-                  } else if (data.cloudMachines) {
-                    return data.cloudMachines
-                  }
-                  return []
-                }
-              }"
-              show-checkbox
-              default-expand-all
-              node-key="id"
-              :default-checked-keys="props.treeSelectedKeys"
-              @check="handleTreeCheck"
-              :allow-drop="handleDrop"
-              @node-drop="handleNodeDrop"
-              style="width: 100%;"
+            <div
+              v-for="group in filteredCloudMachineGroups"
+              :key="group.id"
+              class="batch-group"
             >
-              <template #default="{ node, data }">
-                <span class="tree-node-label">
-                  {{ 
-                  data.cloudMachines ? data.ip : 
-                  data.screenshot ? (() => {
-                    // 将类似 "8569541a74175bfe052739c4321ea31b_2_T0002" 处理成 "T0002"
-                    const nameParts = data.name.split('_');
-                    return nameParts[nameParts.length - 1] || data.name;
-                  })() : 
-                  data.name 
-                }}
-                </span>
-                <!-- 只有分组节点显示添加设备按钮 -->
-                <el-button
-                  v-if="!data.cloudMachines && !data.screenshot"
-                  type="text"
-                  size="small" 
-                  :icon="Rank"
-                  class="group-add-btn"
-                  @click.stop="showAddDeviceToGroupDialog(data.name)"
+              <!-- 分组节点 -->
+              <div
+                class="batch-group-header"
+                @click="toggleBatchExpand(group.id)"
+              >
+                <el-checkbox
+                  :model-value="getGroupCheckedState(group)"
+                  :indeterminate="getGroupCheckedState(group) === 'indeterminate'"
+                  @change="(val) => onGroupCheckChange(group, val)"
+                  @click.stop
+                />
+                <el-icon class="batch-expand-icon" :class="{ 'is-expanded': isBatchExpanded(group.id) }"><ArrowDown /></el-icon>
+                <span class="batch-group-name">{{ group.name }} ({{ group.devices?.length || 0 }})</span>
+              </div>
+              <!-- 分组下的设备列表 -->
+              <div v-show="isBatchExpanded(group.id)" class="batch-group-devices">
+                <div
+                  v-for="device in (group.devices || [])"
+                  :key="device.id"
+                  class="batch-device"
                 >
-                {{ t('cloudMachine.batchAddToGroup') }}
-              </el-button>
-              </template>
-            </el-tree>
+                  <!-- 设备节点 -->
+                  <div
+                    class="batch-device-header"
+                    @click="toggleBatchExpand(device.id)"
+                  >
+                    <el-checkbox
+                      :model-value="getDeviceCheckedState(device)"
+                      :indeterminate="getDeviceCheckedState(device) === 'indeterminate'"
+                      @change="(val) => onDeviceCheckChange(device, val)"
+                      @click.stop
+                    />
+                    <el-icon class="batch-expand-icon" :class="{ 'is-expanded': isBatchExpanded(device.id) }"><ArrowDown /></el-icon>
+                    <span class="batch-device-ip">{{ device.ip }}</span>
+                  </div>
+                  <!-- 设备下的云机列表 -->
+                  <div v-show="isBatchExpanded(device.id)" class="batch-device-machines">
+                    <div
+                      v-for="cm in (device.cloudMachines || [])"
+                      :key="cm.id"
+                      class="batch-machine"
+                    >
+                      <el-checkbox
+                        :model-value="isMachineChecked(cm.id)"
+                        @change="(val) => onMachineCheckChange(cm, val)"
+                        @click.stop
+                      />
+                      <span class="batch-machine-name">{{ formatCloudMachineName(cm.name) }}</span>
+                    </div>
+                    <div v-if="!(device.cloudMachines && device.cloudMachines.length)" class="batch-empty-hint">暂无云机</div>
+                  </div>
+                </div>
+                <div v-if="!(group.devices && group.devices.length)" class="batch-empty-hint">暂无设备</div>
+              </div>
+            </div>
+            <div v-if="!filteredCloudMachineGroups.length" class="batch-empty-hint">暂无数据</div>
           </div>
         </div>
       </el-card>
@@ -771,7 +773,7 @@
                 marginRight: '8px'
               }"
             >
-              {{ getDeviceTypeName(device.name).charAt(0).toUpperCase() }}
+              {{ getDeviceTypeLabel(device.name) }}
             </div>
             <span>{{ device.ip }} ({{ device.group || t('common.defaultGroup') }})</span>
           </el-checkbox>
@@ -958,7 +960,7 @@ const handleSearchClear = () => {
 // 过滤后的树形结构（用于批量模式）
 const filteredCloudMachineGroups = computed(() => {
   if (!deviceSearchText.value.trim()) {
-    return props.cloudMachineGroups
+    return props.cloudMachineGroups || []
   }
 
   const searchText = deviceSearchText.value.trim().toLowerCase()
@@ -1013,7 +1015,7 @@ const filteredCloudMachineGroups = computed(() => {
     return ip.toLowerCase().includes(searchText)
   }
 
-  const filteredGroups = props.cloudMachineGroups
+  const filteredGroups = (props.cloudMachineGroups || [])
     .map(group => {
       const groupName = (group.name || '').toLowerCase()
       if (groupName.includes(searchText)) {
@@ -2077,89 +2079,8 @@ const recalcSelectedMachines = (checkedKeys, groups) => {
   return selectedMachines
 }
 
-// 树形结构勾选事件处理
-const handleTreeCheck = (data, checkedInfo) => {
-  // 获取选中的节点ID数组
-  const checkedKeys = checkedInfo.checkedKeys
-  currentCheckedKeys = [...checkedKeys] // 保存当前勾选 key
-  
-  // 筛选出所有选中的云机节点和设备节点
-  const selectedMachines = []
-  const selectedDevices = []
-  const machineIds = new Set() // 用于去重
-  
-  // 递归遍历所有节点，检查是否被选中
-  const findSelectedItems = (nodes) => {
-    nodes.forEach(node => {
-      if (node.screenshot) {
-        // 云机节点，检查是否被选中
-        if (checkedKeys.includes(node.id) && !machineIds.has(node.id)) {
-          selectedMachines.push(node)
-          machineIds.add(node.id)
-        }
-      } else if (node.cloudMachines) {
-        // 设备节点，检查是否被选中
-        if (checkedKeys.includes(node.id)) {
-          // 设备被选中，添加到选中设备列表
-          selectedDevices.push(node)
-          // 添加其下所有云机（去重）
-          node.cloudMachines.forEach(machine => {
-            if (!machineIds.has(machine.id)) {
-              selectedMachines.push(machine)
-              machineIds.add(machine.id)
-            }
-          })
-        } else {
-          // 递归检查云机节点
-          findSelectedItems(node.cloudMachines)
-        }
-      } else if (node.devices) {
-        // 分组节点，检查是否被选中
-        if (checkedKeys.includes(node.id)) {
-          // 分组被选中，添加其下所有设备和云机（去重）
-          node.devices.forEach(device => {
-            selectedDevices.push(device)
-            device.cloudMachines.forEach(machine => {
-              if (!machineIds.has(machine.id)) {
-                selectedMachines.push(machine)
-                machineIds.add(machine.id)
-              }
-            })
-          })
-        } else {
-          // 递归检查设备节点
-          findSelectedItems(node.devices)
-        }
-      }
-    })
-  }
-  
-  // 开始遍历所有分组
-  findSelectedItems(props.cloudMachineGroups)
-  
-  // 更新选中的云机列表，确保每次都重新赋值
-  selectedCloudMachines.value = [...selectedMachines]
-  console.log('selectedCloudMachines:', selectedCloudMachines.value)
-  
-  // 通知父组件处理截图加载队列
-  emit('handleTreeCheck', { 
-    selectedMachines: [...selectedMachines], 
-    selectedDevices: [...selectedDevices],
-    treeSelectedKeys: [...checkedKeys]
-  })
-}
-
 // 截图队列管理现在由父组件App.vue处理
 
-const handleDrop = (draggingNode, dropNode, dropType) => {
-  // 处理树形结构拖放
-  return true
-}
-
-const handleNodeDrop = (draggingNode, dropNode, dropType, ev) => {
-  // 处理树形结构拖放完成
-  emit('handleNodeDrop', draggingNode, dropNode, dropType, ev)
-}
 
 const updateSelectedCloudMachines = () => {
   // 更新选中的云机列表
@@ -2176,6 +2097,13 @@ const getDeviceTypeName = (deviceName) => {
   return parts[0] || 'unknown'
 }
 
+// 设备分类标签字母：r1p 归入 P 类，其余取 name 首字母大写
+const getDeviceTypeLabel = (deviceName) => {
+  const deviceType = getDeviceTypeName(deviceName)
+  if (deviceType === 'r1p') return 'P'
+  return (deviceName || '').charAt(0).toUpperCase()
+}
+
 // 获取设备类型颜色
 const getDeviceTypeColor = (deviceName) => {
   const deviceType = getDeviceTypeName(deviceName)
@@ -2184,7 +2112,8 @@ const getDeviceTypeColor = (deviceName) => {
     'p1': '#67C23A', // 绿色
     'm48': '#E6A23C', // 黄色
     'c1': '#F56C6C', // 红色
-    'a1': '#909399' // 灰色
+    'a1': '#909399', // 灰色
+    'r1p': '#67C23A' // 归入 P 类，使用绿色
   }
   return colorMap[deviceType] || '#909399' // 默认灰色
 }
@@ -2284,6 +2213,198 @@ const props = defineProps({
     default: () => ({})
   }
 })
+
+// === 批量模式：自渲染折叠列表的状态管理 ===
+// 展开状态用 Set 保存节点 id，数据刷新不影响（按 id 而非引用判断）
+const batchExpandedKeys = ref(new Set())
+// 收起的节点 id（用户主动收起后记下，避免数据刷新后被重新展开）
+const batchCollapsedKeys = ref(new Set())
+
+// 当前选中的云机 id 集合
+const batchCheckedMachineIds = ref(new Set())
+
+// 切换节点展开/收起
+const toggleBatchExpand = (id) => {
+  const next = new Set(batchExpandedKeys.value)
+  const collapsed = new Set(batchCollapsedKeys.value)
+  if (next.has(id)) {
+    next.delete(id)
+    collapsed.add(id)
+  } else {
+    next.add(id)
+    collapsed.delete(id)
+  }
+  batchExpandedKeys.value = next
+  batchCollapsedKeys.value = collapsed
+}
+
+// 节点是否展开：默认展开，仅在用户主动收起时才收起
+const isBatchExpanded = (id) => {
+  return !batchCollapsedKeys.value.has(id)
+}
+
+// 格式化云机名（提取末尾部分）
+const formatCloudMachineName = (name) => {
+  if (!name) return ''
+  const parts = name.split('_')
+  return parts[parts.length - 1] || name
+}
+
+// 收集分组下所有云机 id
+const collectMachineIdsInGroup = (group) => {
+  const ids = []
+  for (const device of (group.devices || [])) {
+    for (const cm of (device.cloudMachines || [])) {
+      if (cm && cm.id) ids.push(cm.id)
+    }
+  }
+  return ids
+}
+
+// 收集设备下所有云机 id
+const collectMachineIdsInDevice = (device) => {
+  const ids = []
+  for (const cm of (device.cloudMachines || [])) {
+    if (cm && cm.id) ids.push(cm.id)
+  }
+  return ids
+}
+
+// 分组勾选状态：'all' | 'none' | 'indeterminate'
+const getGroupCheckedState = (group) => {
+  const ids = collectMachineIdsInGroup(group)
+  if (ids.length === 0) return false
+  let checked = 0
+  for (const id of ids) {
+    if (batchCheckedMachineIds.value.has(id)) checked++
+  }
+  if (checked === ids.length) return true
+  if (checked === 0) return false
+  return 'indeterminate'
+}
+
+// 设备勾选状态
+const getDeviceCheckedState = (device) => {
+  const ids = collectMachineIdsInDevice(device)
+  if (ids.length === 0) return false
+  let checked = 0
+  for (const id of ids) {
+    if (batchCheckedMachineIds.value.has(id)) checked++
+  }
+  if (checked === ids.length) return true
+  if (checked === 0) return false
+  return 'indeterminate'
+}
+
+// 云机是否勾选
+const isMachineChecked = (id) => batchCheckedMachineIds.value.has(id)
+
+// 勾选/取消勾选分组（联动分组下所有云机）
+const onGroupCheckChange = (group, val) => {
+  const ids = collectMachineIdsInGroup(group)
+  const next = new Set(batchCheckedMachineIds.value)
+  if (val) {
+    ids.forEach(id => next.add(id))
+  } else {
+    ids.forEach(id => next.delete(id))
+  }
+  batchCheckedMachineIds.value = next
+  syncSelectedToParent()
+}
+
+// 勾选/取消勾选设备（联动设备下所有云机）
+const onDeviceCheckChange = (device, val) => {
+  const ids = collectMachineIdsInDevice(device)
+  const next = new Set(batchCheckedMachineIds.value)
+  if (val) {
+    ids.forEach(id => next.add(id))
+  } else {
+    ids.forEach(id => next.delete(id))
+  }
+  batchCheckedMachineIds.value = next
+  syncSelectedToParent()
+}
+
+// 勾选/取消勾选单个云机
+const onMachineCheckChange = (cm, val) => {
+  const next = new Set(batchCheckedMachineIds.value)
+  if (val) {
+    next.add(cm.id)
+  } else {
+    next.delete(cm.id)
+  }
+  batchCheckedMachineIds.value = next
+  syncSelectedToParent()
+}
+
+// 同步选中状态到父组件（保持原 handleTreeCheck 接口）
+const syncSelectedToParent = () => {
+  const checkedMachineIds = batchCheckedMachineIds.value
+  const selectedMachines = []
+  const selectedDevices = []
+  const machineIdSet = new Set()
+  for (const group of (props.cloudMachineGroups || [])) {
+    let deviceSelected = false
+    for (const device of (group.devices || [])) {
+      const deviceMachines = (device.cloudMachines || []).filter(cm => cm && cm.id)
+      const checkedInDevice = deviceMachines.filter(cm => checkedMachineIds.has(cm.id))
+      if (checkedInDevice.length > 0 && checkedInDevice.length === deviceMachines.length) {
+        selectedDevices.push(device)
+        deviceSelected = true
+      }
+      for (const cm of checkedInDevice) {
+        if (!machineIdSet.has(cm.id)) {
+          selectedMachines.push(cm)
+          machineIdSet.add(cm.id)
+        }
+      }
+    }
+  }
+  selectedCloudMachines.value = [...selectedMachines]
+  currentCheckedKeys = [...checkedMachineIds]
+  emit('handleTreeCheck', {
+    selectedMachines: [...selectedMachines],
+    selectedDevices: [...selectedDevices],
+    treeSelectedKeys: [...checkedMachineIds]
+  })
+}
+
+// 监听 props.treeSelectedKeys 变化，同步到本地勾选状态（外部强制更新时）
+watch(() => props.treeSelectedKeys, (newKeys) => {
+  if (!newKeys) return
+  const next = new Set()
+  for (const k of newKeys) {
+    // 仅保留云机 id（过滤掉分组/设备 id）
+    if (typeof k === 'string' && k.includes('_')) next.add(k)
+  }
+  batchCheckedMachineIds.value = next
+}, { immediate: true, deep: true })
+
+// 监听云机数据变化，剔除已不存在的云机 id
+watch(() => props.cloudMachineGroups, () => {
+  const validIds = new Set()
+  for (const group of (props.cloudMachineGroups || [])) {
+    for (const device of (group.devices || [])) {
+      for (const cm of (device.cloudMachines || [])) {
+        if (cm && cm.id) validIds.add(cm.id)
+      }
+    }
+  }
+  const next = new Set()
+  for (const id of batchCheckedMachineIds.value) {
+    if (validIds.has(id)) next.add(id)
+  }
+  // 仅在集合变化时更新，避免无限循环
+  if (next.size !== batchCheckedMachineIds.value.size) {
+    batchCheckedMachineIds.value = next
+  } else {
+    let diff = false
+    for (const id of next) {
+      if (!batchCheckedMachineIds.value.has(id)) { diff = true; break }
+    }
+    if (diff) batchCheckedMachineIds.value = next
+  }
+}, { deep: true })
 
 // 监听属性变化
 watch(() => props.instances, (newInstances) => {
@@ -2976,6 +3097,89 @@ onBeforeUnmount(() => {
   padding: 12px;
   background-color: #fafafa;
   border-radius: 4px;
+}
+
+/* 批量模式：自渲染折叠列表 */
+.batch-group {
+  margin-bottom: 6px;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  background: #fff;
+  overflow: hidden;
+}
+.batch-group-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  cursor: pointer;
+  user-select: none;
+  background: #f5f7fa;
+}
+.batch-group-header:hover {
+  background: #ecf5ff;
+}
+.batch-group-name {
+  font-weight: bold;
+  font-size: 13px;
+  color: #303030;
+  margin-left: 4px;
+}
+.batch-group-devices {
+  padding: 2px 0 2px 16px;
+}
+.batch-device {
+  margin: 2px 0;
+}
+.batch-device-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 4px;
+}
+.batch-device-header:hover {
+  background: #f5f7fa;
+}
+.batch-device-ip {
+  font-size: 13px;
+  color: #606266;
+  margin-left: 4px;
+}
+.batch-device-machines {
+  padding: 2px 0 2px 32px;
+}
+.batch-machine {
+  display: flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+.batch-machine:hover {
+  background: #f5f7fa;
+}
+.batch-machine-name {
+  font-size: 12px;
+  color: #606266;
+  margin-left: 4px;
+}
+.batch-expand-icon {
+  transition: transform 0.2s;
+  color: #909399;
+  font-size: 12px;
+  margin-right: 2px;
+}
+.batch-expand-icon.is-expanded {
+  transform: rotate(0deg);
+}
+.batch-expand-icon:not(.is-expanded) {
+  transform: rotate(-90deg);
+}
+.batch-empty-hint {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #c0c4cc;
+  text-align: center;
 }
 
 /* 4K屏幕适配 - 放大树形选择框 */

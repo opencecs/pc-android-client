@@ -10,7 +10,7 @@
   <Identity 
     Name="com.MYT.v3"
     Publisher="CN=MYT Ltd.co"
-    Version="1.9.2" 
+    Version="1.9.3" 
     ProcessorArchitecture="x64" />
   
   <Properties>

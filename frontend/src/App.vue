@@ -5520,7 +5520,14 @@ const handleSelectedCloudDeviceChange = (device) => {
   selectedCloudDevice.value = device
   // 切换设备时清空版本快照，强制下次轮询立即拉取新设备截图
   screenshotLocalVersions = {}
-  
+
+  // 切换设备时立即清空坑位状态，避免显示上一个设备的已过期/即将过期标签
+  slotStates.value = {}
+  // 异步加载新设备的坑位状态
+  if (device && device.id) {
+    fetchAndCacheSlotStates(device.id)
+  }
+
   // 同步更新activeDevice，确保实例数据正确更新
   if (device && activeDevice.value?.ip !== device.ip) {
     console.log('同步更新activeDevice:', device)
@@ -11309,7 +11316,13 @@ const handleDeviceSelect = async (device) => {
     
     // 切换设备时停止当前截图刷新
     stopScreenshotRefresh()
-    
+
+    // 切换设备时立即清空坑位状态，避免显示上一个设备的已过期/即将过期标签
+    slotStates.value = {}
+    if (device.id) {
+      fetchAndCacheSlotStates(device.id)
+    }
+
     // 清空选中的云机列表，避免不同设备的云机混淆
     selectedCloudMachines.value = []
     
@@ -11562,11 +11575,15 @@ const handleCloudDeviceSelect = async (device) => {
     console.log('Setting selectedCloudDevice and activeDevice to:', device.ip)
     selectedCloudDevice.value = device
     activeDevice.value = device // 同步到activeDevice，确保主机管理和云机管理使用同一设备
-    
+
     // 切换设备时停止当前截图刷新，清空版本快照强制下次立即拉取新设备截图
     stopScreenshotRefresh()
     screenshotLocalVersions = {}
-    
+
+    // 切换设备时立即清空坑位状态，避免显示上一个设备的已过期/即将过期标签
+    slotStates.value = {}
+    fetchAndCacheSlotStates(device.id)
+
     // 清空选中的云机列表，避免不同设备的云机混淆
     selectedCloudMachines.value = []
     
@@ -17286,7 +17303,8 @@ const getDeviceTypeColor = (deviceName) => {
     'p1': '#67C23A', // 绿色
     'm48': '#E6A23C', // 黄色
     'c1': '#F56C6C', // 红色
-    'a1': '#909399' // 灰色
+    'a1': '#909399', // 灰色
+    'r1p': '#67C23A' // 归入 P 类，使用绿色
   }
   return colorMap[deviceType] || '#909399' // 默认灰色
 }
