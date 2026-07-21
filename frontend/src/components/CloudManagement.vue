@@ -320,24 +320,24 @@
                     {{ formatInstanceName(props.selectedCloudDevice && props.instances.find(inst => inst.indexNum === i)?.name) }}
                   </span>
                   <!-- 根据实际容器数据显示状态 -->
-                  <el-tag 
-                            v-if="props.selectedCloudDevice && props.instances.find(inst => inst.indexNum === i)?.status === 'running'" 
-                            size="small" 
-                            type="success" 
+                  <el-tag
+                            v-if="!(props.slotStates[i] && props.slotStates[i].state === 2) && props.selectedCloudDevice && props.instances.find(inst => inst.indexNum === i)?.status === 'running'"
+                            size="small"
+                            type="success"
                             class="status-tag-normal"
                           >
                             {{ t('common.running') }}
                           </el-tag>
-                          <el-tag 
-                            v-else-if="props.selectedCloudDevice && props.instances.find(inst => inst.indexNum === i)?.status" 
-                            size="small" 
-                            type="warning" 
+                          <el-tag
+                            v-else-if="!(props.slotStates[i] && props.slotStates[i].state === 2) && props.selectedCloudDevice && props.instances.find(inst => inst.indexNum === i)?.status"
+                            size="small"
+                            type="warning"
                             class="status-tag-normal"
                           >
                             {{ t('common.backupCount', { count: getBackupCount(i) }) }}
                           </el-tag>
                           <el-tag
-                            v-else
+                            v-else-if="!(props.slotStates[i] && props.slotStates[i].state === 2)"
                             size="small"
                             type="info"
                             class="status-tag-normal"
@@ -361,7 +361,19 @@
               </template>
               <!-- 根据实际容器数据显示内容 -->
               <div class="cloud-machine-screenshot-large">
-                <template v-if="props.selectedCloudDevice && props.instances.find(inst => inst.indexNum === i)">
+                <!-- 已到期坑位：不显示截图，即使有缓存也只显示到期提示 -->
+                <template v-if="props.selectedCloudDevice && props.slotStates[i] && props.slotStates[i].state === 2">
+                  <div class="screenshot-offline">
+                    <span>{{ (() => {
+                      const inst = props.instances.find(it => it.indexNum === i);
+                      const hasScreenshot = inst && props.screenshotCache?.get(`${props.selectedCloudDevice.ip}_${inst.name}`);
+                      return hasScreenshot
+                        ? `${t('common.shutdownStatus')} | ${t('common.pleaseRenewInstance')}`
+                        : t('common.pleaseRenewInstance');
+                    })() }}</span>
+                  </div>
+                </template>
+                <template v-else-if="props.selectedCloudDevice && props.instances.find(inst => inst.indexNum === i)">
                   <!-- 有容器实例的坑位 -->
                   <template v-if="props.instances.find(inst => inst.indexNum === i)?.status === 'running'">
                     <!-- 运行中状态显示截图 -->
@@ -607,17 +619,33 @@
                     const nameParts = machine.name.split('_');
                     return nameParts[nameParts.length - 1] || machine.name;
                   })() }}</span>
-                  <el-tag size="small" type="success" class="status-tag-normal">{{ t('common.running') }}</el-tag>
+                  <el-tag
+                    v-if="props.slotStates[machine.indexNum] && props.slotStates[machine.indexNum].state === 2"
+                    size="small"
+                    type="danger"
+                    class="status-tag-normal"
+                  >{{ t('common.expired') }}</el-tag>
+                  <el-tag v-else size="small" type="success" class="status-tag-normal">{{ t('common.running') }}</el-tag>
                 </div>
               </template>
               <div class="cloud-machine-screenshot-large">
-                <!-- 使用新的截图组件（数据由后端缓存驱动，无需 screenshot URL） -->
-                <ScreenshotImage
-                  :screenshot-data="props.screenshotCache?.get(machine.id) || ''"
-                  :device-key="machine.id"
-                  :rotate="cardOrientation === 'horizontal'"
-                  @click="() => { startProjection({ ip: machine.networkName == 'myt' ? machine.ip : machine.deviceIp }, machine) }"
-                />
+                <!-- 已到期云机：不显示截图（即使有缓存），显示到期提示 -->
+                <template v-if="props.slotStates[machine.indexNum] && props.slotStates[machine.indexNum].state === 2">
+                  <div class="screenshot-offline">
+                    <span>{{ (props.screenshotCache?.get(machine.id))
+                      ? `${t('common.shutdownStatus')} | ${t('common.pleaseRenewInstance')}`
+                      : t('common.pleaseRenewInstance') }}</span>
+                  </div>
+                </template>
+                <template v-else>
+                  <!-- 使用新的截图组件（数据由后端缓存驱动，无需 screenshot URL） -->
+                  <ScreenshotImage
+                    :screenshot-data="props.screenshotCache?.get(machine.id) || ''"
+                    :device-key="machine.id"
+                    :rotate="cardOrientation === 'horizontal'"
+                    @click="() => { startProjection({ ip: machine.networkName == 'myt' ? machine.ip : machine.deviceIp }, machine) }"
+                  />
+                </template>
               </div>
               <div class="cloud-machine-info-small">
                 <el-space size="small" class="cloud-machine-actions">
@@ -662,7 +690,18 @@
                 <el-table-column prop="created" :label="t('common.createTime')" width="160" align="center"></el-table-column>
                 <el-table-column prop="status" :label="t('common.statusLabel')" width="140" align="center">
                   <template #default="scope">
-                    <el-tag size="small" :type="scope.row.status === 'running' ? 'success' : 'info'" class="status-tag-normal">
+                    <el-tag
+                      v-if="props.slotStates[scope.row.slotNum] && props.slotStates[scope.row.slotNum].state === 2"
+                      type="danger"
+                      size="small"
+                      class="status-tag-normal"
+                    >{{ t('common.expired') }}</el-tag>
+                    <el-tag
+                      v-else
+                      size="small"
+                      :type="scope.row.status === 'running' ? 'success' : 'info'"
+                      class="status-tag-normal"
+                    >
                       {{ scope.row.status === 'running' ? t('common.running') : t('common.shutdownStatus') }}
                     </el-tag>
                     <el-tag
@@ -671,12 +710,6 @@
                       size="small"
                       style="margin-left: 4px;"
                     >{{ t('common.expiringSoon') }}</el-tag>
-                    <el-tag
-                      v-if="props.slotStates[scope.row.slotNum] && props.slotStates[scope.row.slotNum].state === 2"
-                      type="danger"
-                      size="small"
-                      style="margin-left: 4px;"
-                    >{{ t('common.expired') }}</el-tag>
                   </template>
                 </el-table-column>
                 <el-table-column prop="modelName" :label="t('common.modelLabel')" width="100" align="center">
@@ -2378,33 +2411,17 @@ watch(() => props.treeSelectedKeys, (newKeys) => {
     if (typeof k === 'string' && k.includes('_')) next.add(k)
   }
   batchCheckedMachineIds.value = next
+  // 同步更新 currentCheckedKeys，保证后续 cloudMachineGroups 重建时
+  // watch 能用最新的选中 id 重算 selectedCloudMachines（如切换备份后新 id）
+  currentCheckedKeys = [...next]
 }, { immediate: true, deep: true })
 
 // 监听云机数据变化，剔除已不存在的云机 id
-watch(() => props.cloudMachineGroups, () => {
-  const validIds = new Set()
-  for (const group of (props.cloudMachineGroups || [])) {
-    for (const device of (group.devices || [])) {
-      for (const cm of (device.cloudMachines || [])) {
-        if (cm && cm.id) validIds.add(cm.id)
-      }
-    }
-  }
-  const next = new Set()
-  for (const id of batchCheckedMachineIds.value) {
-    if (validIds.has(id)) next.add(id)
-  }
-  // 仅在集合变化时更新，避免无限循环
-  if (next.size !== batchCheckedMachineIds.value.size) {
-    batchCheckedMachineIds.value = next
-  } else {
-    let diff = false
-    for (const id of next) {
-      if (!batchCheckedMachineIds.value.has(id)) { diff = true; break }
-    }
-    if (diff) batchCheckedMachineIds.value = next
-  }
-}, { deep: true })
+// 注意：数据刷新（如批量切换备份、关机后 fetchAndroidContainers）会重建 cloudMachineGroups，
+// 新云机对象的 id 形如 `${device.ip}_${inst.name}`，容器名变了 id 也变。
+// 若这里主动剔除"已不存在的 id"，会把切换备份前选中的状态清空，影响用户连续操作。
+// 因此这里不主动剔除失效 id，仅在 syncSelectedToParent 时跳过已不存在的云机。
+// watch(() => props.cloudMachineGroups, () => {}, { deep: true })
 
 // 监听属性变化
 watch(() => props.instances, (newInstances) => {
@@ -2414,15 +2431,76 @@ watch(() => props.instances, (newInstances) => {
 // 监听云机分组数据变化
 watch(() => props.cloudMachineGroups, (newGroups) => {
   if (JSON.stringify(newGroups) !== JSON.stringify(previousGroups.value)) {
-    console.log('云机分组数据变化:', newGroups)
     previousGroups.value = [...newGroups]
     // 分组数据更新后，用当前勾选 key 从新数据中重新提取 selectedCloudMachines
     // 避免截图区域仍显示旧对象引用（status 等字段不更新）
     if (currentCheckedKeys.length > 0) {
-      selectedCloudMachines.value = recalcSelectedMachines(currentCheckedKeys, newGroups)
+      // 先按云机 id 精确匹配；若全部失效（如切换备份后容器名变化导致 id 变更），
+      // 退化为按"设备IP + 坑位号"匹配，保留选中状态。
+      const recalc = recalcSelectedMachines(currentCheckedKeys, newGroups)
+      if (recalc.length > 0) {
+        selectedCloudMachines.value = recalc
+        // 同步 batchCheckedMachineIds 为新数据中实际存在的云机 id，
+        // 避免残留失效 id 导致 checkbox 状态与列表不一致。
+        const next = new Set()
+        recalc.forEach(cm => { if (cm && cm.id) next.add(cm.id) })
+        batchCheckedMachineIds.value = next
+        currentCheckedKeys = [...next]
+      } else {
+        const slotMatched = recalcSelectedMachinesBySlot(currentCheckedKeys, newGroups)
+        selectedCloudMachines.value = slotMatched
+        // 同步更新本地勾选状态为新云机 id，保持左侧 checkbox 选中
+        if (slotMatched.length > 0) {
+          const next = new Set()
+          slotMatched.forEach(cm => next.add(cm.id))
+          batchCheckedMachineIds.value = next
+          currentCheckedKeys = [...next]
+          emit('handleTreeCheck', {
+            selectedMachines: [...slotMatched],
+            selectedDevices: [],
+            treeSelectedKeys: [...next]
+          })
+        }
+      }
     }
   }
 }, { deep: true })
+
+// 按"设备IP + 坑位号"重算选中云机（用于切换备份后容器名变更的场景）
+// checkedKeys 中 id 形如 `${deviceIp}_${containerName}`，
+// containerName 形如 `8569541a74175bfe052739c4321ea31b_2_T0002`，
+// 整体 split('_') 后为 [deviceIp, hash, slot, name]，坑位号在第 2 段（索引 2）。
+const recalcSelectedMachinesBySlot = (checkedKeys, groups) => {
+  // 解析出 (deviceIp, slotNum) 对集合
+  const slotSet = new Set()
+  for (const key of checkedKeys) {
+    if (typeof key !== 'string' || !key.includes('_')) continue
+    const parts = key.split('_')
+    if (parts.length < 3) continue
+    const deviceIp = parts[0]
+    const slotNum = parseInt(parts[2], 10)
+    if (deviceIp && !isNaN(slotNum)) slotSet.add(`${deviceIp}@${slotNum}`)
+  }
+  if (slotSet.size === 0) return []
+
+  const selectedMachines = []
+  const machineIds = new Set()
+  for (const group of (groups || [])) {
+    for (const device of (group.devices || [])) {
+      if (!device.ip) continue
+      for (const cm of (device.cloudMachines || [])) {
+        if (!cm || !cm.id) continue
+        const slotNum = cm.indexNum
+        if (slotNum === undefined) continue
+        if (slotSet.has(`${device.ip}@${slotNum}`) && !machineIds.has(cm.id)) {
+          selectedMachines.push(cm)
+          machineIds.add(cm.id)
+        }
+      }
+    }
+  }
+  return selectedMachines
+}
 
 // 监听选中云机设备变化
 watch(() => props.selectedCloudDevice, (newDevice) => {

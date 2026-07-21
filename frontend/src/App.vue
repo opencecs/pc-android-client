@@ -2928,12 +2928,16 @@ const hasCacheExpiredSlot = (cached, slot) => {
 
 // 拉取并更新 slotStates，同时写缓存
 const fetchAndCacheSlotStates = (deviceId) => {
-  return GetUserRabbetList(deviceId).then(res => {
+  return GetUserRabbetList(deviceId).then(async res => {
     console.log('GetUserRabbetList result:', res)
     if (res.data && res.data.data && res.data.data.length > 0) {
       const converted = convertChild(res.data.data[0].child || {})
+      // 先读取上一次缓存（saveSlotCache 之前的快照），用于判断"本次新进入到期"
+      const previousSlotStates = loadSlotCache(deviceId) || {}
       saveSlotCache(deviceId, converted)
       slotStates.value = converted
+      // 已过期坑位里的运行中云机强制关机
+      await stopExpiredRunningContainers(deviceId, converted, previousSlotStates)
     } else {
       slotStates.value = {}
     }
@@ -2941,6 +2945,50 @@ const fetchAndCacheSlotStates = (deviceId) => {
     console.error('GetUserRabbetList error:', err)
     slotStates.value = {}
   })
+}
+
+// 将已过期坑位（state === 2）中的运行中容器强制关机
+// 仅处理 previousSlotStates 中非到期、newSlotStates 中到期的坑位，避免重复关机
+const stopExpiredRunningContainers = async (deviceId, newSlotStates, previousSlotStates) => {
+  try {
+    const device = devices.value.find(d => d.id === deviceId)
+    if (!device) return
+    const cached = deviceCloudMachinesCache.value.get(device.ip) || []
+    if (cached.length === 0) return
+    const targets = []
+    for (const [slotStr, info] of Object.entries(newSlotStates || {})) {
+      if (!info || info.state !== 2) continue
+      const slotNum = parseInt(slotStr, 10)
+      if (isNaN(slotNum)) continue
+      // 仅在本次"由非到期 → 到期"或"无记录 → 到期"时关机，避免重复调用
+      const prev = previousSlotStates ? previousSlotStates[slotStr] : undefined
+      const prevExpired = prev && prev.state === 2
+      if (prevExpired) continue
+      // 在缓存中查找该坑位运行中的容器
+      const running = cached.find(cm => cm.indexNum === slotNum && cm.status === 'running')
+      if (running) targets.push(running)
+    }
+    if (targets.length === 0) return
+    console.log(`[到期强制关机] 设备 ${device.ip} 发现 ${targets.length} 个到期坑位的运行中云机，开始关机`)
+    for (const cm of targets) {
+      try {
+        await authRetry(device, async (password) => {
+          await stopContainer(device, cm.name, password)
+        })
+        console.log(`[到期强制关机] 设备 ${device.ip} 坑位 ${cm.indexNum} 云机 ${cm.name} 已关机`)
+      } catch (e) {
+        console.error(`[到期强制关机] 设备 ${device.ip} 坑位 ${cm.indexNum} 云机 ${cm.name} 关机失败:`, e)
+      }
+    }
+    // 关机完成后刷新容器列表，同步本地 status
+    try {
+      await fetchAndroidContainers(device, true)
+    } catch (e) {
+      console.error('[到期强制关机] 刷新容器列表失败:', e)
+    }
+  } catch (e) {
+    console.error('[到期强制关机] 异常:', e)
+  }
 }
 
 // 加载坑位状态：优先使用缓存，若目标坑位已到期则重新请求
@@ -5556,6 +5604,20 @@ const handleSelectedCloudDeviceChange = (device) => {
 const handleBatchAction = async (action, selectedData = [], cardOrientation = null) => {
   // 对于"停止批量控制"操作，不需要检查是否选中云机
   const isStoppingControl = action === 'projection-control' && isBatchProjectionControlling.value
+
+  // 判断某云机/坑位是否已到期（slotStates[key].state === 2）
+  // 已到期的云机不允许执行 开机/重启/重置 操作（强制保持关机状态）
+  const isSlotExpired = (item) => {
+    if (item == null) return false
+    // 坑位模式：item 是坑位号（数字/字符串）
+    const slotNum = (typeof item === 'number' || typeof item === 'string')
+      ? item
+      : (item.indexNum != null ? item.indexNum : null)
+    if (slotNum == null) return false
+    const info = slotStates.value[slotNum]
+    return !!(info && info.state === 2)
+  }
+  const FORCED_SHUTDOWN_ACTIONS = new Set(['start', 'restart', 'reset'])
   
   if (!isStoppingControl) {
     // 根据云机管理模式检查是否有选中的云机
@@ -5578,6 +5640,20 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
   
   loading.value = true
   try {
+    // 已到期云机强制关机：过滤掉到期云机，并提示用户
+    if (FORCED_SHUTDOWN_ACTIONS.has(action) && Array.isArray(selectedData)) {
+      const expiredItems = selectedData.filter(isSlotExpired)
+      if (expiredItems.length > 0) {
+        const validItems = selectedData.filter(item => !isSlotExpired(item))
+        ElMessage.warning(`已到期的云机不能执行此操作（强制关机），已跳过 ${expiredItems.length} 个到期云机`)
+        if (validItems.length === 0) {
+          // 全部到期，直接结束
+          loading.value = false
+          return
+        }
+        selectedData = validItems
+      }
+    }
     switch (action) {
       case 'restart':
         // 实现批量重启功能
@@ -6145,12 +6221,43 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
             }
             
             // 3. 刷新容器列表（按设备分组刷新）
+            // 切换备份刚 stop/start 完，后端缓存可能仍是旧容器状态，
+            // 必须用 isUserInitiated=true 强制后端立即刷新，否则拿到的是旧数据。
             const deviceIpSet = new Set(switchBackupTargets.map(t => t.deviceIp))
             for (const ip of deviceIpSet) {
               const d = devices.value.find(dev => dev.ip === ip)
-              if (d) await fetchAndroidContainers(d)
+              if (d) await fetchAndroidContainers(d, true)
             }
-            
+
+            // 4. 切换备份后容器名变更，原选中的云机 id 全部失效。
+            //    按坑位重新匹配新容器并恢复选中状态，避免用户选中状态被取消。
+            if (cloudManageMode.value === 'batch' && successCount > 0) {
+              const slotKeys = new Set()
+              for (const target of switchBackupTargets) {
+                if (target.currentContainer && target.currentContainer.name) {
+                  slotKeys.add(`${target.deviceIp}@${target.slotNum}`)
+                }
+              }
+              const newSelected = []
+              const newIdSet = new Set()
+              for (const ip of deviceIpSet) {
+                const list = deviceCloudMachinesCache.value.get(ip) || []
+                for (const cm of list) {
+                  if (!cm || !cm.id) continue
+                  const slot = cm.indexNum
+                  if (slot === undefined) continue
+                  if (slotKeys.has(`${ip}@${slot}`) && !newIdSet.has(cm.id)) {
+                    newSelected.push(cm)
+                    newIdSet.add(cm.id)
+                  }
+                }
+              }
+              if (newSelected.length > 0) {
+                selectedCloudMachines.value = [...newSelected]
+                treeSelectedKeys.value = [...newIdSet]
+              }
+            }
+
             if (successCount > 0) {
               ElMessage.success(`批量切换备份成功：${successCount} 个`)
             }
@@ -9158,8 +9265,9 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
   }
   
   // 检查目标坑位的状态，决定Start参数的值
-  let shouldStart = true
-  
+  // 新创建的云机默认关机（保持关机状态），用户需要时再手动开机
+  let shouldStart = false
+
   if (options.start !== undefined) {
     shouldStart = options.start
     console.log(`[createV3CloudMachine] 使用options.start: ${shouldStart}`)
@@ -9168,14 +9276,14 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
     const deviceContainers = deviceCloudMachinesCache.value.get(device.ip) || []
     // 查找该坑位是否已有容器
     const existingMachine = deviceContainers.find(m => m.indexNum === slot)
-    
+
     if (existingMachine) {
         if (existingMachine.status === 'running') {
         shouldStart = false
         console.log(`坑位 ${slot} 已有运行中的云机，设置 Start=false`)
         } else {
-        shouldStart = true
-        console.log(`坑位 ${slot} 云机处于非运行状态，设置 Start=true`)
+        shouldStart = false
+        console.log(`坑位 ${slot} 云机处于非运行状态，保持 Start=false`)
         }
     }
   }
@@ -9558,29 +9666,14 @@ const handleCreateSubmit = async () => {
                     //      * 状态0或1：如果有开机云机则关机，否则开机
                     //      * 状态2或无实例：默认关机
                     let shouldStart = false
+                    // 新创建的云机一律保持关机状态，用户需要时手动开机
                     if (k === 0) {
-                       const isLoggedIn = !!token.value
-                       const bindStatus = deviceBindStatus.value.get(device.id) || 0
-                       const slotInfo = slotStates.value[slot]
-                       const state = slotInfo ? slotInfo.state : undefined
-                       
-                       // 未登录或已登录但未绑定/被绑定时：直接根据是否有运行中的云机判断
-                       if (!isLoggedIn || bindStatus === 0 || bindStatus === 2) {
-                           shouldStart = !hasRunning
-                       } else {
-                           // 已登录且已绑定(1)：根据坑位状态判断
-                           if (state === 0 || state === 1) {
-                               shouldStart = !hasRunning
-                           } else {
-                               // state === 2 (Expired) or undefined (No Instance)
-                               shouldStart = false
-                           }
-                       }
+                       shouldStart = false
                     }
 
                     // 计算当前实例的 IP
                     const currentMacVlanIp = calculateSingleIp(
-                        createForm.value.containerMacVlanIp || createForm.value.macVlanIp, 
+                        createForm.value.containerMacVlanIp || createForm.value.macVlanIp,
                         globalIpIndex
                     )
             
@@ -9736,24 +9829,9 @@ const handleCreateSubmit = async () => {
                      //      * 状态0或1：如果有开机云机则关机，否则开机
                      //      * 状态2或无实例：默认关机
                      let shouldStart = false
+                     // 新创建的云机一律保持关机状态，用户需要时手动开机
                      if (k === 0) {
-                        const isLoggedIn = !!token.value
-                        const bindStatus = deviceBindStatus.value.get(device.id) || 0
-                        const slotInfo = slotStates.value[slot]
-                        const state = slotInfo ? slotInfo.state : undefined
-                        
-                        // 未登录或已登录但未绑定/被绑定时：直接根据是否有运行中的云机判断
-                        if (!isLoggedIn || bindStatus === 0 || bindStatus === 2) {
-                            shouldStart = !hasRunning
-                        } else {
-                            // 已登录且已绑定(1)：根据坑位状态判断
-                            if (state === 0 || state === 1) {
-                                shouldStart = !hasRunning
-                            } else {
-                                // state === 2 (Expired) or undefined (No Instance)
-                                shouldStart = false
-                            }
-                        }
+                        shouldStart = false
                      }
 
                      // 获取本地镜像的 onlineUrl（从缓存读取）
@@ -12262,6 +12340,18 @@ onMounted(() => {
 
 // 处理容器操作
 const handleContainerAction = async (container, action) => {
+  // 已到期云机强制关机：禁止 restart/start/reset
+  if (['restart', 'start', 'reset'].includes(action) && container) {
+    const slotNum = container.indexNum
+    if (slotNum != null) {
+      const info = slotStates.value[slotNum]
+      if (info && info.state === 2) {
+        ElMessage.warning(t('common.expiredCannotStart'))
+        return
+      }
+    }
+  }
+
   // 确定目标设备
   let targetDevice = activeDevice.value
   if (cloudManageMode.value === 'batch' && container && container.deviceIp) {
@@ -12877,7 +12967,19 @@ const submitMoveInstance = async () => {
 const handleResetContainer = async () => {
   const container = getCurrentContextMenuContainer()
   console.log('handleResetContainer called with container:', container)
-  
+
+  // 已到期云机强制关机：禁止重置
+  if (container) {
+    const slotNum = container.indexNum
+    if (slotNum != null) {
+      const info = slotStates.value[slotNum]
+      if (info && info.state === 2) {
+        ElMessage.warning(t('common.expiredCannotStart'))
+        return
+      }
+    }
+  }
+
   // 确定目标设备
   let targetDevice = activeDevice.value
   if (cloudManageMode.value === 'batch' && container && container.deviceIp) {
@@ -19841,6 +19943,7 @@ const handleBindsTest = async () => {
           <ExtensionService
             :devices="extensionServiceDevices"
             :device-firmware-info="deviceFirmwareInfo"
+            :device-version-info="deviceVersionInfo"
             :devices-status-cache="devicesStatusCache"
             @upgrade-device="handleUpgradeDevice"
           />
@@ -22753,16 +22856,22 @@ const handleBindsTest = async () => {
           <el-table-column :label="$t('common.operation')" width="200" fixed="right" align="center">
             <template #default="scope">
               <el-space size="mini" wrap>
-                <el-button 
-                  size="mini" 
-                  :type="scope.row.status === 'running' ? 'warning' : 'success'" 
+                <el-button
+                  v-if="!(slotStates[scope.row.slotNum] && slotStates[scope.row.slotNum].state === 2) || scope.row.status === 'running'"
+                  size="mini"
+                  :type="scope.row.status === 'running' ? 'warning' : 'success'"
                   @click="() => {
                     // 检查是否为空坑位（没有云机）
                     if (!scope.row.name || scope.row.name === '') {
                       ElMessage.warning($t('common.slotNoMachine').replace('{slot}', scope.row.slotNum));
                       return;
                     }
-                    
+                    // 已到期云机不允许开机（强制关机）
+                    if (scope.row.status !== 'running' && slotStates[scope.row.slotNum] && slotStates[scope.row.slotNum].state === 2) {
+                      ElMessage.warning($t('common.expiredCannotStart'));
+                      return;
+                    }
+
                     const action = scope.row.status === 'running' ? $t('common.shutdown') : $t('common.startUp');
                     ElMessageBox.confirm($t('common.confirmAction').replace('{action}', action).replace('{name}', scope.row.name), $t('common.operationConfirm'), {
                       confirmButtonText: $t('common.confirm'),

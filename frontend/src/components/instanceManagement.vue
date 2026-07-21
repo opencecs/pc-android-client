@@ -1088,7 +1088,7 @@ const fetchInstances = async () => {
 
         // 批量搜索或IP搜索时获取全量数据，单关键词搜索传给API
         const page = 1
-        const size = 1000
+        const size = 9999999
 
         const result = await GetUserRabbetListWithToken(
             currentToken,

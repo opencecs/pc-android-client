@@ -166,6 +166,41 @@
             </div>
           </div>
 
+          <el-divider style="margin: 12px 0;" />
+
+          <!-- MYT Agent -->
+          <div class="service-item">
+            <div class="service-info">
+              <div class="service-name">{{ t('extension.mytAgent') }}</div>
+              <div class="service-desc">{{ t('extension.mytAgentDesc') }}</div>
+              <div v-if="!mytAgentSdkMet" class="service-warn" style="margin-top: 4px; color: #E6A23C; font-size: 12px;">
+                {{ t('extension.mytAgentSdkNotMet') }}
+              </div>
+            </div>
+            <div class="service-actions">
+              <el-button
+                type="primary"
+                size="small"
+                :disabled="!mytAgentSdkMet"
+                :loading="installingMytAgent"
+                @click="installMytAgent"
+              >
+                {{ t('extension.install') }}
+              </el-button>
+              <el-button
+                type="danger"
+                size="small"
+                :loading="uninstallingMytAgent"
+                @click="uninstallMytAgent"
+              >
+                {{ t('extension.uninstall') }}
+              </el-button>
+              <el-button type="info" size="small" @click="openUrl('https://doc.opencecs.com/workflow/myt-agent')">
+                {{ t('extension.usageGuide') }}
+              </el-button>
+            </div>
+          </div>
+
           <!-- 操作状态 -->
           <div v-if="operationStatus" style="margin-top: 12px;">
             <el-alert :type="operationStatus.type" :closable="false" show-icon>
@@ -174,12 +209,15 @@
             <div v-if="operationStatus.serverAddr" style="margin-top: 6px; font-size: 13px; color: #606266;">
               服务端地址: <span style="font-weight: 600;">{{ operationStatus.serverAddr }}:7500</span>
             </div>
-            <div v-if="operationStatus.webAddress || operationStatus.url" style="margin-top: 8px; display: flex; gap: 8px;">
+            <div v-if="operationStatus.webAddress || operationStatus.url || operationStatus.agentWebUrl" style="margin-top: 8px; display: flex; gap: 8px;">
               <el-button v-if="operationStatus.webAddress" type="primary" size="small" @click="openUrl(operationStatus.webAddress)">
                 Web管理界面
               </el-button>
               <el-button v-if="operationStatus.url && !operationStatus.webAddress" type="primary" size="small" @click="openUrl(operationStatus.url)">
                 {{ t('extension.openPanel') }}
+              </el-button>
+              <el-button v-if="operationStatus.agentWebUrl" type="primary" size="small" @click="openUrl(operationStatus.agentWebUrl)">
+                打开 Agent 面板
               </el-button>
               <el-button v-if="operationStatus.remoteAddress" type="success" size="small" @click="copyText(operationStatus.remoteAddress)">
                 复制SSH地址
@@ -249,6 +287,18 @@
           <p style="margin-top: 8px;cursor: pointer;color: #409EFF;" @click="openUrl('https://gofrp.org/zh-cn/docs/')"> 查看 frp 官方文档</p>
         </div>
       </div>
+
+      <div v-if="usageGuideType === 'mytAgent'" class="usage-guide">
+        <div style="line-height: 2; font-size: 14px;">
+          <p><strong>{{ t('extension.mytAgent') }}</strong></p>
+          <p style="color: #909399;">{{ t('extension.mytAgentGuideIntro') }}</p>
+          <el-divider />
+          <p><strong>{{ t('extension.mytAgentGuideReq') }}</strong></p>
+          <p><strong>1.</strong> {{ t('extension.mytAgentGuideStep1') }}</p>
+          <p><strong>2.</strong> {{ t('extension.mytAgentGuideStep2') }}</p>
+          <p><strong>3.</strong> {{ t('extension.mytAgentGuideStep3') }}</p>
+        </div>
+      </div>
     </el-dialog>
 
     <!-- 公网穿透安装配置对话框 -->
@@ -314,6 +364,10 @@ const props = defineProps({
     type: Map,
     default: () => new Map()
   },
+  deviceVersionInfo: {
+    type: Map,
+    default: () => new Map()
+  },
   devicesStatusCache: {
     type: Map,
     default: () => new Map()
@@ -340,12 +394,15 @@ const installingMytPanel = ref(false)
 const uninstallingMytPanel = ref(false)
 const installingTunnel = ref(false)
 const uninstallingTunnel = ref(false)
+const installingMytAgent = ref(false)
+const uninstallingMytAgent = ref(false)
 const operationStatus = ref(null)
 const usageDialogVisible = ref(false)
 const usageGuideType = ref('')
 const usageDialogTitle = computed(() => {
   if (usageGuideType.value === 'mytPanel') return t('extension.mytPanel') + ' - ' + t('extension.usageGuide')
   if (usageGuideType.value === 'tunnel') return t('extension.tunnel') + ' - ' + t('extension.usageGuide')
+  if (usageGuideType.value === 'mytAgent') return t('extension.mytAgent') + ' - ' + t('extension.usageGuide')
   return t('extension.usageGuide')
 })
 
@@ -401,6 +458,21 @@ const canInstallService = computed(() => {
   if (!selectedDevice.value) return false
   const check = getFirmwareCheck(selectedDevice.value)
   return check.supported && check.isLatest
+})
+
+// MYT Agent 要求 SDK 版本 >= 165
+// SDK 整数版本来自设备 /info 接口的 currentVersion 字段（deviceVersionInfo）
+const MYT_AGENT_MIN_SDK = 165
+const getSdkIntVersion = (device) => {
+  if (!device) return 0
+  const versionInfo = props.deviceVersionInfo.get(device.id)
+  const cur = versionInfo?.currentVersion
+  const num = Number(cur)
+  return isNaN(num) ? 0 : num
+}
+const mytAgentSdkMet = computed(() => {
+  if (!selectedDevice.value) return false
+  return getSdkIntVersion(selectedDevice.value) >= MYT_AGENT_MIN_SDK
 })
 
 // 魔云互联访问URL
@@ -587,6 +659,77 @@ const doInstallTunnel = async () => {
     ElMessage.error(t('extension.installFailed') + `: ${e.message || e}`)
   } finally {
     installingTunnel.value = false
+  }
+}
+
+// 安装 MYT Agent：调用设备端 http://ip:8000/mytVpn/start
+const installMytAgent = async () => {
+  if (!selectedDevice.value) return
+  if (!mytAgentSdkMet.value) {
+    ElMessage.warning(t('extension.mytAgentSdkNotMet'))
+    return
+  }
+  installingMytAgent.value = true
+  operationStatus.value = null
+  try {
+    const ip = extractPureIP(selectedDevice.value.ip)
+    const url = `http://${ip}:8000/mytVpn/start`
+    const resp = await fetch(url, { method: 'POST' })
+    const text = await resp.text().catch(() => '')
+    if (resp.ok) {
+      operationStatus.value = {
+        type: 'success',
+        message: t('extension.installSuccess'),
+        agentWebUrl: 'https://agent.opencecs.com/'
+      }
+      ElMessage.success(t('extension.installSuccess'))
+    } else {
+      const msg = text || `${t('extension.installFailed')} (HTTP ${resp.status})`
+      operationStatus.value = { type: 'error', message: msg }
+      ElMessage.error(msg)
+    }
+  } catch (e) {
+    console.error('[扩展服务] 安装 MYT Agent 失败:', e)
+    operationStatus.value = { type: 'error', message: t('extension.installFailed') + `: ${e.message || e}` }
+    ElMessage.error(t('extension.installFailed') + `: ${e.message || e}`)
+  } finally {
+    installingMytAgent.value = false
+  }
+}
+
+// 卸载 MYT Agent：调用设备端 http://ip:8000/mytVpn/uninstall
+const uninstallMytAgent = async () => {
+  if (!selectedDevice.value) return
+  try {
+    await ElMessageBox.confirm(t('extension.uninstallConfirm'), t('extension.uninstall'), {
+      confirmButtonText: t('extension.confirmUninstall'),
+      cancelButtonText: t('extension.cancelUninstall'),
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  uninstallingMytAgent.value = true
+  operationStatus.value = null
+  try {
+    const ip = extractPureIP(selectedDevice.value.ip)
+    const url = `http://${ip}:8000/mytVpn/uninstall`
+    const resp = await fetch(url, { method: 'POST' })
+    const text = await resp.text().catch(() => '')
+    if (resp.ok) {
+      operationStatus.value = { type: 'success', message: t('extension.uninstallSuccess') }
+      ElMessage.success(t('extension.uninstallSuccess'))
+    } else {
+      const msg = text || `${t('extension.uninstallFailed')} (HTTP ${resp.status})`
+      operationStatus.value = { type: 'error', message: msg }
+      ElMessage.error(msg)
+    }
+  } catch (e) {
+    console.error('[扩展服务] 卸载 MYT Agent 失败:', e)
+    operationStatus.value = { type: 'error', message: t('extension.uninstallFailed') + `: ${e.message || e}` }
+    ElMessage.error(t('extension.uninstallFailed') + `: ${e.message || e}`)
+  } finally {
+    uninstallingMytAgent.value = false
   }
 }
 
