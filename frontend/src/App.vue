@@ -6104,8 +6104,10 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
           
           // 对每个选中的容器，在 allInstances 中查找同坑位创建时间最新的其他备份
           const switchBackupTargets = []
+          // 没有备份可切换的容器（容器名未变，需保持原选中状态）
+          const noBackupTargets = []
           const noBackupSlots = []
-          
+
           for (const container of switchBackupContainersToOperate) {
             const slotNum = container.indexNum
             const deviceIp = cloudManageMode.value === 'slot' && selectedCloudDevice.value
@@ -6127,6 +6129,12 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
             
             if (slotAllContainers.length === 0) {
               noBackupSlots.push(slotNum)
+              // 没有备份的容器不参与切换，但其容器名不变，仍需保持原选中状态
+              noBackupTargets.push({
+                currentContainer: container,
+                deviceIp,
+                slotNum
+              })
               continue
             }
             
@@ -6233,13 +6241,92 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
             //    按坑位重新匹配新容器并恢复选中状态，避免用户选中状态被取消。
             if (cloudManageMode.value === 'batch' && successCount > 0) {
               const slotKeys = new Set()
+              // 切换成功的坑位（容器名已变，需用新容器匹配）
               for (const target of switchBackupTargets) {
                 if (target.currentContainer && target.currentContainer.name) {
                   slotKeys.add(`${target.deviceIp}@${target.slotNum}`)
                 }
               }
+              // 没有备份可切换的容器：容器名未变，原选中 id 仍然有效，必须保留
+              const noBackupIds = new Set()
+              for (const target of noBackupTargets) {
+                if (target.currentContainer && target.currentContainer.id) {
+                  noBackupIds.add(target.currentContainer.id)
+                }
+              }
+              // 仅统计切换成功的坑位（失败的坑位容器名未变）
+              const successSlotKeys = new Set()
+              for (let i = 0; i < switchBackupTargets.length; i++) {
+                if (batchSwitchBackupProgressList.value[i]?.status === 'success') {
+                  const t = switchBackupTargets[i]
+                  successSlotKeys.add(`${t.deviceIp}@${t.slotNum}`)
+                }
+              }
+
+              // 提取某设备缓存中匹配坑位的"最新容器名集合"
+              const getRunningNamesInCache = (ip) => {
+                const list = deviceCloudMachinesCache.value.get(ip) || []
+                const names = new Set()
+                for (const cm of list) {
+                  if (!cm || !cm.name) continue
+                  const slot = cm.indexNum
+                  if (slot === undefined) continue
+                  if (cm.status !== 'running') continue
+                  if (successSlotKeys.has(`${ip}@${slot}`)) names.add(cm.name)
+                }
+                return names
+              }
+
+              // 切换前的容器名集合
+              const prevRunningNamesByIp = new Map()
+              for (const target of switchBackupTargets) {
+                if (!successSlotKeys.has(`${target.deviceIp}@${target.slotNum}`)) continue
+                const set = prevRunningNamesByIp.get(target.deviceIp) || new Set()
+                set.add(target.currentContainer.name)
+                prevRunningNamesByIp.set(target.deviceIp, set)
+              }
+
+              // 轮询等待后端缓存刷新完成：新容器名出现 且 与旧容器名不同
+              const waitContainerRefresh = async (ip, maxRetry = 6, interval = 800) => {
+                const prevNames = prevRunningNamesByIp.get(ip) || new Set()
+                for (let k = 0; k < maxRetry; k++) {
+                  const curNames = getRunningNamesInCache(ip)
+                  // 全部成功坑位都出现新名字且与旧名不同
+                  let allFresh = true
+                  for (const slotKey of successSlotKeys) {
+                    if (!slotKey.startsWith(`${ip}@`)) continue
+                    const slotNum = parseInt(slotKey.split('@')[1], 10)
+                    const list = deviceCloudMachinesCache.value.get(ip) || []
+                    const matched = list.find(cm => cm.indexNum === slotNum && cm.status === 'running')
+                    if (!matched) { allFresh = false; break }
+                    if (prevNames.has(matched.name)) { allFresh = false; break }
+                  }
+                  if (allFresh && curNames.size > 0) return true
+                  await new Promise(r => setTimeout(r, interval))
+                  // 再次强制刷新后端缓存
+                  const d = devices.value.find(dev => dev.ip === ip)
+                  if (d) {
+                    try { await fetchAndroidContainers(d, true) } catch {}
+                  }
+                }
+                return false
+              }
+
+              // 并行等待所有涉及设备
+              await Promise.all([...deviceIpSet].map(ip => waitContainerRefresh(ip)))
+
+              // 用刷新后的缓存按坑位重新匹配新容器
               const newSelected = []
               const newIdSet = new Set()
+              // 先加入没有备份可切换的容器（容器名未变，原 id 仍有效）
+              for (const target of noBackupTargets) {
+                const cm = target.currentContainer
+                if (cm && cm.id && !newIdSet.has(cm.id)) {
+                  newSelected.push(cm)
+                  newIdSet.add(cm.id)
+                }
+              }
+              // 再按坑位匹配切换成功的新容器
               for (const ip of deviceIpSet) {
                 const list = deviceCloudMachinesCache.value.get(ip) || []
                 for (const cm of list) {
@@ -9265,8 +9352,8 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
   }
   
   // 检查目标坑位的状态，决定Start参数的值
-  // 新创建的云机默认关机（保持关机状态），用户需要时再手动开机
-  let shouldStart = false
+  // 默认开机；仅当目标坑位处于已过期状态（slotStates[slot].state === 2）时强制不开机
+  let shouldStart = true
 
   if (options.start !== undefined) {
     shouldStart = options.start
@@ -9278,13 +9365,20 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
     const existingMachine = deviceContainers.find(m => m.indexNum === slot)
 
     if (existingMachine) {
-        if (existingMachine.status === 'running') {
+      if (existingMachine.status === 'running') {
         shouldStart = false
         console.log(`坑位 ${slot} 已有运行中的云机，设置 Start=false`)
-        } else {
-        shouldStart = false
-        console.log(`坑位 ${slot} 云机处于非运行状态，保持 Start=false`)
-        }
+      } else {
+        shouldStart = true
+        console.log(`坑位 ${slot} 云机处于非运行状态，保持 Start=true`)
+      }
+    }
+
+    // 坑位已过期：无论已有容器状态如何，强制不开机
+    const slotInfo = slotStates.value[slot]
+    if (slotInfo && slotInfo.state === 2) {
+      shouldStart = false
+      console.log(`坑位 ${slot} 已过期，强制 Start=false`)
     }
   }
 
@@ -9666,9 +9760,11 @@ const handleCreateSubmit = async () => {
                     //      * 状态0或1：如果有开机云机则关机，否则开机
                     //      * 状态2或无实例：默认关机
                     let shouldStart = false
-                    // 新创建的云机一律保持关机状态，用户需要时手动开机
+                    // 仅第一个云机需要考虑开机；后续云机一律关机避免抢占同一坑位
                     if (k === 0) {
-                       shouldStart = false
+                       // 默认开机；坑位已过期（state === 2）时强制不开机
+                       const slotInfo = slotStates.value[slot]
+                       shouldStart = !(slotInfo && slotInfo.state === 2)
                     }
 
                     // 计算当前实例的 IP
@@ -9829,9 +9925,11 @@ const handleCreateSubmit = async () => {
                      //      * 状态0或1：如果有开机云机则关机，否则开机
                      //      * 状态2或无实例：默认关机
                      let shouldStart = false
-                     // 新创建的云机一律保持关机状态，用户需要时手动开机
+                     // 仅第一个云机需要考虑开机；后续云机一律关机避免抢占同一坑位
                      if (k === 0) {
-                        shouldStart = false
+                        // 默认开机；坑位已过期（state === 2）时强制不开机
+                        const slotInfo = slotStates.value[slot]
+                        shouldStart = !(slotInfo && slotInfo.state === 2)
                      }
 
                      // 获取本地镜像的 onlineUrl（从缓存读取）
@@ -10833,24 +10931,33 @@ const executeBatchUpdateImage = async () => {
 // 切换备份
 const switchBackup = async (backupId) => {
   console.log(`切换坑位 ${backupCurrentSlot.value} 到备份 ${backupId}`)
-  
+
   if (!activeDevice.value) {
     ElMessage.error('没有选中设备')
     backupListVisible.value = false
     return
   }
-  
+
+  // 记录切换前的运行容器名（用于刷新后判定"已切换为新容器"）
+  const deviceIp = activeDevice.value.ip
+  const slotNum = backupCurrentSlot.value
+  const prevRunningName = (() => {
+    const list = deviceCloudMachinesCache.value.get(deviceIp) || []
+    const cm = list.find(it => it.indexNum === slotNum && it.status === 'running')
+    return cm?.name || ''
+  })()
+
   // 记录当前正在切换的坑位
   switchingBackupSlot.value = backupCurrentSlot.value
   backupLoading.value = true
-  
+
   try {
     // 1. 找到当前坑位运行的容器并关机
-    const runningContainer = instances.value.find(inst => 
-      inst.indexNum === backupCurrentSlot.value && 
+    const runningContainer = instances.value.find(inst =>
+      inst.indexNum === backupCurrentSlot.value &&
       inst.status === 'running'
     );
-    
+
     if (runningContainer) {
       ElMessage.info(`正在关机当前运行的容器: ${runningContainer.name}`)
       await authRetry(activeDevice.value, async (password) => {
@@ -10859,13 +10966,13 @@ const switchBackup = async (backupId) => {
       // 等待1秒，确保容器完全关闭
       await new Promise(resolve => setTimeout(resolve, 1000))
     }
-    
+
     // 2. 找到要切换的备份容器并开机
     // 从allInstances中查找，因为instances只包含每个坑位的一个容器
-    const backupContainer = allInstances.value.find(inst => 
+    const backupContainer = allInstances.value.find(inst =>
       inst.name === backupId
     );
-    
+
     if (backupContainer) {
       ElMessage.info(`正在开机备份容器: ${backupContainer.name}`)
       await authRetry(activeDevice.value, async (password) => {
@@ -10877,20 +10984,42 @@ const switchBackup = async (backupId) => {
     } else {
       ElMessage.error('未找到指定的备份容器')
     }
-    
+
     // 3. 刷新容器列表，重试最多3次，确保获取最新状态
     for (let i = 0; i < 3; i++) {
-      await fetchAndroidContainers(activeDevice.value)
-      // 检查是否获取到了正确的状态
-      const updatedContainer = instances.value.find(inst => 
-        inst.indexNum === backupCurrentSlot.value && 
-        (inst.status === 'running' || inst.status === 'created')
+      await fetchAndroidContainers(activeDevice.value, true)
+      // 检查是否获取到了"与旧容器名不同"的运行中容器
+      const updatedContainer = instances.value.find(inst =>
+        inst.indexNum === backupCurrentSlot.value &&
+        (inst.status === 'running' || inst.status === 'created') &&
+        inst.name !== prevRunningName
       );
       if (updatedContainer) {
         break;
       }
       // 等待1秒后重试
       await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+
+    // 4. 批量模式下：切换备份后容器名变更，原选中的云机 id 失效，
+    //    按坑位重新匹配新容器并恢复选中状态。
+    if (cloudManageMode.value === 'batch') {
+      const newCm = (() => {
+        const list = deviceCloudMachinesCache.value.get(deviceIp) || []
+        return list.find(it => it.indexNum === slotNum && it.status === 'running' && it.name !== prevRunningName)
+      })()
+      if (newCm && newCm.id) {
+        const next = new Set()
+        for (const cm of selectedCloudMachines.value) {
+          // 保留同设备其它坑位的选中，同坑位旧云机会被新云机替换
+          if (cm.deviceIp === deviceIp && cm.indexNum === slotNum) continue
+          next.add(cm)
+        }
+        next.add(newCm)
+        const newSelected = [...next]
+        selectedCloudMachines.value = newSelected
+        treeSelectedKeys.value = newSelected.map(cm => cm.id)
+      }
     }
   } catch (error) {
     console.error('切换备份失败:', error)

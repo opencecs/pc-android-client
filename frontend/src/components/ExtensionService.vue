@@ -107,10 +107,23 @@
         </el-alert>
 
         <!-- 服务列表 -->
-        <el-card v-if="canInstallService" shadow="hover">
+        <el-card shadow="hover">
           <template #header>
             <span style="font-weight: bold;">{{ t('extension.serviceList') }}</span>
           </template>
+
+          <!-- 固件不满足时提示 -->
+          <el-alert
+            v-if="!canInstallService"
+            type="warning"
+            :closable="false"
+            show-icon
+            style="margin-bottom: 12px;"
+          >
+            <template #title>
+              <span>{{ t('extension.firmwareNotMetAlert') }}</span>
+            </template>
+          </el-alert>
 
           <!-- 魔云互联 -->
           <div class="service-item">
@@ -122,6 +135,7 @@
               <el-button
                 type="primary"
                 size="small"
+                :disabled="!canInstallService"
                 :loading="installingMytPanel"
                 @click="installMytPanel"
               >
@@ -130,6 +144,7 @@
               <el-button
                 type="danger"
                 size="small"
+                :disabled="!canInstallService"
                 :loading="uninstallingMytPanel"
                 @click="uninstallMytPanel"
               >
@@ -154,10 +169,10 @@
               <div class="service-desc">{{ t('extension.tunnelDesc') }}</div>
             </div>
             <div class="service-actions">
-              <el-button type="primary" size="small" :loading="installingTunnel" @click="installTunnel">
+              <el-button type="primary" size="small" :disabled="!canInstallService" :loading="installingTunnel" @click="installTunnel">
                 {{ t('extension.install') }}
               </el-button>
-              <el-button type="danger" size="small" :loading="uninstallingTunnel" @click="uninstallTunnelAll">
+              <el-button type="danger" size="small" :disabled="!canInstallService" :loading="uninstallingTunnel" @click="uninstallTunnelAll">
                 卸载
               </el-button>
               <el-button type="info" size="small" @click="showUsageGuide('tunnel')">
@@ -173,6 +188,16 @@
             <div class="service-info">
               <div class="service-name">{{ t('extension.mytAgent') }}</div>
               <div class="service-desc">{{ t('extension.mytAgentDesc') }}</div>
+              <div style="margin-top: 4px; font-size: 12px;">
+                <span style="color: #909399;">{{ t('extension.mytAgentSdkRequired') }}: </span>
+                <span :style="{ color: mytAgentSdkMet ? '#67C23A' : '#E6A23C', fontWeight: 'bold' }">
+                  ≥ 177
+                </span>
+                <span style="color: #909399; margin-left: 8px;">{{ t('extension.mytAgentSdkCurrent') }}: </span>
+                <span style="color: #606266; font-weight: bold;">
+                  {{ getSdkIntVersion(selectedDevice) || '-' }}
+                </span>
+              </div>
               <div v-if="!mytAgentSdkMet" class="service-warn" style="margin-top: 4px; color: #E6A23C; font-size: 12px;">
                 {{ t('extension.mytAgentSdkNotMet') }}
               </div>
@@ -341,6 +366,7 @@
 import { ref, computed, getCurrentInstance } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { InstallMytPanel, UninstallMytPanel, InstallTunnel, UninstallTunnel, InstallTunnelServer, UninstallTunnelServer, OpenInBrowser } from '../../bindings/edgeclient/app'
+import { getDevicePassword, saveDevicePassword } from '../services/api.js'
 
 const { proxy } = getCurrentInstance()
 
@@ -462,7 +488,7 @@ const canInstallService = computed(() => {
 
 // MYT Agent 要求 SDK 版本 >= 165
 // SDK 整数版本来自设备 /info 接口的 currentVersion 字段（deviceVersionInfo）
-const MYT_AGENT_MIN_SDK = 165
+const MYT_AGENT_MIN_SDK = 177
 const getSdkIntVersion = (device) => {
   if (!device) return 0
   const versionInfo = props.deviceVersionInfo.get(device.id)
@@ -662,6 +688,41 @@ const doInstallTunnel = async () => {
   }
 }
 
+// 构造设备 API 请求头（含 Basic Auth 鉴权）
+// 复用全局设备密码表（与添加设备时输入的密码同一份存储）
+const buildDeviceAuthHeaders = (device) => {
+  if (!device) return {}
+  const savedPassword = getDevicePassword(device.ip)
+  if (!savedPassword) return {}
+  const auth = btoa(`admin:${savedPassword}`)
+  return { 'Authorization': `Basic ${auth}` }
+}
+
+// 请求设备密码（401 时弹窗让用户输入，成功后存入全局设备密码表）
+const promptDevicePassword = async (device) => {
+  if (!device) return null
+  try {
+    const { value: password } = await ElMessageBox.prompt(
+      `请输入设备 ${device.ip} 的密码`,
+      t('extension.deviceAuthRequired'),
+      {
+        confirmButtonText: t('extension.confirm'),
+        cancelButtonText: t('extension.cancel'),
+        inputType: 'password',
+        inputPlaceholder: t('extension.devicePasswordPlaceholder'),
+        closeOnClickModal: false,
+      }
+    )
+    if (password) {
+      await saveDevicePassword(device.ip, password)
+      return password
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
 // 安装 MYT Agent：调用设备端 http://ip:8000/mytVpn/start
 const installMytAgent = async () => {
   if (!selectedDevice.value) return
@@ -674,7 +735,22 @@ const installMytAgent = async () => {
   try {
     const ip = extractPureIP(selectedDevice.value.ip)
     const url = `http://${ip}:8000/mytVpn/start`
-    const resp = await fetch(url, { method: 'POST' })
+    const doRequest = async (headers) => {
+      return await fetch(url, { method: 'POST', headers })
+    }
+    let headers = buildDeviceAuthHeaders(selectedDevice.value)
+    let resp = await doRequest(headers)
+    // 401 → 弹窗让用户输入密码后重试一次
+    if (resp.status === 401) {
+      const password = await promptDevicePassword(selectedDevice.value)
+      if (!password) {
+        operationStatus.value = { type: 'error', message: t('extension.installFailed') }
+        ElMessage.error(t('extension.installFailed'))
+        return
+      }
+      headers = buildDeviceAuthHeaders(selectedDevice.value)
+      resp = await doRequest(headers)
+    }
     const text = await resp.text().catch(() => '')
     if (resp.ok) {
       operationStatus.value = {
@@ -714,7 +790,21 @@ const uninstallMytAgent = async () => {
   try {
     const ip = extractPureIP(selectedDevice.value.ip)
     const url = `http://${ip}:8000/mytVpn/uninstall`
-    const resp = await fetch(url, { method: 'POST' })
+    const doRequest = async (headers) => {
+      return await fetch(url, { method: 'POST', headers })
+    }
+    let headers = buildDeviceAuthHeaders(selectedDevice.value)
+    let resp = await doRequest(headers)
+    if (resp.status === 401) {
+      const password = await promptDevicePassword(selectedDevice.value)
+      if (!password) {
+        operationStatus.value = { type: 'error', message: t('extension.uninstallFailed') }
+        ElMessage.error(t('extension.uninstallFailed'))
+        return
+      }
+      headers = buildDeviceAuthHeaders(selectedDevice.value)
+      resp = await doRequest(headers)
+    }
     const text = await resp.text().catch(() => '')
     if (resp.ok) {
       operationStatus.value = { type: 'success', message: t('extension.uninstallSuccess') }
