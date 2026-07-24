@@ -2224,14 +2224,32 @@ const filteredImageListForUpdate = computed(() => {
 })
 
 // 根据选择的安卓版本过滤在线镜像列表（用于模拟器创建）
+// 在线镜像分类中排除特质版镜像（特质版仅在"特质镜像"分类显示）
 const androidVersionFilteredImageList = computed(() => {
   const images = filteredImageList.value
   if (!images || images.length === 0) return []
   const ver = createForm.value.androidVersion
-  if (!ver) return images
   const osVer = `and${ver}`
-  return images.filter(img => img.os_ver === osVer)
+  return images.filter(img => img.os_ver === osVer && img.sys_ver_des !== '特质版')
 })
+
+// 特质镜像暂时屏蔽
+/*
+const specialImageList = computed(() => {
+  const images = filteredImageList.value
+  if (!images || images.length === 0) return []
+  const ver = createForm.value.androidVersion
+  const osVer = `and${ver}`
+  return images.filter(img => img.os_ver === osVer && img.sys_ver_des === '特质版')
+})
+
+// 当前镜像分类对应的镜像列表
+const currentCategoryImageList = computed(() => {
+  return createForm.value.imageCategory === 'special'
+    ? specialImageList.value
+    : androidVersionFilteredImageList.value
+})
+*/
 
 // 根据选择的安卓版本过滤在线机型列表
 const androidVersionFilteredPhoneModels = computed(() => {
@@ -4339,14 +4357,17 @@ const filterImageList = (deviceType) => {
   filteredImageList.value = imageList.value.filter(image => {
 
   if(image.sys_ver != 5) {
-    return false
-   } 
+    // 特质版镜像 sys_ver=4 也需要保留，用于特质镜像分类
+    if (!(image.sys_ver == 4 && image.sys_ver_des === '特质版')) {
+      return false
+    }
+   }
   //  console.log('正在检查镜像:', image)
     // 检查ttype字段
     if (image.ttype && compatibleTypes.includes(image.ttype)) {
       return true
     }
-    
+
     // 检查ttype2字段（数组）
     if (Array.isArray(image.ttype2)) {
       for (const t of image.ttype2) {
@@ -4355,7 +4376,7 @@ const filterImageList = (deviceType) => {
         }
       }
     }
-    
+
     // 没有匹配的ttype或ttype2字段，过滤掉
     return false
   })
@@ -4373,7 +4394,7 @@ const filterImageList = (deviceType) => {
   // 默认选中留给 watcher 处理（会经过安卓版本过滤）
 }
 
-// 监听 filteredImageList 变化，自动选中第一条（按安卓版本过滤后）
+// 监听 filteredImageList 变化，自动选中第一条（按镜像分类过滤后）
 watch(filteredImageList, () => {
   if (createForm.value.imageCategory === 'online' && createForm.value.createType !== 'container') {
     const filtered = androidVersionFilteredImageList.value
@@ -4384,6 +4405,16 @@ watch(filteredImageList, () => {
     }
   }
 }, { immediate: true })
+
+// 特质镜像分类切换逻辑暂时屏蔽
+/*
+watch(() => createForm.value.imageCategory, (newCat) => {
+  if (newCat === 'online' || newCat === 'special') {
+    const filtered = currentCategoryImageList.value
+    createForm.value.imageSelect = (filtered && filtered.length > 0) ? filtered[0].url : ''
+  }
+})
+*/
 
 // 按型号分类在线镜像
 const categorizeOnlineImages = async () => {
@@ -20873,6 +20904,9 @@ const handleBindsTest = async () => {
             <el-form-item :label="$t('common.imageCategory')">
               <el-radio-group v-model="createForm.imageCategory">
                 <el-radio label="online">{{ $t('common.onlineImage') }}</el-radio>
+                <!-- 特质镜像暂时屏蔽
+                <el-radio label="special">{{ $t('common.specialImage') }}</el-radio>
+                -->
                 <el-radio label="local">{{ $t('common.localImage') }}</el-radio>
               </el-radio-group>
             </el-form-item>
@@ -20882,32 +20916,32 @@ const handleBindsTest = async () => {
               <el-select v-model="createForm.imageSelect" @change="handleImageSelectChange" :loading="fetchingImages" style="width: 100%;" filterable>
                 <el-option :label="$t('common.customImage')" value="custom"></el-option>
                 <!-- 使用按安卓版本过滤的镜像列表 -->
-                <el-option 
-                  v-for="image in androidVersionFilteredImageList" 
-                  :key="image.url" 
-                  :label="image.name" 
+                <el-option
+                  v-for="image in androidVersionFilteredImageList"
+                  :key="image.url"
+                  :label="image.name"
                   :value="image.url"
                 ></el-option>
               </el-select>
             </el-form-item>
-            
+
             <!-- 本地镜像选择（已按设备类型过滤：P系列设备只显示P系列镜像，非P系列只显示非P系列镜像） -->
             <el-form-item v-if="createForm.imageCategory === 'local'" :label="$t('common.imageSelection')">
               <el-select v-model="createForm.localImageUrl" :placeholder="$t('common.pleaseSelectLocalImage')" style="width: 100%;" filterable>
-                <el-option 
-                  v-for="image in filteredLocalCachedImages" 
-                  :key="image.url" 
-                  :label="image.name" 
+                <el-option
+                  v-for="image in filteredLocalCachedImages"
+                  :key="image.url"
+                  :label="image.name"
                   :value="image.url"
                 ></el-option>
               </el-select>
             </el-form-item>
-            
+
             <!-- 自定义镜像地址 -->
             <el-form-item v-if="createForm.imageCategory === 'online' && createForm.imageSelect === 'custom'" :label="$t('common.customImageAddress')">
               <el-input v-model="createForm.customImageUrl" :placeholder="$t('common.enterImageAddress')"></el-input>
             </el-form-item>
-            
+
             <!-- 在线镜像缓存到本地创建选项 -->
             <el-form-item v-if="createForm.imageCategory === 'online'" :label="$t('common.creationMethod')">
               <div style="display: flex; align-items: center;">

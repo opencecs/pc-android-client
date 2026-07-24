@@ -27,6 +27,7 @@
                             <div class="device-list">
                                 <div v-for="device in deviceList" :key="device.ip"
                                     :class="['device-item', { active: selectedDeviceIP === device.ip }]"
+                                    :title="device.ip"
                                     @click="selectDevice(device)">
                                     <span class="device-ip">{{ device.ip }}</span>
                                 </div>
@@ -161,6 +162,7 @@
                             <div class="device-list">
                                 <div v-for="device in deviceList" :key="device.ip"
                                     :class="['device-item', { active: selectedDeviceIP === device.ip }]"
+                                    :title="device.ip"
                                     @click="selectDevice(device)">
                                     <span class="device-ip">{{ device.ip }}</span>
                                 </div>
@@ -229,6 +231,7 @@
                             <div class="device-list">
                                 <div v-for="device in deviceList" :key="device.ip"
                                     :class="['device-item', { active: selectedDeviceIP === device.ip }]"
+                                    :title="device.ip"
                                     @click="selectDevice(device)">
                                     <span class="device-ip">{{ device.ip }}</span>
                                 </div>
@@ -481,6 +484,7 @@
                             <div class="device-list">
                                 <div v-for="device in deviceList" :key="device.ip"
                                     :class="['device-item', { active: selectedDeviceIP === device.ip }]"
+                                    :title="device.ip"
                                     @click="selectDevice(device)">
                                     <span class="device-ip">{{ device.ip }}</span>
                                 </div>
@@ -658,6 +662,7 @@
                             <div class="device-list">
                                 <div v-for="device in deviceList" :key="device.ip"
                                     :class="['device-item', { active: selectedDeviceIP === device.ip }]"
+                                    :title="device.ip"
                                     @click="selectDevice(device)">
                                     <span class="device-ip">{{ device.ip }}</span>
                                 </div>
@@ -892,6 +897,7 @@
                             <div class="device-list">
                                 <div v-for="device in deviceList" :key="device.ip"
                                     :class="['device-item', { active: selectedDeviceIP === device.ip }]"
+                                    :title="device.ip"
                                     @click="selectDevice(device)">
                                     <span class="device-ip">{{ device.ip }}</span>
                                 </div>
@@ -944,6 +950,7 @@
                             <div class="device-list">
                                 <div v-for="device in deviceList" :key="device.ip"
                                     :class="['device-item', { active: selectedDeviceIP === device.ip }]"
+                                    :title="device.ip"
                                     @click="selectDevice(device)">
                                     <span class="device-ip">{{ device.ip }}</span>
                                 </div>
@@ -5675,13 +5682,16 @@ defineExpose({
 }
 
 .left-panel {
-    width: 180px;
+    width: fit-content;
+    min-width: 180px;
+    max-width: 480px;
     border: 1px solid #ebeef5;
     border-radius: 4px;
     display: flex;
     flex-direction: column;
     background: #fafafa;
     flex-shrink: 0;
+    overflow: visible;
 }
 
 .panel-header {
@@ -5698,6 +5708,7 @@ defineExpose({
 .device-list {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 8px;
 }
 
@@ -5710,6 +5721,9 @@ defineExpose({
     align-items: center;
     margin-bottom: 4px;
     transition: all 0.2s;
+    width: fit-content;
+    min-width: 100%;
+    white-space: nowrap;
 }
 
 .device-item:hover {
@@ -5724,8 +5738,6 @@ defineExpose({
 .device-ip {
     font-size: 14px;
     color: #606266;
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
