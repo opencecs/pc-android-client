@@ -38,21 +38,25 @@ func main() {
 
 	flag.Parse()
 
-	// ========== 日志输出到文件（dev/debug 模式）==========
-	// Windows 下 wails3 dev 没有控制台，log 写到 logs/app.log 方便实时查看
-	if err := os.MkdirAll("logs", 0755); err == nil {
-		logFilePath := filepath.Join("logs", "app.log")
-		logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-		if err == nil {
-			multi := io.MultiWriter(os.Stderr, logFile)
-			log.SetOutput(multi)
-			log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
-			log.Printf("[Main] 日志同步写入: %s", logFilePath)
-		}
-	}
-
 	envDebug := os.Getenv("APP_DEBUG")
 	enableDebug := *debugMode || strings.ToLower(envDebug) == "true" || envDebug == "1" || IsDevBuild()
+
+	// ========== 日志输出到文件（仅 dev/debug 模式）==========
+	// 生产构建（IsDevBuild()=false 且未开 debug）不写日志文件，
+	// 避免用户长时间运行后 logs/app.log 无限增长。
+	// debug 模式下日志写到 logs/app.log，每次启动 O_TRUNC 清空。
+	if enableDebug {
+		if err := os.MkdirAll("logs", 0755); err == nil {
+			logFilePath := filepath.Join("logs", "app.log")
+			logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+			if err == nil {
+				multi := io.MultiWriter(os.Stderr, logFile)
+				log.SetOutput(multi)
+				log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+				log.Printf("[Main] 日志同步写入: %s", logFilePath)
+			}
+		}
+	}
 
 	if enableDebug {
 		log.Printf("[Main] Debug mode enabled")
