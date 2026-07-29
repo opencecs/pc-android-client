@@ -393,7 +393,7 @@ getVersionInfo();
   color: #cbd5e1;
 }
 :deep(.dark .update-menu-button:hover) {
-  background: #1e293b;
+  background: #000000;
   color: #60a5fa;
 }
 
@@ -409,20 +409,20 @@ getVersionInfo();
 
 :deep(.dark .update-dropdown-menu),
 :deep(.dark .el-dropdown-menu) {
-  background: #172033;
+  background: #000000;
   border-color: #334155;
   color: #e5e7eb;
 }
 
 :deep(.dark .update-dropdown-menu .el-dropdown-menu__item),
 :deep(.dark .el-dropdown-menu .el-dropdown-menu__item) {
-  background: #172033;
+  background: #000000;
   color: #e5e7eb;
 }
 
 :deep(.dark .update-dropdown-menu .el-dropdown-menu__item:hover),
 :deep(.dark .el-dropdown-menu .el-dropdown-menu__item:hover) {
-  background: #1e293b;
+  background: #000000;
   color: #bfdbfe;
 }
 

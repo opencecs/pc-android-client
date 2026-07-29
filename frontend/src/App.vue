@@ -255,13 +255,13 @@ const applyThemeMode = () => {
 const fixDarkBackgrounds = () => {
   if (!isDarkTheme.value) return
   const lightBgs = {
-    'rgb(255, 255, 255)': 'rgb(23, 32, 51)',
-    'rgba(255, 255, 255, 1)': 'rgb(23, 32, 51)',
-    'rgb(245, 247, 250)': 'rgb(30, 41, 59)',
-    'rgb(240, 242, 245)': 'rgb(30, 41, 59)',
-    'rgb(250, 250, 250)': 'rgb(30, 41, 59)',
-    'rgb(245, 245, 245)': 'rgb(30, 41, 59)',
-    'rgb(255, 247, 230)': 'rgb(42, 36, 20)',
+    'rgb(255, 255, 255)': 'rgb(0, 0, 0)',
+    'rgba(255, 255, 255, 1)': 'rgb(0, 0, 0)',
+    'rgb(245, 247, 250)': 'rgb(0, 0, 0)',
+    'rgb(240, 242, 245)': 'rgb(0, 0, 0)',
+    'rgb(250, 250, 250)': 'rgb(0, 0, 0)',
+    'rgb(245, 245, 245)': 'rgb(0, 0, 0)',
+    'rgb(255, 247, 230)': 'rgb(0, 0, 0)',
   }
   const all = document.querySelectorAll('*')
   for (const el of all) {
@@ -9794,8 +9794,10 @@ const handleCreateSubmit = async () => {
                     // 仅第一个云机需要考虑开机；后续云机一律关机避免抢占同一坑位
                     if (k === 0) {
                        // 默认开机；坑位已过期（state === 2）时强制不开机
-                       const slotInfo = slotStates.value[slot]
-                       shouldStart = !(slotInfo && slotInfo.state === 2)
+                        const slotInfo = slotStates.value[slot]
+                        const isExpired = slotInfo && slotInfo.state === 2
+                        // 坑位已有运行中的云机或已过期时，start 传 false
+                        shouldStart = !isExpired && !hasRunning
                     }
 
                     // 计算当前实例的 IP
@@ -9958,9 +9960,11 @@ const handleCreateSubmit = async () => {
                      let shouldStart = false
                      // 仅第一个云机需要考虑开机；后续云机一律关机避免抢占同一坑位
                      if (k === 0) {
-                        // 默认开机；坑位已过期（state === 2）时强制不开机
-                        const slotInfo = slotStates.value[slot]
-                        shouldStart = !(slotInfo && slotInfo.state === 2)
+                         // 默认开机；坑位已过期（state === 2）时强制不开机
+                         const slotInfo = slotStates.value[slot]
+                         const isExpired = slotInfo && slotInfo.state === 2
+                         // 坑位已有运行中的云机或已过期时，start 传 false
+                         shouldStart = !isExpired && !hasRunning
                      }
 
                      // 获取本地镜像的 onlineUrl（从缓存读取）
@@ -10142,7 +10146,8 @@ const handleCreateSubmit = async () => {
         maxSlots = 24
       }
       
-      if (usedSlots.size >= maxSlots) {
+      // 如果目标坑位已有运行中的云机，创建会覆盖它，不应受上限拦截
+      if (!usedSlots.has(currentSlot.value) && usedSlots.size >= maxSlots) {
         ElMessage.error(`${createDevice.value.name}型号最大只能运行${maxSlots}个云机`)
         createLoading.value = false
         return
@@ -10175,8 +10180,12 @@ const handleCreateSubmit = async () => {
         targetModelStatic = backupPhoneModels.value[randomIndex].name
       }
 
+      // 目标坑位已有运行中的云机时，start 传 false（覆盖创建）
+      const isSlotRunning = usedSlots.has(currentSlot.value)
+
       const target = {
         slot: currentSlot.value,
+        start: !isSlotRunning,
         modelName: modelName,
         modelType: createForm.value.modelType,
         localModel: targetLocalModel,

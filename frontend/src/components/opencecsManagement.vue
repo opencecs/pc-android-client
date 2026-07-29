@@ -1327,7 +1327,7 @@ defineExpose({ init, fetchInstances, ensureContainerPortMappings, getInstanceByD
   width: 100%;
   height: 100%;
   min-height: 400px;
-  background: #0d0d1a;
+  background: #000000;
   color: #e0e0e0;
   font-size: 14px;
   box-sizing: border-box;
@@ -1340,7 +1340,7 @@ defineExpose({ init, fetchInstances, ensureContainerPortMappings, getInstanceByD
   align-items: center;
   justify-content: space-between;
   padding: 14px 24px;
-  background: #13132a;
+  background: #000000;
   border-bottom: 1px solid #252545;
 }
 .top-bar-title {
@@ -1385,7 +1385,7 @@ defineExpose({ init, fetchInstances, ensureContainerPortMappings, getInstanceByD
   align-items: center;
   gap: 24px;
   margin-bottom: 16px;
-  background: #13132a;
+  background: #000000;
   border: 1px solid #252545;
   border-radius: 10px;
   padding: 12px 20px;
@@ -1432,7 +1432,7 @@ defineExpose({ init, fetchInstances, ensureContainerPortMappings, getInstanceByD
   position: sticky;
   top: 0;
   z-index: 10;
-  background: #13132a;
+  background: #000000;
   color: #8899bb;
   font-size: 12px;
   font-weight: 600;
@@ -1450,7 +1450,7 @@ defineExpose({ init, fetchInstances, ensureContainerPortMappings, getInstanceByD
   text-align: center;
 }
 .instance-table tr:last-child td { border-bottom: none; }
-.instance-table tr:hover td { background: #13132a; }
+.instance-table tr:hover td { background: #000000; }
 .monospace { font-family: monospace; font-size: 12px; color: #aab; }
 .expire-soon { color: #e6a23c !important; font-weight: 600; }
 
@@ -1512,7 +1512,7 @@ defineExpose({ init, fetchInstances, ensureContainerPortMappings, getInstanceByD
 .dialog-box {
   position: relative;
   width: 460px;
-  background: #1a1a2e;
+  background: #000000;
   border-radius: 16px;
   padding: 40px 40px 32px;
   box-shadow: 0 20px 60px rgba(0,0,0,0.6);
@@ -1571,7 +1571,7 @@ defineExpose({ init, fetchInstances, ensureContainerPortMappings, getInstanceByD
 /* ===== 端口映射新弹窗 ===== */
 .port-add-dialog {
   width: 420px;
-  background: #1c1c30;
+  background: #000000;
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0,0,0,0.7);
@@ -1759,7 +1759,7 @@ defineExpose({ init, fetchInstances, ensureContainerPortMappings, getInstanceByD
 .pad-overview {
   margin: 0 20px 0;
   padding: 14px 16px;
-  background: #14142a;
+  background: #000000;
   border: 1px solid #252545;
   border-radius: 8px;
   margin-top: 14px;
