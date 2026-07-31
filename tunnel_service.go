@@ -19,7 +19,7 @@ import (
 
 // InstallTunnel 安装公网穿透(frpc)到指定设备
 // 流程：解压frpc → 生成配置（含SSH代理）→ SSH上传 → 注册系统服务 → 启动
-func (a *App) InstallTunnel(deviceIP string, serverAddr string, serverPort int, token string) map[string]interface{} {
+func (a *App) InstallTunnel(deviceIP string, serverAddr string, serverPort int, token string, webUser string, webPassword string) map[string]interface{} {
 	log.Printf("[公网穿透] 开始安装到设备: %s, 服务器: %s:%d", deviceIP, serverAddr, serverPort)
 
 	ip := extractPureIP(deviceIP)
@@ -43,7 +43,7 @@ func (a *App) InstallTunnel(deviceIP string, serverAddr string, serverPort int, 
 	}
 
 	// 2. 生成 frpc.toml 配置（含SSH代理规则，暴露设备22端口）
-	configContent := generateFrpcConfig(serverAddr, serverPort, token, ip)
+	configContent := generateFrpcConfig(serverAddr, serverPort, token, ip, webUser, webPassword)
 	configPath := filepath.Join(localDir, "frpc.toml")
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		return map[string]interface{}{"success": false, "message": fmt.Sprintf("生成配置失败: %v", err)}
@@ -124,6 +124,10 @@ func (a *App) InstallTunnel(deviceIP string, serverAddr string, serverPort int, 
 	// 查询frps获取实际分配的远程端口
 	remoteAddress := ""
 	webAddress := ""
+	// 代理名称包含设备IP后缀，用于在frps中精确匹配本设备的代理
+	ipSuffix := strings.ReplaceAll(ip, ".", "-")
+	sshProxyName := fmt.Sprintf("ssh-%s", ipSuffix)
+	webProxyName := fmt.Sprintf("frpc-web-%s", ipSuffix)
 	for i := 0; i < 5; i++ {
 		time.Sleep(2 * time.Second)
 		dashboardURL := fmt.Sprintf("http://%s:7500/api/proxy/tcp", serverAddr)
@@ -145,10 +149,10 @@ func (a *App) InstallTunnel(deviceIP string, serverAddr string, serverPort int, 
 		}
 		if json.Unmarshal(body, &result) == nil {
 			for _, p := range result.Proxies {
-				if p.Name == "ssh" {
+				if p.Name == sshProxyName {
 					remoteAddress = fmt.Sprintf("%s:%d", serverAddr, p.Conf.RemotePort)
 				}
-				if p.Name == "frpc-web" {
+				if p.Name == webProxyName {
 					webAddress = fmt.Sprintf("http://%s:%d", serverAddr, p.Conf.RemotePort)
 				}
 			}
@@ -176,7 +180,7 @@ func (a *App) InstallTunnel(deviceIP string, serverAddr string, serverPort int, 
 		"remoteAddress": remoteAddress,
 		"webAddress":    webAddress,
 	}
-	}
+}
 
 // UninstallTunnel 卸载公网穿透(frpc)
 func (a *App) UninstallTunnel(deviceIP string) map[string]interface{} {
@@ -197,9 +201,9 @@ func (a *App) UninstallTunnel(deviceIP string) map[string]interface{} {
 			cmd  string
 		}{
 			{"停止服务", fmt.Sprintf("echo '%s' | sudo -S rc-service frpc stop 2>/dev/null || true", extensionSSHPassword)},
-			{"强杀进程", fmt.Sprintf("echo '%s' | sudo -S killall frpc 2>/dev/null || true", extensionSSHPassword)},
 			{"移除开机启动", fmt.Sprintf("echo '%s' | sudo -S rc-update del frpc default 2>/dev/null || true", extensionSSHPassword)},
 			{"删除服务文件", fmt.Sprintf("echo '%s' | sudo -S rm -f /etc/init.d/frpc", extensionSSHPassword)},
+			{"强杀进程", fmt.Sprintf("echo '%s' | sudo -S killall -9 frpc 2>/dev/null || true", extensionSSHPassword)},
 		}
 		for _, step := range steps {
 			output, err := sshExecCommandWithOutput(sshClient, step.cmd)
@@ -213,10 +217,10 @@ func (a *App) UninstallTunnel(deviceIP string) map[string]interface{} {
 			cmd  string
 		}{
 			{"停止服务", fmt.Sprintf("echo '%s' | sudo -S systemctl stop frpc 2>/dev/null || true", extensionSSHPassword)},
-			{"强杀进程", fmt.Sprintf("echo '%s' | sudo -S killall frpc 2>/dev/null || true", extensionSSHPassword)},
 			{"禁用服务", fmt.Sprintf("echo '%s' | sudo -S systemctl disable frpc 2>/dev/null || true", extensionSSHPassword)},
 			{"删除服务文件", fmt.Sprintf("echo '%s' | sudo -S rm -f /etc/systemd/system/frpc.service", extensionSSHPassword)},
 			{"重载systemd", fmt.Sprintf("echo '%s' | sudo -S systemctl daemon-reload", extensionSSHPassword)},
+			{"强杀进程", fmt.Sprintf("echo '%s' | sudo -S killall -9 frpc 2>/dev/null || true", extensionSSHPassword)},
 		}
 		for _, step := range steps {
 			output, err := sshExecCommandWithOutput(sshClient, step.cmd)
@@ -224,6 +228,14 @@ func (a *App) UninstallTunnel(deviceIP string) map[string]interface{} {
 				log.Printf("[公网穿透] %s: %v (%s)", step.desc, err, strings.TrimSpace(output))
 			}
 		}
+	}
+
+	// 再次确认进程已终止
+	time.Sleep(1 * time.Second)
+	psCheck, _ := sshExecCommandWithOutput(sshClient, "ps aux | grep /home/user/frpc | grep -v grep")
+	if strings.TrimSpace(psCheck) != "" {
+		sshExecCommandWithOutput(sshClient, fmt.Sprintf("echo '%s' | sudo -S kill -9 $(pgrep -f /home/user/frpc) 2>/dev/null; true", extensionSSHPassword))
+		log.Printf("[公网穿透] 二次清理：仍有残留 frpc 进程，已强制杀死")
 	}
 
 	// 清理文件
@@ -239,7 +251,18 @@ func (a *App) UninstallTunnel(deviceIP string) map[string]interface{} {
 
 // generateFrpcConfig 生成 frpc.toml 配置内容（含SSH代理规则）
 // 不指定remotePort，由frps服务端自动分配端口
-func generateFrpcConfig(serverAddr string, serverPort int, token string, deviceIP string) string {
+// 代理名称包含设备IP作为后缀，避免多台设备同时连接同一frps时名称冲突
+func generateFrpcConfig(serverAddr string, serverPort int, token string, deviceIP string, webUser string, webPassword string) string {
+	// 将IP中的点替换为横线，用作代理名称后缀（frp代理名称不允许点号）
+	ipSuffix := strings.ReplaceAll(deviceIP, ".", "-")
+
+	if webUser == "" {
+		webUser = "admin"
+	}
+	if webPassword == "" {
+		webPassword = "admin"
+	}
+
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("serverAddr = \"%s\"\n", serverAddr))
 	sb.WriteString(fmt.Sprintf("serverPort = %d\n", serverPort))
@@ -254,8 +277,8 @@ func generateFrpcConfig(serverAddr string, serverPort int, token string, deviceI
 	sb.WriteString("\n[webServer]\n")
 	sb.WriteString("addr = \"0.0.0.0\"\n")
 	sb.WriteString("port = 7400\n")
-	sb.WriteString("user = \"admin\"\n")
-	sb.WriteString("password = \"admin\"\n")
+	sb.WriteString(fmt.Sprintf("user = \"%s\"\n", webUser))
+	sb.WriteString(fmt.Sprintf("password = \"%s\"\n", webPassword))
 
 	// 持久化存储，保持代理状态（避免重启后frps重新分配端口）
 	sb.WriteString("\n[store]\n")
@@ -263,14 +286,14 @@ func generateFrpcConfig(serverAddr string, serverPort int, token string, deviceI
 
 	// SSH代理规则：将设备22端口映射到frps服务器（端口由服务端自动分配）
 	sb.WriteString(fmt.Sprintf("\n[[proxies]]\n"))
-	sb.WriteString("name = \"ssh\"\n")
+	sb.WriteString(fmt.Sprintf("name = \"ssh-%s\"\n", ipSuffix))
 	sb.WriteString("type = \"tcp\"\n")
 	sb.WriteString("localIP = \"127.0.0.1\"\n")
 	sb.WriteString("localPort = 22\n")
 
 	// Web管理代理规则：将设备7400端口映射到frps服务器（端口由服务端自动分配）
 	sb.WriteString(fmt.Sprintf("\n[[proxies]]\n"))
-	sb.WriteString("name = \"frpc-web\"\n")
+	sb.WriteString(fmt.Sprintf("name = \"frpc-web-%s\"\n", ipSuffix))
 	sb.WriteString("type = \"tcp\"\n")
 	sb.WriteString("localIP = \"127.0.0.1\"\n")
 	sb.WriteString("localPort = 7400\n")
@@ -501,6 +524,27 @@ func (a *App) InstallTunnelServer(serverIP string, sshUser string, sshPassword s
 		return map[string]interface{}{"success": false, "message": fmt.Sprintf("SSH连接 %s 失败: %v", addr, err)}
 	}
 	defer sshClient.Close()
+
+	// 检测 frps 是否已安装且正在运行
+	// 如果已有其他设备安装过 frps 服务端，直接复用，避免重启服务导致已连接的 frpc 客户端全部断开
+	psOutput, _ := sshExecCommandWithOutput(sshClient, "ps aux | grep /usr/local/bin/frps | grep -v grep")
+	if strings.TrimSpace(psOutput) != "" {
+		// frps 进程已存在，检查端口是否在监听
+		portOutput, _ := sshExecCommandWithOutput(sshClient, fmt.Sprintf("ss -tlnp | grep ':%d '", bindPort))
+		if strings.TrimSpace(portOutput) != "" {
+			log.Printf("[公网穿透服务端] frps 已在运行且端口 %d 正在监听，跳过重新安装", bindPort)
+			dashboardURL := fmt.Sprintf("http://%s:%d", serverIP, dashboardPort)
+			return map[string]interface{}{
+				"success":       true,
+				"message":       fmt.Sprintf("frps 服务端已安装且正在运行，无需重复安装。绑定端口: %d，管理面板: %s", bindPort, dashboardURL),
+				"serverAddr":    serverIP,
+				"bindPort":      bindPort,
+				"dashboardURL":  dashboardURL,
+				"dashboardUser": dashboardUser,
+				"alreadyInstalled": true,
+			}
+		}
+	}
 
 	// 停止已有frps服务
 	runSSHCmd(sshClient, fmt.Sprintf("echo '%s' | sudo -S systemctl stop frps 2>/dev/null; echo '%s' | sudo -S killall frps 2>/dev/null; true", sshPassword, sshPassword))

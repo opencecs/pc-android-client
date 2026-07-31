@@ -1979,7 +1979,12 @@ watch(isPSeriesOrBatchP, (isP) => {
 
 const handleModelTypeChange = async (val) => {
   if (val === 'online') {
-    if (!createForm.value.modelName) createForm.value.modelName = 'random'
+    // 特质镜像 + 安卓15 时绑定 Samsung_S24，否则随机
+    if (isSpecialModelLocked.value) {
+      createForm.value.modelName = 'Samsung_S24'
+    } else if (!createForm.value.modelName || createForm.value.modelName === 'Samsung_S24') {
+      createForm.value.modelName = 'random'
+    }
     // 确保在线机型列表已加载
     if (phoneModels.value.length === 0 && createDevice.value && createDevice.value.ip) {
       await getV3PhoneModels(createDevice.value.ip)
@@ -2233,8 +2238,7 @@ const androidVersionFilteredImageList = computed(() => {
   return images.filter(img => img.os_ver === osVer && img.sys_ver_des !== '特质版')
 })
 
-// 特质镜像暂时屏蔽
-/*
+// 特质镜像列表
 const specialImageList = computed(() => {
   const images = filteredImageList.value
   if (!images || images.length === 0) return []
@@ -2249,7 +2253,6 @@ const currentCategoryImageList = computed(() => {
     ? specialImageList.value
     : androidVersionFilteredImageList.value
 })
-*/
 
 // 根据选择的安卓版本过滤在线机型列表
 const androidVersionFilteredPhoneModels = computed(() => {
@@ -2272,6 +2275,21 @@ watch(() => createForm.value.androidVersion, () => {
     } else {
       createForm.value.imageSelect = ''
     }
+  }
+  // 特质镜像：切换安卓版本时重新选中第一条镜像
+  if (createForm.value.createType !== 'container' && createForm.value.imageCategory === 'special') {
+    const filtered = specialImageList.value
+    if (filtered && filtered.length > 0) {
+      createForm.value.imageSelect = filtered[0].url
+    } else {
+      createForm.value.imageSelect = ''
+    }
+  }
+  // 特质镜像 + 安卓15 + 在线机型 时绑定 Samsung_S24
+  if (isSpecialModelLocked.value) {
+    createForm.value.modelName = 'Samsung_S24'
+  } else if (createForm.value.imageCategory === 'special' && createForm.value.modelName === 'Samsung_S24') {
+    createForm.value.modelName = 'random'
   }
 })
 
@@ -4406,15 +4424,32 @@ watch(filteredImageList, () => {
   }
 }, { immediate: true })
 
-// 特质镜像分类切换逻辑暂时屏蔽
-/*
-watch(() => createForm.value.imageCategory, (newCat) => {
+// 特质镜像分类切换逻辑
+watch(() => createForm.value.imageCategory, (newCat, oldCat) => {
   if (newCat === 'online' || newCat === 'special') {
     const filtered = currentCategoryImageList.value
     createForm.value.imageSelect = (filtered && filtered.length > 0) ? filtered[0].url : ''
   }
+  // 特质镜像 + 安卓15 + 在线机型 时绑定 Samsung_S24
+  if (newCat === 'special') {
+    if (createForm.value.androidVersion === '15' && createForm.value.modelType === 'online') {
+      createForm.value.modelName = 'Samsung_S24'
+    }
+  }
+  // 从特质镜像切回其他分类时，恢复随机机型
+  if (oldCat === 'special' && newCat !== 'special') {
+    if (createForm.value.modelName === 'Samsung_S24') {
+      createForm.value.modelName = 'random'
+    }
+  }
 })
-*/
+
+// 特质镜像是否需要锁定 Samsung_S24：仅安卓15 + 在线机型
+const isSpecialModelLocked = computed(() => {
+  return createForm.value.imageCategory === 'special'
+    && createForm.value.androidVersion === '15'
+    && createForm.value.modelType === 'online'
+})
 
 // 按型号分类在线镜像
 const categorizeOnlineImages = async () => {
@@ -9655,6 +9690,22 @@ const handleCreateSubmit = async () => {
 
   // 重置取消标志
   createCancelled.value = false
+
+  // 校验特质镜像固件版本要求
+  if (createForm.value.imageCategory === 'special') {
+    const firmwareInfo = createDeviceFirmwareInfo.value
+    const sdkVersion = firmwareInfo?.sdkVersion || ''
+    const match = String(sdkVersion).match(/v?(\d+\.\d+\.\d+)/)
+    const currentVer = match ? match[1] : '0.0.0'
+    const requiredVer = '0.8.8'
+    const [a1, a2, a3] = currentVer.split('.').map(Number)
+    const [b1, b2, b3] = requiredVer.split('.').map(Number)
+    const meets = (a1 || 0) > (b1 || 0) || ((a1 || 0) === (b1 || 0) && (a2 || 0) > (b2 || 0)) || ((a1 || 0) === (b1 || 0) && (a2 || 0) === (b2 || 0) && (a3 || 0) >= (b3 || 0))
+    if (!meets) {
+      ElMessage.error(`特质镜像要求固件版本 >= 0.8.8，当前固件版本为 ${currentVer}，请先升级固件`)
+      return
+    }
+  }
 
   // 校验容器名称：不允许包含下划线
   const chineseRegex = /[\u4e00-\u9fa5]/
@@ -20913,9 +20964,7 @@ const handleBindsTest = async () => {
             <el-form-item :label="$t('common.imageCategory')">
               <el-radio-group v-model="createForm.imageCategory">
                 <el-radio label="online">{{ $t('common.onlineImage') }}</el-radio>
-                <!-- 特质镜像暂时屏蔽
                 <el-radio label="special">{{ $t('common.specialImage') }}</el-radio>
-                -->
                 <el-radio label="local">{{ $t('common.localImage') }}</el-radio>
               </el-radio-group>
             </el-form-item>
@@ -20927,6 +20976,18 @@ const handleBindsTest = async () => {
                 <!-- 使用按安卓版本过滤的镜像列表 -->
                 <el-option
                   v-for="image in androidVersionFilteredImageList"
+                  :key="image.url"
+                  :label="image.name"
+                  :value="image.url"
+                ></el-option>
+              </el-select>
+            </el-form-item>
+
+            <!-- 特质镜像选择 -->
+            <el-form-item v-if="createForm.imageCategory === 'special'" :label="$t('common.imageSelection')">
+              <el-select v-model="createForm.imageSelect" @change="handleImageSelectChange" :loading="fetchingImages" style="width: 100%;" filterable>
+                <el-option
+                  v-for="image in specialImageList"
                   :key="image.url"
                   :label="image.name"
                   :value="image.url"
@@ -21098,7 +21159,7 @@ const handleBindsTest = async () => {
               </el-radio-group>
             </el-form-item>
             <!-- V3设备显示在线型号选择 -->
-            <el-form-item v-if="showV3Options && createForm.modelType === 'online'" :label="$t('common.phoneModel')">
+            <el-form-item v-if="showV3Options && createForm.modelType === 'online' && !isSpecialModelLocked" :label="$t('common.phoneModel')">
               <el-select v-model="createForm.modelName" :placeholder="$t('common.pleaseSelectPhoneModel')" :loading="fetchingModels" filterable>
                 <el-option :label="$t('common.random')" value="random"></el-option>
                 <el-option 
@@ -21107,6 +21168,12 @@ const handleBindsTest = async () => {
                   :label="model.name" 
                   :value="model.name"
                 ></el-option>
+              </el-select>
+            </el-form-item>
+            <!-- 特质镜像 + 安卓15 + 在线机型 时固定 Samsung_S24 机型 -->
+            <el-form-item v-if="showV3Options && createForm.modelType === 'online' && isSpecialModelLocked" :label="$t('common.phoneModel')">
+              <el-select v-model="createForm.modelName" disabled>
+                <el-option label="Samsung_S24" value="Samsung_S24"></el-option>
               </el-select>
             </el-form-item>
             <!-- V3设备显示本地型号选择 -->

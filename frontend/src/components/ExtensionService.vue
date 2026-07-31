@@ -45,6 +45,16 @@
               <el-tag v-else type="info" size="small">{{ t('extension.modelNotSupported') }}</el-tag>
             </template>
           </el-table-column>
+          <el-table-column label="服务状态" min-width="140" align="center">
+            <template #default="scope">
+              <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+                <el-tag v-if="getDeviceServiceStatus(scope.row.ip).mytPanel" type="success" size="small">互联</el-tag>
+                <el-tag v-if="getDeviceServiceStatus(scope.row.ip).tunnel" type="warning" size="small">穿透</el-tag>
+                <el-tag v-if="getDeviceServiceStatus(scope.row.ip).mytAgent" type="primary" size="small">Agent</el-tag>
+                <span v-if="!getDeviceServiceStatus(scope.row.ip).mytPanel && !getDeviceServiceStatus(scope.row.ip).tunnel && !getDeviceServiceStatus(scope.row.ip).mytAgent" style="color: #c0c4cc; font-size: 12px;">未安装</span>
+              </div>
+            </template>
+          </el-table-column>
         </el-table>
       </el-card>
     </div>
@@ -159,6 +169,17 @@
               </el-button>
             </div>
           </div>
+          <!-- 魔云互联面板信息 -->
+          <div v-if="mytPanelStatus" class="service-status-box">
+            <el-alert :type="mytPanelStatus.type" :closable="false" show-icon>
+              <template #title>{{ mytPanelStatus.message }}</template>
+            </el-alert>
+            <div v-if="mytPanelStatus.url" style="margin-top: 8px; display: flex; gap: 8px;">
+              <el-button type="primary" size="small" @click="openUrl(mytPanelStatus.url)">
+                {{ t('extension.openPanel') }}
+              </el-button>
+            </div>
+          </div>
 
           <el-divider style="margin: 12px 0;" />
 
@@ -177,6 +198,23 @@
               </el-button>
               <el-button type="info" size="small" @click="showUsageGuide('tunnel')">
                 {{ t('extension.usageGuide') }}
+              </el-button>
+            </div>
+          </div>
+          <!-- 公网穿透面板信息 -->
+          <div v-if="tunnelStatus" class="service-status-box">
+            <el-alert :type="tunnelStatus.type" :closable="false" show-icon>
+              <template #title>{{ tunnelStatus.message }}</template>
+            </el-alert>
+            <div v-if="tunnelStatus.serverAddr" style="margin-top: 6px; font-size: 13px; color: #606266;">
+              服务端地址: <span style="font-weight: 600;">{{ tunnelStatus.serverAddr }}:7500</span>
+            </div>
+            <div v-if="tunnelStatus.webAddress || tunnelStatus.remoteAddress" style="margin-top: 8px; display: flex; gap: 8px;">
+              <el-button v-if="tunnelStatus.webAddress" type="primary" size="small" @click="openUrl(tunnelStatus.webAddress)">
+                Web管理界面
+              </el-button>
+              <el-button v-if="tunnelStatus.remoteAddress" type="success" size="small" @click="copyText(tunnelStatus.remoteAddress)">
+                复制SSH地址
               </el-button>
             </div>
           </div>
@@ -225,27 +263,14 @@
               </el-button>
             </div>
           </div>
-
-          <!-- 操作状态 -->
-          <div v-if="operationStatus" style="margin-top: 12px;">
-            <el-alert :type="operationStatus.type" :closable="false" show-icon>
-              <template #title>{{ operationStatus.message }}</template>
+          <!-- MYT Agent 面板信息 -->
+          <div v-if="mytAgentStatus" class="service-status-box">
+            <el-alert :type="mytAgentStatus.type" :closable="false" show-icon>
+              <template #title>{{ mytAgentStatus.message }}</template>
             </el-alert>
-            <div v-if="operationStatus.serverAddr" style="margin-top: 6px; font-size: 13px; color: #606266;">
-              服务端地址: <span style="font-weight: 600;">{{ operationStatus.serverAddr }}:7500</span>
-            </div>
-            <div v-if="operationStatus.webAddress || operationStatus.url || operationStatus.agentWebUrl" style="margin-top: 8px; display: flex; gap: 8px;">
-              <el-button v-if="operationStatus.webAddress" type="primary" size="small" @click="openUrl(operationStatus.webAddress)">
-                Web管理界面
-              </el-button>
-              <el-button v-if="operationStatus.url && !operationStatus.webAddress" type="primary" size="small" @click="openUrl(operationStatus.url)">
-                {{ t('extension.openPanel') }}
-              </el-button>
-              <el-button v-if="operationStatus.agentWebUrl" type="primary" size="small" @click="openUrl(operationStatus.agentWebUrl)">
+            <div v-if="mytAgentStatus.agentWebUrl" style="margin-top: 8px; display: flex; gap: 8px;">
+              <el-button type="primary" size="small" @click="openUrl(mytAgentStatus.agentWebUrl)">
                 打开 Agent 面板
-              </el-button>
-              <el-button v-if="operationStatus.remoteAddress" type="success" size="small" @click="copyText(operationStatus.remoteAddress)">
-                复制SSH地址
               </el-button>
             </div>
           </div>
@@ -331,6 +356,7 @@
       v-model="tunnelConfigDialogVisible"
       title="安装公网穿透"
       width="500px"
+      top="5vh"
     >
       <el-form label-position="top" size="default">
         <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px;">
@@ -352,6 +378,13 @@
         </el-form-item>
         <el-form-item label="frps绑定端口">
           <el-input-number v-model="tunnelServerPort" :min="1" :max="65535" style="width: 100%;" />
+        </el-form-item>
+        <el-divider content-position="center">管理界面登录（默认 admin）</el-divider>
+        <el-form-item label="管理界面账号">
+          <el-input v-model="tunnelDashboardUser" placeholder="默认 admin" />
+        </el-form-item>
+        <el-form-item label="管理界面密码">
+          <el-input v-model="tunnelDashboardPassword" type="password" show-password placeholder="默认 admin" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -422,7 +455,10 @@ const installingTunnel = ref(false)
 const uninstallingTunnel = ref(false)
 const installingMytAgent = ref(false)
 const uninstallingMytAgent = ref(false)
-const operationStatus = ref(null)
+// 每个服务独立的面板状态，互不影响
+const mytPanelStatus = ref(null)
+const tunnelStatus = ref(null)
+const mytAgentStatus = ref(null)
 const usageDialogVisible = ref(false)
 const usageGuideType = ref('')
 const usageDialogTitle = computed(() => {
@@ -431,6 +467,36 @@ const usageDialogTitle = computed(() => {
   if (usageGuideType.value === 'mytAgent') return t('extension.mytAgent') + ' - ' + t('extension.usageGuide')
   return t('extension.usageGuide')
 })
+
+// ===== 持久化服务安装状态缓存 =====
+// key: device.ip, value: { mytPanel, tunnel, mytAgent, mytPanelStatus, tunnelStatus, mytAgentStatus, tunnelServerAddr, tunnelServerPort }
+const SERVICE_CACHE_KEY = 'extensionServiceStatusCache'
+const loadServiceCache = () => {
+  try {
+    const raw = localStorage.getItem(SERVICE_CACHE_KEY)
+    if (raw) return new Map(JSON.parse(raw))
+  } catch (e) {
+    console.error('[扩展服务] 加载缓存失败:', e)
+  }
+  return new Map()
+}
+const serviceStatusCache = ref(loadServiceCache())
+const saveServiceCache = () => {
+  try {
+    localStorage.setItem(SERVICE_CACHE_KEY, JSON.stringify([...serviceStatusCache.value]))
+  } catch (e) {
+    console.error('[扩展服务] 保存缓存失败:', e)
+  }
+}
+// 更新某设备的服务状态
+const updateDeviceServiceStatus = (deviceIP, status) => {
+  serviceStatusCache.value.set(deviceIP, { ...serviceStatusCache.value.get(deviceIP), ...status })
+  saveServiceCache()
+}
+// 获取某设备的服务状态
+const getDeviceServiceStatus = (deviceIP) => {
+  return serviceStatusCache.value.get(deviceIP) || {}
+}
 
 // 提取标准 semver 版本号
 const extractSemver = (v) => {
@@ -522,7 +588,14 @@ const extractPureIP = (ip) => {
 const handleDeviceSelect = (row) => {
   if (!row) return
   selectedDevice.value = row
-  operationStatus.value = null
+  // 从缓存恢复该设备各服务的面板状态
+  const cached = getDeviceServiceStatus(row.ip)
+  mytPanelStatus.value = cached.mytPanelStatus || null
+  tunnelStatus.value = cached.tunnelStatus || null
+  mytAgentStatus.value = cached.mytAgentStatus || null
+  // 恢复公网穿透服务器配置
+  if (cached.tunnelServerAddr) tunnelServerAddr.value = cached.tunnelServerAddr
+  if (cached.tunnelServerPort) tunnelServerPort.value = cached.tunnelServerPort
 }
 
 // 行样式
@@ -561,7 +634,7 @@ const showUsageGuide = (type) => {
 const installMytPanel = async () => {
   if (!selectedDevice.value) return
   installingMytPanel.value = true
-  operationStatus.value = null
+  mytPanelStatus.value = null
   try {
     const ip = extractPureIP(selectedDevice.value.ip)
     const result = await InstallMytPanel(ip)
@@ -569,15 +642,16 @@ const installMytPanel = async () => {
       const msg = result.url
         ? `${t('extension.installSuccess')} - ${t('extension.accessUrl')}: ${result.url}`
         : t('extension.installSuccess')
-      operationStatus.value = { type: 'success', message: msg, url: result.url || '' }
+      mytPanelStatus.value = { type: 'success', message: msg, url: result.url || '' }
+      updateDeviceServiceStatus(selectedDevice.value.ip, { mytPanel: true, mytPanelStatus: { type: 'success', message: msg, url: result.url || '' } })
       ElMessage.success(msg)
     } else {
-      operationStatus.value = { type: 'error', message: result.message || t('extension.installFailed') }
+      mytPanelStatus.value = { type: 'error', message: result.message || t('extension.installFailed') }
       ElMessage.error(result.message || t('extension.installFailed'))
     }
   } catch (e) {
     console.error('[扩展服务] 安装魔云互联失败:', e)
-    operationStatus.value = { type: 'error', message: t('extension.installFailed') + `: ${e.message || e}` }
+    mytPanelStatus.value = { type: 'error', message: t('extension.installFailed') + `: ${e.message || e}` }
     ElMessage.error(t('extension.installFailed') + `: ${e.message || e}`)
   } finally {
     installingMytPanel.value = false
@@ -597,20 +671,21 @@ const uninstallMytPanel = async () => {
     return // 用户取消
   }
   uninstallingMytPanel.value = true
-  operationStatus.value = null
+  mytPanelStatus.value = null
   try {
     const ip = extractPureIP(selectedDevice.value.ip)
     const result = await UninstallMytPanel(ip)
     if (result.success) {
-      operationStatus.value = { type: 'success', message: t('extension.uninstallSuccess') }
+      mytPanelStatus.value = { type: 'success', message: t('extension.uninstallSuccess') }
+      updateDeviceServiceStatus(selectedDevice.value.ip, { mytPanel: false, mytPanelStatus: { type: 'success', message: t('extension.uninstallSuccess') } })
       ElMessage.success(t('extension.uninstallSuccess'))
     } else {
-      operationStatus.value = { type: 'error', message: result.message || t('extension.uninstallFailed') }
+      mytPanelStatus.value = { type: 'error', message: result.message || t('extension.uninstallFailed') }
       ElMessage.error(result.message || t('extension.uninstallFailed'))
     }
   } catch (e) {
     console.error('[扩展服务] 卸载魔云互联失败:', e)
-    operationStatus.value = { type: 'error', message: t('extension.uninstallFailed') + `: ${e.message || e}` }
+    mytPanelStatus.value = { type: 'error', message: t('extension.uninstallFailed') + `: ${e.message || e}` }
     ElMessage.error(t('extension.uninstallFailed') + `: ${e.message || e}`)
   } finally {
     uninstallingMytPanel.value = false
@@ -623,6 +698,8 @@ const tunnelServerPort = ref(7000)
 const tunnelServerSSHPort = ref(22)
 const tunnelServerSSHUser = ref('root')
 const tunnelServerSSHPassword = ref('')
+const tunnelDashboardUser = ref('admin')
+const tunnelDashboardPassword = ref('admin')
 const tunnelConfigDialogVisible = ref(false)
 
 const installTunnel = () => {
@@ -641,7 +718,7 @@ const doInstallTunnel = async () => {
   }
   tunnelConfigDialogVisible.value = false
   installingTunnel.value = true
-  operationStatus.value = null
+  tunnelStatus.value = null
   try {
     // 第一步：在用户服务器上安装frps服务端
     ElMessage.info('正在安装服务端(frps)到服务器...')
@@ -651,21 +728,27 @@ const doInstallTunnel = async () => {
       tunnelServerSSHPassword.value || 'myt',
       tunnelServerSSHPort.value || 22,
       tunnelServerPort.value || 7000,
-      7500, 'admin', 'admin'
+      7500,
+      tunnelDashboardUser.value || 'admin',
+      tunnelDashboardPassword.value || 'admin'
     )
     if (!serverResult.success) {
-      operationStatus.value = { type: 'error', message: serverResult.message || '服务端安装失败' }
+      tunnelStatus.value = { type: 'error', message: serverResult.message || '服务端安装失败' }
       ElMessage.error(serverResult.message || '服务端安装失败')
       return
     }
-    ElMessage.success('服务端安装成功，正在安装客户端(frpc)到设备...')
+    if (serverResult.alreadyInstalled) {
+      ElMessage.info('检测到服务端(frps)已安装且正在运行，跳过重新安装，直接安装客户端(frpc)到设备...')
+    } else {
+      ElMessage.success('服务端安装成功，正在安装客户端(frpc)到设备...')
+    }
 
     // 第二步：在设备上安装frpc客户端
     const ip = extractPureIP(selectedDevice.value.ip)
-    const result = await InstallTunnel(ip, tunnelServerAddr.value, tunnelServerPort.value, '')
+    const result = await InstallTunnel(ip, tunnelServerAddr.value, tunnelServerPort.value, '', tunnelDashboardUser.value || 'admin', tunnelDashboardPassword.value || 'admin')
     if (result.success) {
       const msg = result.message || t('extension.installSuccess')
-      operationStatus.value = {
+      tunnelStatus.value = {
         type: 'success',
         message: msg,
         url: result.webAddress || result.remoteAddress || '',
@@ -674,14 +757,20 @@ const doInstallTunnel = async () => {
         serverAddr: tunnelServerAddr.value,
         serverPort: tunnelServerPort.value || 7000,
       }
+      updateDeviceServiceStatus(selectedDevice.value.ip, {
+        tunnel: true,
+        tunnelStatus: { ...tunnelStatus.value },
+        tunnelServerAddr: tunnelServerAddr.value,
+        tunnelServerPort: tunnelServerPort.value || 7000,
+      })
       ElMessage.success(msg)
     } else {
-      operationStatus.value = { type: 'error', message: result.message || t('extension.installFailed') }
+      tunnelStatus.value = { type: 'error', message: result.message || t('extension.installFailed') }
       ElMessage.error(result.message || t('extension.installFailed'))
     }
   } catch (e) {
     console.error('[扩展服务] 安装公网穿透失败:', e)
-    operationStatus.value = { type: 'error', message: t('extension.installFailed') + `: ${e.message || e}` }
+    tunnelStatus.value = { type: 'error', message: t('extension.installFailed') + `: ${e.message || e}` }
     ElMessage.error(t('extension.installFailed') + `: ${e.message || e}`)
   } finally {
     installingTunnel.value = false
@@ -731,7 +820,7 @@ const installMytAgent = async () => {
     return
   }
   installingMytAgent.value = true
-  operationStatus.value = null
+  mytAgentStatus.value = null
   try {
     const ip = extractPureIP(selectedDevice.value.ip)
     const url = `http://${ip}:8000/mytVpn/start`
@@ -744,7 +833,7 @@ const installMytAgent = async () => {
     if (resp.status === 401) {
       const password = await promptDevicePassword(selectedDevice.value)
       if (!password) {
-        operationStatus.value = { type: 'error', message: t('extension.installFailed') }
+        mytAgentStatus.value = { type: 'error', message: t('extension.installFailed') }
         ElMessage.error(t('extension.installFailed'))
         return
       }
@@ -753,20 +842,21 @@ const installMytAgent = async () => {
     }
     const text = await resp.text().catch(() => '')
     if (resp.ok) {
-      operationStatus.value = {
+      mytAgentStatus.value = {
         type: 'success',
         message: t('extension.installSuccess'),
         agentWebUrl: 'https://agent.opencecs.com/'
       }
+      updateDeviceServiceStatus(selectedDevice.value.ip, { mytAgent: true, mytAgentStatus: { ...mytAgentStatus.value } })
       ElMessage.success(t('extension.installSuccess'))
     } else {
       const msg = text || `${t('extension.installFailed')} (HTTP ${resp.status})`
-      operationStatus.value = { type: 'error', message: msg }
+      mytAgentStatus.value = { type: 'error', message: msg }
       ElMessage.error(msg)
     }
   } catch (e) {
     console.error('[扩展服务] 安装 MYT Agent 失败:', e)
-    operationStatus.value = { type: 'error', message: t('extension.installFailed') + `: ${e.message || e}` }
+    mytAgentStatus.value = { type: 'error', message: t('extension.installFailed') + `: ${e.message || e}` }
     ElMessage.error(t('extension.installFailed') + `: ${e.message || e}`)
   } finally {
     installingMytAgent.value = false
@@ -786,7 +876,7 @@ const uninstallMytAgent = async () => {
     return
   }
   uninstallingMytAgent.value = true
-  operationStatus.value = null
+  mytAgentStatus.value = null
   try {
     const ip = extractPureIP(selectedDevice.value.ip)
     const url = `http://${ip}:8000/mytVpn/uninstall`
@@ -798,7 +888,7 @@ const uninstallMytAgent = async () => {
     if (resp.status === 401) {
       const password = await promptDevicePassword(selectedDevice.value)
       if (!password) {
-        operationStatus.value = { type: 'error', message: t('extension.uninstallFailed') }
+        mytAgentStatus.value = { type: 'error', message: t('extension.uninstallFailed') }
         ElMessage.error(t('extension.uninstallFailed'))
         return
       }
@@ -807,16 +897,17 @@ const uninstallMytAgent = async () => {
     }
     const text = await resp.text().catch(() => '')
     if (resp.ok) {
-      operationStatus.value = { type: 'success', message: t('extension.uninstallSuccess') }
+      mytAgentStatus.value = { type: 'success', message: t('extension.uninstallSuccess') }
+      updateDeviceServiceStatus(selectedDevice.value.ip, { mytAgent: false, mytAgentStatus: { type: 'success', message: t('extension.uninstallSuccess') } })
       ElMessage.success(t('extension.uninstallSuccess'))
     } else {
       const msg = text || `${t('extension.uninstallFailed')} (HTTP ${resp.status})`
-      operationStatus.value = { type: 'error', message: msg }
+      mytAgentStatus.value = { type: 'error', message: msg }
       ElMessage.error(msg)
     }
   } catch (e) {
     console.error('[扩展服务] 卸载 MYT Agent 失败:', e)
-    operationStatus.value = { type: 'error', message: t('extension.uninstallFailed') + `: ${e.message || e}` }
+    mytAgentStatus.value = { type: 'error', message: t('extension.uninstallFailed') + `: ${e.message || e}` }
     ElMessage.error(t('extension.uninstallFailed') + `: ${e.message || e}`)
   } finally {
     uninstallingMytAgent.value = false
@@ -828,7 +919,7 @@ const uninstallMytAgent = async () => {
 const uninstallTunnelAll = async () => {
   if (!selectedDevice.value) return
   try {
-    await ElMessageBox.confirm('确认卸载公网穿透？将同时卸载设备上的客户端和服务器上的服务端。', '卸载公网穿透', {
+    await ElMessageBox.confirm('确认卸载公网穿透？将卸载该设备上的 frpc 客户端。服务端 frps 不受影响，其他设备可继续使用。', '卸载公网穿透', {
       confirmButtonText: '确认卸载',
       cancelButtonText: '取消',
       type: 'warning',
@@ -837,9 +928,9 @@ const uninstallTunnelAll = async () => {
     return
   }
   uninstallingTunnel.value = true
-  operationStatus.value = null
+  tunnelStatus.value = null
   try {
-    // 第一步：卸载客户端
+    // 卸载客户端（frpc）
     const ip = extractPureIP(selectedDevice.value.ip)
     const clientResult = await UninstallTunnel(ip)
     if (clientResult.success) {
@@ -848,25 +939,11 @@ const uninstallTunnelAll = async () => {
       ElMessage.warning(clientResult.message || '客户端卸载失败')
     }
 
-    // 第二步：卸载服务端
-    if (tunnelServerAddr.value && tunnelServerSSHPassword.value) {
-      const serverResult = await UninstallTunnelServer(
-        tunnelServerAddr.value,
-        tunnelServerSSHUser.value || 'root',
-        tunnelServerSSHPassword.value,
-        tunnelServerSSHPort.value || 22
-      )
-      if (serverResult.success) {
-        ElMessage.success('服务端卸载成功')
-      } else {
-        ElMessage.warning(serverResult.message || '服务端卸载失败')
-      }
-    }
-
-    operationStatus.value = { type: 'success', message: '公网穿透已卸载' }
+    tunnelStatus.value = { type: 'success', message: '公网穿透客户端已卸载，服务端不受影响' }
+    updateDeviceServiceStatus(selectedDevice.value.ip, { tunnel: false, tunnelStatus: { type: 'success', message: '公网穿透客户端已卸载，服务端不受影响' } })
   } catch (e) {
     console.error('[扩展服务] 卸载公网穿透失败:', e)
-    operationStatus.value = { type: 'error', message: `卸载失败: ${e.message || e}` }
+    tunnelStatus.value = { type: 'error', message: `卸载失败: ${e.message || e}` }
     ElMessage.error(`卸载失败: ${e.message || e}`)
   } finally {
     uninstallingTunnel.value = false
@@ -910,6 +987,13 @@ const uninstallTunnelAll = async () => {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.service-status-box {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f5f7fa;
+  border-radius: 6px;
 }
 
 .usage-guide p {
