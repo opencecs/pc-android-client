@@ -487,8 +487,8 @@ func (a *App) checkSingleDeviceStatus(deviceIP string) {
 // 实现状态机逻辑:
 //   - 先进行TCP Ping检测端口连通性和延迟(超时5s,失败后立即重试1次)
 //   - TCP成功后进行HTTP /info验证确认是我们的设备服务
-//   - 连续8次失败(TCP失败或HTTP验证失败) → 标记为离线
-//   - 连续2次成功(TCP≤5000ms且HTTP验证通过) → 标记为在线
+//   - 连续3次失败(TCP失败或HTTP验证失败) → 标记为离线
+//   - 连续1次成功(TCP≤5000ms且HTTP验证通过) → 标记为在线
 //   - 状态变化(离线→在线)时检查401认证,通过后触发API版本检查和存储查询
 func (a *App) tcpPingSingleDevice(deviceIP string) {
 	// ========== 1. 执行TCP Ping ==========
@@ -497,7 +497,7 @@ func (a *App) tcpPingSingleDevice(deviceIP string) {
 	addr := deviceAddr(deviceIP)
 	const (
 		tcpDialTimeout = 5000 * time.Millisecond // 单次TCP连接超时
-		maxFailCount   = 8                       // 连续失败多少次后判定离线（跨网段恢复容忍期）
+		maxFailCount   = 3                       // 连续失败多少次后判定离线
 	)
 	probeStart := time.Now()
 
@@ -557,7 +557,7 @@ func (a *App) tcpPingSingleDevice(deviceIP string) {
 			status.ResponseTime = latency
 		}
 		
-		// 连续maxFailCount次失败 → 标记离线（跨网段恢复容忍期，3秒间隔下约24秒）
+		// 连续maxFailCount次失败 → 标记离线
 		if status.ConsecutiveFailures >= maxFailCount {
 			if status.Status != "offline" {
 				status.Status = "offline"
@@ -653,8 +653,8 @@ func (a *App) tcpPingSingleDevice(deviceIP string) {
 		// 输出每个设备的独立延迟(用于调试和监控)
 		// log.Printf("[TCP Ping] 📡 设备 %s (%s) 延迟: %dms (连续成功%d次)", deviceIP, a.getDeviceName(deviceIP), latency, status.ConsecutiveSuccesses)
 
-		// 连续2次成功 → 标记在线
-		if status.ConsecutiveSuccesses >= 2 {
+		// 连续1次成功 → 标记在线
+		if status.ConsecutiveSuccesses >= 1 {
 			if status.Status != "online" {
 				status.Status = "online"
 				log.Printf("[TCP Ping] ✅ 设备 %s (%s) 上线 (连续%d次验证通过, 延迟%dms)",

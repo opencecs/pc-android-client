@@ -3047,7 +3047,7 @@ const updateRunningSlots = (device, containers) => {
     if (c.status === 'running') {
       let snum
       if (device.version === 'v3') {
-        snum = parseInt(c.snum)
+        snum = parseInt(c.indexNum || c.snum)
       } else {
         const name = c.names?.[0] || c.Name || ''
         const match = name.match(/(\d+)/)
@@ -8456,13 +8456,17 @@ const findAvailableSlot = (device, startSlot = 1, count = 1) => {
 const isSlotOccupied = (device, slot) => {
   if (!device) return true
   
-  // 获取当前设备的所有容器
-  const deviceContainers = deviceCloudMachinesCache.value.get(device.ip) || []
+  // 优先从 runningSlots 检查（showCreateDialog 时实时获取的运行状态）
+  if (runningSlots.value.has(slot)) return true
   
-  // 检查是否有运行中的容器占用该坑位
-  return deviceContainers.some(machine => 
-    machine.status === 'running' && machine.indexNum === slot
-  )
+  // 从 deviceCloudMachinesCache 检查
+  const deviceContainers = deviceCloudMachinesCache.value.get(device.ip) || []
+  if (deviceContainers.some(machine => machine.status === 'running' && machine.indexNum === slot)) return true
+  
+  // 从 instances 检查（当前选中设备的容器列表）
+  if (instances.value.some(machine => machine.status === 'running' && machine.indexNum === slot)) return true
+  
+  return false
 }
 
 // 检查并关闭指定坑位的运行中容器
@@ -9418,25 +9422,31 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
   }
   
   // 检查目标坑位的状态，决定Start参数的值
-  // 默认开机；仅当目标坑位处于已过期状态（slotStates[slot].state === 2）时强制不开机
   let shouldStart = true
 
-  if (options.start !== undefined) {
-    shouldStart = options.start
-    console.log(`[createV3CloudMachine] 使用options.start: ${shouldStart}`)
+  if (options.start === false) {
+    // 显式传 false 时直接使用
+    shouldStart = false
+    console.log(`[createV3CloudMachine] 使用options.start: false`)
   } else {
-    // 从缓存中获取当前设备的容器列表
-    const deviceContainers = deviceCloudMachinesCache.value.get(device.ip) || []
-    // 查找该坑位是否已有容器
-    const existingMachine = deviceContainers.find(m => m.indexNum === slot)
-
-    if (existingMachine) {
-      if (existingMachine.status === 'running') {
+    // 未传或传 true 时，重新检查该坑位是否有运行中的云机
+    // 优先检查 runningSlots（打开创建对话框时实时获取的运行状态）
+    if (runningSlots.value.has(slot)) {
+      shouldStart = false
+      console.log(`坑位 ${slot} 已有运行中的云机（runningSlots），设置 Start=false`)
+    } else {
+      // 从 deviceCloudMachinesCache 检查
+      const deviceContainers = deviceCloudMachinesCache.value.get(device.ip) || []
+      const existingMachine = deviceContainers.find(m => m.indexNum === slot)
+      if (existingMachine && existingMachine.status === 'running') {
         shouldStart = false
-        console.log(`坑位 ${slot} 已有运行中的云机，设置 Start=false`)
+        console.log(`坑位 ${slot} 已有运行中的云机（缓存），设置 Start=false`)
+      } else if (instances.value.some(m => m.indexNum === slot && m.status === 'running')) {
+        shouldStart = false
+        console.log(`坑位 ${slot} 已有运行中的云机（instances），设置 Start=false`)
       } else {
         shouldStart = true
-        console.log(`坑位 ${slot} 云机处于非运行状态，保持 Start=true`)
+        console.log(`坑位 ${slot} 无运行中的云机，保持 Start=true`)
       }
     }
 
@@ -9570,11 +9580,11 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
     apiUrl = `http://${getDeviceAddr(device.ip)}/androidV2`
   }
   console.log('调用V3 API创建容器:', apiUrl, params)
-  
+
   // 尝试使用已保存的密码
   const savedPassword = getDevicePassword(device.ip)
   let headers = {}
-  
+
   if (savedPassword) {
     // 添加认证头
     const auth = btoa(`admin:${savedPassword}`)
@@ -9582,14 +9592,29 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
       'Authorization': `Basic ${auth}`
     }
   }
-  
+
+  // 设备固件类型未获取到时自动重试（设备启动后首次创建可能尚未缓存固件类型）
+  const isFirmwareTypeMissing = (data) => {
+    if (!data) return false
+    const msg = String(data.message || '')
+    return data.code !== 0 && msg.includes('设备固件类型未获取到')
+  }
+
+  const postCreate = async (reqHeaders) => {
+    let resp = await axios.post(apiUrl, params, { headers: reqHeaders })
+    if (isFirmwareTypeMissing(resp.data)) {
+      console.warn('[createV3CloudMachine] 设备固件类型未获取到，1.5s 后自动重试一次')
+      await new Promise(r => setTimeout(r, 1500))
+      resp = await axios.post(apiUrl, params, { headers: reqHeaders })
+    }
+    return resp
+  }
+
   try {
     // 发送POST请求到设备的8000端口/android端点
-    const response = await axios.post(apiUrl, params, {
-      headers: headers
-    })
+    const response = await postCreate(headers)
     console.log('V3 API创建容器成功，返回数据:', response.data)
-    
+
     // 检查响应状态
     if (response.data.code !== 0) {
       if (response.data.code === 61 && response.data.message === 'Authentication Failed') {
@@ -9598,19 +9623,17 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
           showAuthDialog(device, async (password) => {
             try {
               const auth = btoa(`admin:${password}`)
-              const authResponse = await axios.post(apiUrl, params, {
-                headers: {
-                  'Authorization': `Basic ${auth}`
-                }
+              const authResponse = await postCreate({
+                'Authorization': `Basic ${auth}`
               })
-              
+
               console.log('V3 API创建容器成功，返回数据:', authResponse.data)
-              
+
               // 检查响应状态
               if (authResponse.data.code !== 0) {
                 throw new Error(`创建失败: ${authResponse.data.message || '未知错误'}`)
               }
-              
+
               resolve(authResponse.data)
             } catch (error) {
               console.error('创建容器失败:', error)
@@ -9622,7 +9645,7 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
         throw new Error(`创建失败: ${response.data.message || '未知错误'}`)
       }
     }
-    
+
     return response.data
   } catch (error) {
     if (error.response && error.response.data && error.response.data.code === 61 && error.response.data.message === 'Authentication Failed') {
@@ -9631,19 +9654,17 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
         showAuthDialog(device, async (password) => {
           try {
             const auth = btoa(`admin:${password}`)
-            const authResponse = await axios.post(apiUrl, params, {
-              headers: {
-                'Authorization': `Basic ${auth}`
-              }
+            const authResponse = await postCreate({
+              'Authorization': `Basic ${auth}`
             })
-            
+
             console.log('V3 API创建容器成功，返回数据:', authResponse.data)
-            
+
             // 检查响应状态
             if (authResponse.data.code !== 0) {
               throw new Error(`创建失败: ${authResponse.data.message || '未知错误'}`)
             }
-            
+
             resolve(authResponse.data)
           } catch (error) {
             console.error('创建容器失败:', error)
@@ -9889,15 +9910,11 @@ const handleCreateSubmit = async () => {
                 }
             }
         } else {
-            // 旧模式：连续分配
+            // 旧模式：单个坑位创建时 startSlot 即为用户选择的坑位，直接使用不跳过
             let availableSlot = startSlot
+            const hasRunning = isSlotOccupied(device, availableSlot)
             
             for (let i = 0; i < count; i++) {
-              // 自动查找下一个可用坑位
-              while (isSlotOccupied(device, availableSlot)) {
-                availableSlot++
-              }
-              
               // 计算当前实例的 IP
               const currentMacVlanIp = calculateSingleIp(
                 createForm.value.containerMacVlanIp || createForm.value.macVlanIp, 
@@ -9907,6 +9924,7 @@ const handleCreateSubmit = async () => {
               targets.push({
                 createType: 'container', // 标记为容器创建
                 slot: availableSlot,
+                start: !hasRunning, // 有运行中的云机时 start 传 false
                 modelName: 'random', 
                 modelType: 'online',
                 deviceIp: device.ip,
