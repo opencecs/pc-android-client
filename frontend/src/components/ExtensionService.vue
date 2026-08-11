@@ -210,7 +210,7 @@
               服务端地址: <span style="font-weight: 600;">{{ tunnelStatus.serverAddr }}:7500</span>
             </div>
             <div v-if="tunnelStatus.webAddress || tunnelStatus.remoteAddress" style="margin-top: 8px; display: flex; gap: 8px;">
-              <el-button v-if="tunnelStatus.webAddress" type="primary" size="small" @click="openUrl(tunnelStatus.webAddress)">
+              <el-button v-if="tunnelStatus.webAddress" type="primary" size="small" @click="openTunnelWeb(tunnelStatus)">
                 Web管理界面
               </el-button>
               <el-button v-if="tunnelStatus.remoteAddress" type="success" size="small" @click="copyText(tunnelStatus.remoteAddress)">
@@ -624,6 +624,20 @@ const openUrl = (url) => {
   OpenInBrowser(url)
 }
 
+// 打开公网穿透 Web 管理界面，自动携带设备 frpc 的真实管理凭据（免去手动输入）
+// 使用 URL 内嵌 Basic Auth 格式：http://user:pass@host:port/
+const openTunnelWeb = (status) => {
+  if (!status || !status.webAddress) return
+  let url = status.webAddress
+  if (status.frpcWebUser && status.frpcWebPassword) {
+    const [scheme, rest] = url.split('://')
+    if (rest && !rest.includes('@')) {
+      url = `${scheme}://${encodeURIComponent(status.frpcWebUser)}:${encodeURIComponent(status.frpcWebPassword)}@${rest}`
+    }
+  }
+  openUrl(url)
+}
+
 // 显示使用说明
 const showUsageGuide = (type) => {
   usageGuideType.value = type
@@ -745,6 +759,8 @@ const doInstallTunnel = async () => {
 
     // 第二步：在设备上安装frpc客户端
     const ip = extractPureIP(selectedDevice.value.ip)
+    // frpc 管理界面凭据固定使用用户填写的密码（与命令安装时一致）
+    // 不能使用 serverResult.dashboardPassword：那是 frps 服务端面板的密码，损坏会导致设备 frpc 管理界面无法登录
     const result = await InstallTunnel(ip, tunnelServerAddr.value, tunnelServerPort.value, '', tunnelDashboardUser.value || 'admin', tunnelDashboardPassword.value || 'admin')
     if (result.success) {
       const msg = result.message || t('extension.installSuccess')
@@ -756,6 +772,8 @@ const doInstallTunnel = async () => {
         remoteAddress: result.remoteAddress || '',
         serverAddr: tunnelServerAddr.value,
         serverPort: tunnelServerPort.value || 7000,
+        frpcWebUser: result.frpcWebUser || '',
+        frpcWebPassword: result.frpcWebPassword || '',
       }
       updateDeviceServiceStatus(selectedDevice.value.ip, {
         tunnel: true,

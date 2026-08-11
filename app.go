@@ -44,41 +44,41 @@ import (
 // DeviceStatus 设备状态信息（扩展版，包含设备详细信息）
 type DeviceStatus struct {
 	IP           string    `json:"ip"`
-	Status       string    `json:"status"`        // online/offline
+	Status       string    `json:"status"` // online/offline
 	LastCheckAt  time.Time `json:"lastCheckAt"`
-	ResponseTime int64     `json:"responseTime"`  // 响应时间（毫秒）- TCP Ping延迟或HTTP响应时间
-	
+	ResponseTime int64     `json:"responseTime"` // 响应时间（毫秒）- TCP Ping延迟或HTTP响应时间
+
 	// 设备详细信息（从 /info 接口获取）
-	APIVersion      string `json:"apiVersion"`      // API当前版本
-	LatestVersion   string `json:"latestVersion"`   // API最新版本
-	
+	APIVersion    string `json:"apiVersion"`    // API当前版本
+	LatestVersion string `json:"latestVersion"` // API最新版本
+
 	// NVME存储信息（从 /info/device 接口获取，需要认证）
-	StorageTotal int64  `json:"storageTotal"`  // 总存储空间（MB）
-	StorageFree  int64  `json:"storageFree"`   // 可用存储空间（MB）
-	StorageUsed  int64  `json:"storageUsed"`   // 已用存储空间（MB）
-	
+	StorageTotal int64 `json:"storageTotal"` // 总存储空间（MB）
+	StorageFree  int64 `json:"storageFree"`  // 可用存储空间（MB）
+	StorageUsed  int64 `json:"storageUsed"`  // 已用存储空间（MB）
+
 	// 主机固件信息（从 /info/device 接口获取）
-	SDKVersion   string `json:"sdkVersion"`    // SDK版本/主机固件版本
-	DeviceModel  string `json:"deviceModel"`   // 设备型号
-	
+	SDKVersion  string `json:"sdkVersion"`  // SDK版本/主机固件版本
+	DeviceModel string `json:"deviceModel"` // 设备型号
+
 	// 系统运行信息（从 /info/device 接口获取）
-	CPUTemp      int    `json:"cpuTemp"`       // CPU温度
-	CPULoad      string `json:"cpuLoad"`       // CPU负载
-	MemoryTotal  int64  `json:"memoryTotal"`   // 内存总量（MB）
-	MemoryUsed   int64  `json:"memoryUsed"`    // 内存使用量（MB）
-	MMCRead      string `json:"mmcRead"`       // 磁盘读取量
-	MMCWrite     string `json:"mmcWrite"`      // 磁盘写入量
-	MMCModel     string `json:"mmcModel"`      // 磁盘型号
-	MMCTemp      string `json:"mmcTemp"`       // 磁盘温度
-	SysUptime    string `json:"sysUptime"`     // 系统运行时间（秒）
-	Speed        string `json:"speed"`         // 网络速度
-	Network4G    string `json:"network4g"`     // 4G网络状态
-	NetworkEth0  string `json:"networkEth0"`   // 以太网状态
-	HWAddr       string `json:"hwaddr"`        // MAC地址
-	HWAddr1      string `json:"hwaddr_1"`      // MAC地址2
-	IP1          string `json:"ip_1"`          // 第二IP
-	DeviceID     string `json:"deviceId"`      // 设备ID
-	
+	CPUTemp     int    `json:"cpuTemp"`     // CPU温度
+	CPULoad     string `json:"cpuLoad"`     // CPU负载
+	MemoryTotal int64  `json:"memoryTotal"` // 内存总量（MB）
+	MemoryUsed  int64  `json:"memoryUsed"`  // 内存使用量（MB）
+	MMCRead     string `json:"mmcRead"`     // 磁盘读取量
+	MMCWrite    string `json:"mmcWrite"`    // 磁盘写入量
+	MMCModel    string `json:"mmcModel"`    // 磁盘型号
+	MMCTemp     string `json:"mmcTemp"`     // 磁盘温度
+	SysUptime   string `json:"sysUptime"`   // 系统运行时间（秒）
+	Speed       string `json:"speed"`       // 网络速度
+	Network4G   string `json:"network4g"`   // 4G网络状态
+	NetworkEth0 string `json:"networkEth0"` // 以太网状态
+	HWAddr      string `json:"hwaddr"`      // MAC地址
+	HWAddr1     string `json:"hwaddr_1"`    // MAC地址2
+	IP1         string `json:"ip_1"`        // 第二IP
+	DeviceID    string `json:"deviceId"`    // 设备ID
+
 	// ========== TCP Ping 状态跟踪字段（新增） ==========
 	ConsecutiveFailures  int       `json:"-"`                  // 连续失败次数（不暴露给前端）
 	ConsecutiveSuccesses int       `json:"-"`                  // 连续成功次数（不暴露给前端）
@@ -90,49 +90,49 @@ type DeviceStatus struct {
 
 // App struct - V3 Service
 type App struct {
-	wailsApp                *application.App                      // V3应用实例
-	imagePullProgress       float64                               // 当前镜像拉取进度 (0-100)
-	downloadProgress        float64                               // 当前镜像下载进度 (0-100)
-	progressMutex           sync.Mutex                            // 进度更新互斥锁
-	downloadCancel          context.CancelFunc                    // 下载取消函数
-	downloadCtx             context.Context                       // 下载上下文
-	downloadMutex           sync.Mutex                            // 下载控制互斥锁
-	uploadCancel            context.CancelFunc                    // 上传取消函数
-	uploadCtx               context.Context                       // 上传上下文
-	uploadMutex             sync.Mutex                            // 上传控制互斥锁
-	projectionWindows       map[string]*application.WebviewWindow // 投屏窗口管理 {deviceIP -> window}
-	windowAlwaysOnTop       map[string]bool                       // 投屏窗口置顶状态 {deviceIP -> alwaysOnTop}
-	RtmpService             *RtmpService                          // 流媒体服务
-	P2PManager              *P2PManager                           // P2P推流管理
-	BatchTaskService        *BatchTaskService                     // 批量任务服务
-	currentBatchImportTask  *BatchImportTask                      // 当前批量导入任务
-	log                     *Logger                               // 日志记录器
+	wailsApp               *application.App                      // V3应用实例
+	imagePullProgress      float64                               // 当前镜像拉取进度 (0-100)
+	downloadProgress       float64                               // 当前镜像下载进度 (0-100)
+	progressMutex          sync.Mutex                            // 进度更新互斥锁
+	downloadCancel         context.CancelFunc                    // 下载取消函数
+	downloadCtx            context.Context                       // 下载上下文
+	downloadMutex          sync.Mutex                            // 下载控制互斥锁
+	uploadCancel           context.CancelFunc                    // 上传取消函数
+	uploadCtx              context.Context                       // 上传上下文
+	uploadMutex            sync.Mutex                            // 上传控制互斥锁
+	projectionWindows      map[string]*application.WebviewWindow // 投屏窗口管理 {deviceIP -> window}
+	windowAlwaysOnTop      map[string]bool                       // 投屏窗口置顶状态 {deviceIP -> alwaysOnTop}
+	RtmpService            *RtmpService                          // 流媒体服务
+	P2PManager             *P2PManager                           // P2P推流管理
+	BatchTaskService       *BatchTaskService                     // 批量任务服务
+	currentBatchImportTask *BatchImportTask                      // 当前批量导入任务
+	log                    *Logger                               // 日志记录器
 	// 设备状态管理
-	deviceStatusMap      map[string]*DeviceStatus           // 设备状态缓存 {deviceIP -> status}
-	deviceStatusMutex    sync.RWMutex                       // 设备状态读写锁
-	deviceIPs            []string                           // 需要监控的设备IP列表
-	deviceIPsMutex       sync.RWMutex                       // 设备IP列表读写锁
-	devicePasswords      map[string]string                  // 设备密码映射 {deviceIP -> password}
-	devicePasswordsMutex sync.RWMutex                       // 设备密码读写锁
-	deviceNames          map[string]string                  // 设备名称映射 {deviceIP -> name}
-	deviceNamesMutex     sync.RWMutex                       // 设备名称读写锁
-	heartbeatStop        chan struct{}                      // 心跳检测停止信号
-	heartbeatRunning     bool                               // 心跳服务运行状态标志
-	heartbeatMutex       sync.Mutex                         // 保护运行状态的互斥锁
+	deviceStatusMap      map[string]*DeviceStatus // 设备状态缓存 {deviceIP -> status}
+	deviceStatusMutex    sync.RWMutex             // 设备状态读写锁
+	deviceIPs            []string                 // 需要监控的设备IP列表
+	deviceIPsMutex       sync.RWMutex             // 设备IP列表读写锁
+	devicePasswords      map[string]string        // 设备密码映射 {deviceIP -> password}
+	devicePasswordsMutex sync.RWMutex             // 设备密码读写锁
+	deviceNames          map[string]string        // 设备名称映射 {deviceIP -> name}
+	deviceNamesMutex     sync.RWMutex             // 设备名称读写锁
+	heartbeatStop        chan struct{}            // 心跳检测停止信号
+	heartbeatRunning     bool                     // 心跳服务运行状态标志
+	heartbeatMutex       sync.Mutex               // 保护运行状态的互斥锁
 	// HTTP客户端（复用连接）
-	httpClient           *http.Client                       // 共享的HTTP客户端，用于设备通信
+	httpClient *http.Client // 共享的HTTP客户端，用于设备通信
 	// 安卓容器列表后台轮询
-	androidCache         map[string]*AndroidDeviceCache     // 安卓容器列表缓存 {deviceIP -> cache}
-	androidCacheMutex    sync.RWMutex                       // 安卓缓存读写锁
-	androidPollRunning   bool                               // 安卓轮询服务运行状态
-	androidPollMutex     sync.Mutex                         // 保护轮询运行状态的互斥锁
+	androidCache       map[string]*AndroidDeviceCache // 安卓容器列表缓存 {deviceIP -> cache}
+	androidCacheMutex  sync.RWMutex                   // 安卓缓存读写锁
+	androidPollRunning bool                           // 安卓轮询服务运行状态
+	androidPollMutex   sync.Mutex                     // 保护轮询运行状态的互斥锁
 	// 安卓容器截图后台轮询
-	screenshotCache       map[string]*ScreenshotEntry        // 截图缓存 {"ip_containerName" -> entry}
-	screenshotVersions    map[string]int64                   // 每台设备的截图版本号 {ip -> UnixMilli}
-	screenshotCacheMutex  sync.RWMutex                       // 截图缓存读写锁
-	screenshotPollRunning bool                               // 截图轮询服务运行状态
-	screenshotPollMutex   sync.Mutex                         // 保护截图轮询运行状态的互斥锁
-	screenshotHTTPClient  *http.Client                       // 截图专用 HTTP Client（连接池复用）
+	screenshotCache       map[string]*ScreenshotEntry // 截图缓存 {"ip_containerName" -> entry}
+	screenshotVersions    map[string]int64            // 每台设备的截图版本号 {ip -> UnixMilli}
+	screenshotCacheMutex  sync.RWMutex                // 截图缓存读写锁
+	screenshotPollRunning bool                        // 截图轮询服务运行状态
+	screenshotPollMutex   sync.Mutex                  // 保护截图轮询运行状态的互斥锁
+	screenshotHTTPClient  *http.Client                // 截图专用 HTTP Client（连接池复用）
 	// OpenCecs 端口映射：deviceIp → map[privatePort]publicPort
 	cecsPortMap      map[string]map[int]int
 	cecsPortMapMutex sync.RWMutex
@@ -148,12 +148,26 @@ type ProjectionConfig struct {
 	UDPPort       int    // UDP端口
 	ControlPort   int    // 控制端口
 	Orient        int    // 默认旋转方向 (0竖屏 1横屏)
-	List          string // 批量控制列表
+	List          string // 批量控制列表 (ip:port#ip:port)
+	AllList       string // 批量/矩阵全控制列表（含主控，ip:port#ip:port，主控切换重置用）
 	Term          string // 窗口标题
 	ContainerID   string // 容器ID
 	ContainerName string // 容器名称
 	Width         int    // 窗口宽度
 	Height        int    // 窗口高度
+
+	// go_legacy 投屏窗口/矩阵参数
+	WinX          int     // 网格 x（像素，0=后端接管/居中）
+	WinY          int     // 网格 y（像素，0=后端接管/居中）
+	WinW          int     // 窗口宽（0=go_legacy默认）
+	WinH          int     // 窗口高（0=go_legacy默认）
+	Scale         float64 // 缩放因子 0.6~1.0（0=不缩放）
+	MatrixRole    int     // 0=普通 1=主控 2=被控
+	MatrixPort    int     // 矩阵UDP监听端口
+	MatrixKey     string  // 批次key（批量/矩阵统一关闭用）
+	MatrixTargets string  // 主控广播目标端口（逗号分隔）
+	Self          string  // 本窗口控制地址 ip:port
+	PrimaryAddr   string  // 主控地址 ip:port（被控侧边栏显示）
 }
 
 // CheckPortOpen 检查本地端口是否开放
@@ -173,10 +187,10 @@ func (a *App) SetWailsApp(app *application.App) {
 	a.wailsApp = app
 	a.projectionWindows = make(map[string]*application.WebviewWindow)
 	a.windowAlwaysOnTop = make(map[string]bool)
-	
+
 	// 初始化日志记录器
 	a.log = &Logger{prefix: "BatchTask"}
-	
+
 	// 初始化批量任务服务
 	configDir, err := os.UserConfigDir()
 	if err != nil {
@@ -184,7 +198,7 @@ func (a *App) SetWailsApp(app *application.App) {
 		return
 	}
 	batchTaskDataDir := filepath.Join(configDir, "edgeclient", "batch_tasks")
-	
+
 	a.BatchTaskService = &BatchTaskService{}
 	if err := a.BatchTaskService.InitBatchTaskService(a, batchTaskDataDir); err != nil {
 		a.log.Error("初始化批量任务服务失败: %v", err)
@@ -302,7 +316,7 @@ func (fi *FlexibleInt) UnmarshalJSON(data []byte) error {
 		*fi = FlexibleInt(i)
 		return nil
 	}
-	
+
 	// 尝试作为字符串解析
 	var s string
 	if err := json.Unmarshal(data, &s); err == nil {
@@ -315,42 +329,42 @@ func (fi *FlexibleInt) UnmarshalJSON(data []byte) error {
 		*fi = FlexibleInt(i)
 		return nil
 	}
-	
+
 	*fi = 0
 	return nil
 }
 
 // AnnouncementData 公告数据结构
 type AnnouncementData struct {
-	AnnouncementID  int         `json:"announcementId"`
-	Title           string      `json:"title"`
-	Content         string      `json:"content"`
-	AnnouncementType string     `json:"announcementType"`
-	DisplayDuration FlexibleInt `json:"displayDuration"`
-	ValidDuration   FlexibleInt `json:"validDuration"`
-	IsPopup         bool        `json:"isPopup"`
-	CreatedAt       string      `json:"createdAt"`
-	ValidUntil      string      `json:"validUntil"`
+	AnnouncementID   int         `json:"announcementId"`
+	Title            string      `json:"title"`
+	Content          string      `json:"content"`
+	AnnouncementType string      `json:"announcementType"`
+	DisplayDuration  FlexibleInt `json:"displayDuration"`
+	ValidDuration    FlexibleInt `json:"validDuration"`
+	IsPopup          bool        `json:"isPopup"`
+	CreatedAt        string      `json:"createdAt"`
+	ValidUntil       string      `json:"validUntil"`
 }
 
 // AnnouncementResponse 公告接口响应结构
 type AnnouncementResponse struct {
-	CodeID  int              `json:"code_id"`
-	Msg     string           `json:"msg"`
-	Data    AnnouncementData `json:"data"` // data为单个对象
+	CodeID int              `json:"code_id"`
+	Msg    string           `json:"msg"`
+	Data   AnnouncementData `json:"data"` // data为单个对象
 }
 
 // GetAnnouncement 获取系统公告
 func (a *App) GetAnnouncement() map[string]interface{} {
 	log.Printf("[GetAnnouncement] 开始获取系统公告...")
-	
+
 	apiURL := "https://newapi.moyunteng.com/api/v1/announcement"
-	
+
 	// 创建HTTP客户端
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
-	
+
 	// 创建GET请求
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
@@ -361,7 +375,7 @@ func (a *App) GetAnnouncement() map[string]interface{} {
 			"data":    nil,
 		}
 	}
-	
+
 	// 发送请求
 	resp, err := client.Do(req)
 	if err != nil {
@@ -373,7 +387,7 @@ func (a *App) GetAnnouncement() map[string]interface{} {
 		}
 	}
 	defer resp.Body.Close()
-	
+
 	// 读取响应
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -384,10 +398,10 @@ func (a *App) GetAnnouncement() map[string]interface{} {
 			"data":    nil,
 		}
 	}
-	
+
 	log.Printf("[GetAnnouncement] 响应状态码: %d", resp.StatusCode)
 	log.Printf("[GetAnnouncement] 响应内容: %s", string(body))
-	
+
 	// 解析JSON响应
 	var result AnnouncementResponse
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -398,7 +412,7 @@ func (a *App) GetAnnouncement() map[string]interface{} {
 			"data":    nil,
 		}
 	}
-	
+
 	// 检查data是否为空（无公告时 announcementId 为 0）
 	if result.Data.AnnouncementID == 0 {
 		log.Printf("[GetAnnouncement] 当前无公告")
@@ -412,7 +426,7 @@ func (a *App) GetAnnouncement() map[string]interface{} {
 	// 取公告数据
 	item := &result.Data
 	log.Printf("[GetAnnouncement] 成功获取公告: title=%s, isPopup=%v", item.Title, item.IsPopup)
-	
+
 	// 返回标准格式
 	return map[string]interface{}{
 		"code_id": result.CodeID,
@@ -1195,7 +1209,7 @@ type VPCHost struct {
 // 全局变量
 var (
 	runningProjections = make(map[string]*os.Process) // key: ip_containerName 组合唯一标识
-	pendingProjections = make(map[string]bool)         // 正在启动中的投屏（解压/查找阶段）
+	pendingProjections = make(map[string]bool)        // 正在启动中的投屏（解压/查找阶段）
 	projectionLock     sync.Mutex
 )
 
@@ -1689,35 +1703,35 @@ func NewApp() *App {
 	// ========== 大规模设备优化 HTTP Client 配置 ==========
 	// 设计目标: 支持 5000+ 设备同时在线
 	// 核心策略: 连接池复用 + Keep-Alive + 并发控制
-	
+
 	transport := &http.Transport{
 		// 连接池配置 - 支持大规模设备
-		MaxIdleConns:        500,            // 全局最大空闲连接数 (支持5000台设备×2个接口)
-		MaxIdleConnsPerHost: 2,                // 每设备保持2个连接 (心跳+存储并发)
-		MaxConnsPerHost:     5,                // 每设备最大并发连接数 (防止单设备占用过多)
+		MaxIdleConns:        500,               // 全局最大空闲连接数 (支持5000台设备×2个接口)
+		MaxIdleConnsPerHost: 2,                 // 每设备保持2个连接 (心跳+存储并发)
+		MaxConnsPerHost:     5,                 // 每设备最大并发连接数 (防止单设备占用过多)
 		IdleConnTimeout:     120 * time.Second, // 空闲连接保持2分钟 (覆盖多轮查询)
-		
+
 		// Keep-Alive 配置 - 避免频繁握手
-		DisableKeepAlives:   false,            // 启用 HTTP Keep-Alive (关键!)
-		
+		DisableKeepAlives: false, // 启用 HTTP Keep-Alive (关键!)
+
 		// TCP 层优化
 		DialContext: (&net.Dialer{
-			Timeout:   5 * time.Second,        // 连接建立超时
-			KeepAlive: 60 * time.Second,       // TCP Keep-Alive 探测间隔
+			Timeout:   5 * time.Second,  // 连接建立超时
+			KeepAlive: 60 * time.Second, // TCP Keep-Alive 探测间隔
 		}).DialContext,
-		
+
 		// 超时配置
 		ResponseHeaderTimeout: 10 * time.Second, // 等待响应头超时
 		ExpectContinueTimeout: 0,                // 禁用 100-Continue（设备端 GoFrame 不响应 100，会导致大文件上传阻塞/异常）
-		
+
 		// 性能优化
-		DisableCompression:    false,          // 启用压缩节省带宽
-		ForceAttemptHTTP2:     false,          // 禁用HTTP/2 (设备只支持HTTP/1.1)
-		
+		DisableCompression: false, // 启用压缩节省带宽
+		ForceAttemptHTTP2:  false, // 禁用HTTP/2 (设备只支持HTTP/1.1)
+
 		// 资源限制
-		MaxResponseHeaderBytes: 4096,          // 限制响应头大小 (4KB足够)
+		MaxResponseHeaderBytes: 4096, // 限制响应头大小 (4KB足够)
 	}
-	
+
 	httpClient := &http.Client{
 		Transport: transport,
 		Timeout:   0, // 不设置全局超时，在每个请求中单独使用 context.WithTimeout
@@ -1737,18 +1751,18 @@ func NewApp() *App {
 	}
 
 	app := &App{
-		imagePullProgress: 0,
-		downloadProgress:  0,
-		RtmpService:       NewRtmpService(),
-		P2PManager:        NewP2PManager(),
-		deviceStatusMap:   make(map[string]*DeviceStatus),
-		deviceNames:       make(map[string]string),
-		deviceIPs:         make([]string, 0),
-		heartbeatStop:     make(chan struct{}),
-		httpClient:        httpClient,            // 初始化共享 HTTP Client
+		imagePullProgress:    0,
+		downloadProgress:     0,
+		RtmpService:          NewRtmpService(),
+		P2PManager:           NewP2PManager(),
+		deviceStatusMap:      make(map[string]*DeviceStatus),
+		deviceNames:          make(map[string]string),
+		deviceIPs:            make([]string, 0),
+		heartbeatStop:        make(chan struct{}),
+		httpClient:           httpClient,           // 初始化共享 HTTP Client
 		screenshotHTTPClient: screenshotHTTPClient, // 截图专用 HTTP Client
 		// 安卓轮询缓存初始化
-		androidCache:       make(map[string]*AndroidDeviceCache),
+		androidCache: make(map[string]*AndroidDeviceCache),
 		// 截图缓存初始化
 		screenshotCache:    make(map[string]*ScreenshotEntry),
 		screenshotVersions: make(map[string]int64),
@@ -1764,12 +1778,12 @@ func (a *App) startup() {
 	if a.RtmpService != nil {
 		a.RtmpService.StartRtmpServer()
 	}
-	
+
 	// 注意：心跳检测服务由前端通过 initDeviceHeartbeat() 启动
 	// 不在这里启动，避免重复启动
 	log.Printf("[启动] App 启动完成，等待前端初始化心跳检测服务")
 
-	// 后台预解压投屏资源(player.exe及其DLL)，避免首次投屏时的长时间等待
+	// 后台预解压投屏资源(go_legacy.exe及其DLL)，避免首次投屏时的长时间等待
 	go func() {
 		start := time.Now()
 		log.Printf("[启动] 开始后台预解压投屏资源...")
@@ -1981,93 +1995,38 @@ func (a *App) getContainerByID(deviceIP string, containerID string, password str
 		if dataList != nil {
 			for _, item := range dataList {
 				if containerMap, ok := item.(map[string]interface{}); ok {
-						id := ""
-						if idVal, ok := containerMap["id"].(string); ok {
-							id = idVal
-						} else if idVal, ok := containerMap["Id"].(string); ok {
-							id = idVal
-						} else if idVal, ok := containerMap["ID"].(string); ok {
-							id = idVal
-						} else if idVal, ok := containerMap["containerId"].(string); ok {
-							id = idVal
-						} else if idVal, ok := containerMap["containerID"].(string); ok {
-							id = idVal
-						}
+					id := ""
+					if idVal, ok := containerMap["id"].(string); ok {
+						id = idVal
+					} else if idVal, ok := containerMap["Id"].(string); ok {
+						id = idVal
+					} else if idVal, ok := containerMap["ID"].(string); ok {
+						id = idVal
+					} else if idVal, ok := containerMap["containerId"].(string); ok {
+						id = idVal
+					} else if idVal, ok := containerMap["containerID"].(string); ok {
+						id = idVal
+					}
 
-						// 优先使用indexNum匹配（最可靠）
-						if indexNumVal, ok := containerMap["indexNum"].(float64); ok {
-							if int(indexNumVal) == containerIndexNum && containerIndexNum > 0 {
-								log.Printf("通过indexNum找到容器: indexNum=%d, id=%s", int(indexNumVal), id)
-								var container Container
-								container.ID = id
-								if ipVal, ok := containerMap["ip"].(string); ok {
-									container.IP = ipVal
-								}
-								if networkNameVal, ok := containerMap["networkName"].(string); ok {
-									container.NetworkName = networkNameVal
-								}
-								if networkModeVal, ok := containerMap["networkMode"].(string); ok {
-									container.NetworkMode = networkModeVal
-								} else if networkModeVal, ok := containerMap["NetworkMode"].(string); ok {
-									container.NetworkMode = networkModeVal
-								} else if networkModeVal, ok := containerMap["network"].(string); ok {
-									container.NetworkMode = networkModeVal
-								}
-
-								// 提取端口信息
-								if portBindings, ok := containerMap["portBindings"].(map[string]interface{}); ok {
-									for portKey, bindings := range portBindings {
-										if bindingsList, ok := bindings.([]interface{}); ok {
-											for _, binding := range bindingsList {
-												if bindingMap, ok := binding.(map[string]interface{}); ok {
-													var port Port
-													if strings.HasSuffix(portKey, "/tcp") {
-														privatePortStr := strings.TrimSuffix(portKey, "/tcp")
-														if privatePort, err := strconv.Atoi(privatePortStr); err == nil {
-															port.PrivatePort = privatePort
-														}
-														port.Type = "tcp"
-													} else if strings.HasSuffix(portKey, "/udp") {
-														privatePortStr := strings.TrimSuffix(portKey, "/udp")
-														if privatePort, err := strconv.Atoi(privatePortStr); err == nil {
-															port.PrivatePort = privatePort
-														}
-														port.Type = "udp"
-													}
-													if hostPort, ok := bindingMap["HostPort"].(string); ok {
-														if publicPort, err := strconv.Atoi(hostPort); err == nil {
-															port.PublicPort = publicPort
-														}
-													}
-													container.Ports = append(container.Ports, port)
-												}
-											}
-										}
-									}
-								}
-
-								return container, nil
-							}
-						}
-
-						// 备选：检查ID或名称是否匹配
-						if id == containerID || id == containerName {
-							log.Printf("通过ID或名称找到容器: id=%s", id)
+					// 优先使用indexNum匹配（最可靠）
+					if indexNumVal, ok := containerMap["indexNum"].(float64); ok {
+						if int(indexNumVal) == containerIndexNum && containerIndexNum > 0 {
+							log.Printf("通过indexNum找到容器: indexNum=%d, id=%s", int(indexNumVal), id)
 							var container Container
 							container.ID = id
-								if ipVal, ok := containerMap["ip"].(string); ok {
-									container.IP = ipVal
-								}
-								if networkNameVal, ok := containerMap["networkName"].(string); ok {
-									container.NetworkName = networkNameVal
-								}
-								if networkModeVal, ok := containerMap["networkMode"].(string); ok {
-									container.NetworkMode = networkModeVal
-								} else if networkModeVal, ok := containerMap["NetworkMode"].(string); ok {
-									container.NetworkMode = networkModeVal
-								} else if networkModeVal, ok := containerMap["network"].(string); ok {
-									container.NetworkMode = networkModeVal
-								}
+							if ipVal, ok := containerMap["ip"].(string); ok {
+								container.IP = ipVal
+							}
+							if networkNameVal, ok := containerMap["networkName"].(string); ok {
+								container.NetworkName = networkNameVal
+							}
+							if networkModeVal, ok := containerMap["networkMode"].(string); ok {
+								container.NetworkMode = networkModeVal
+							} else if networkModeVal, ok := containerMap["NetworkMode"].(string); ok {
+								container.NetworkMode = networkModeVal
+							} else if networkModeVal, ok := containerMap["network"].(string); ok {
+								container.NetworkMode = networkModeVal
+							}
 
 							// 提取端口信息
 							if portBindings, ok := containerMap["portBindings"].(map[string]interface{}); ok {
@@ -2103,62 +2062,117 @@ func (a *App) getContainerByID(deviceIP string, containerID string, password str
 
 							return container, nil
 						}
+					}
 
-						if nameVal, ok := containerMap["name"].(string); ok {
-							if nameVal == containerID || nameVal == containerName {
-								log.Printf("通过name找到容器: name=%s, id=%s", nameVal, id)
-								var container Container
-								container.ID = id
-								if ipVal, ok := containerMap["ip"].(string); ok {
-									container.IP = ipVal
-								}
-								if networkNameVal, ok := containerMap["networkName"].(string); ok {
-									container.NetworkName = networkNameVal
-								}
-								if networkModeVal, ok := containerMap["networkMode"].(string); ok {
-									container.NetworkMode = networkModeVal
-								} else if networkModeVal, ok := containerMap["NetworkMode"].(string); ok {
-									container.NetworkMode = networkModeVal
-								} else if networkModeVal, ok := containerMap["network"].(string); ok {
-									container.NetworkMode = networkModeVal
-								}
+					// 备选：检查ID或名称是否匹配
+					if id == containerID || id == containerName {
+						log.Printf("通过ID或名称找到容器: id=%s", id)
+						var container Container
+						container.ID = id
+						if ipVal, ok := containerMap["ip"].(string); ok {
+							container.IP = ipVal
+						}
+						if networkNameVal, ok := containerMap["networkName"].(string); ok {
+							container.NetworkName = networkNameVal
+						}
+						if networkModeVal, ok := containerMap["networkMode"].(string); ok {
+							container.NetworkMode = networkModeVal
+						} else if networkModeVal, ok := containerMap["NetworkMode"].(string); ok {
+							container.NetworkMode = networkModeVal
+						} else if networkModeVal, ok := containerMap["network"].(string); ok {
+							container.NetworkMode = networkModeVal
+						}
 
-								// 提取端口信息
-								if portBindings, ok := containerMap["portBindings"].(map[string]interface{}); ok {
-									for portKey, bindings := range portBindings {
-										if bindingsList, ok := bindings.([]interface{}); ok {
-											for _, binding := range bindingsList {
-												if bindingMap, ok := binding.(map[string]interface{}); ok {
-													var port Port
-													if strings.HasSuffix(portKey, "/tcp") {
-														privatePortStr := strings.TrimSuffix(portKey, "/tcp")
-														if privatePort, err := strconv.Atoi(privatePortStr); err == nil {
-															port.PrivatePort = privatePort
-														}
-														port.Type = "tcp"
-													} else if strings.HasSuffix(portKey, "/udp") {
-														privatePortStr := strings.TrimSuffix(portKey, "/udp")
-														if privatePort, err := strconv.Atoi(privatePortStr); err == nil {
-															port.PrivatePort = privatePort
-														}
-														port.Type = "udp"
-													}
-													if hostPort, ok := bindingMap["HostPort"].(string); ok {
-														if publicPort, err := strconv.Atoi(hostPort); err == nil {
-															port.PublicPort = publicPort
-														}
-													}
-													container.Ports = append(container.Ports, port)
+						// 提取端口信息
+						if portBindings, ok := containerMap["portBindings"].(map[string]interface{}); ok {
+							for portKey, bindings := range portBindings {
+								if bindingsList, ok := bindings.([]interface{}); ok {
+									for _, binding := range bindingsList {
+										if bindingMap, ok := binding.(map[string]interface{}); ok {
+											var port Port
+											if strings.HasSuffix(portKey, "/tcp") {
+												privatePortStr := strings.TrimSuffix(portKey, "/tcp")
+												if privatePort, err := strconv.Atoi(privatePortStr); err == nil {
+													port.PrivatePort = privatePort
 												}
+												port.Type = "tcp"
+											} else if strings.HasSuffix(portKey, "/udp") {
+												privatePortStr := strings.TrimSuffix(portKey, "/udp")
+												if privatePort, err := strconv.Atoi(privatePortStr); err == nil {
+													port.PrivatePort = privatePort
+												}
+												port.Type = "udp"
+											}
+											if hostPort, ok := bindingMap["HostPort"].(string); ok {
+												if publicPort, err := strconv.Atoi(hostPort); err == nil {
+													port.PublicPort = publicPort
+												}
+											}
+											container.Ports = append(container.Ports, port)
+										}
+									}
+								}
+							}
+						}
+
+						return container, nil
+					}
+
+					if nameVal, ok := containerMap["name"].(string); ok {
+						if nameVal == containerID || nameVal == containerName {
+							log.Printf("通过name找到容器: name=%s, id=%s", nameVal, id)
+							var container Container
+							container.ID = id
+							if ipVal, ok := containerMap["ip"].(string); ok {
+								container.IP = ipVal
+							}
+							if networkNameVal, ok := containerMap["networkName"].(string); ok {
+								container.NetworkName = networkNameVal
+							}
+							if networkModeVal, ok := containerMap["networkMode"].(string); ok {
+								container.NetworkMode = networkModeVal
+							} else if networkModeVal, ok := containerMap["NetworkMode"].(string); ok {
+								container.NetworkMode = networkModeVal
+							} else if networkModeVal, ok := containerMap["network"].(string); ok {
+								container.NetworkMode = networkModeVal
+							}
+
+							// 提取端口信息
+							if portBindings, ok := containerMap["portBindings"].(map[string]interface{}); ok {
+								for portKey, bindings := range portBindings {
+									if bindingsList, ok := bindings.([]interface{}); ok {
+										for _, binding := range bindingsList {
+											if bindingMap, ok := binding.(map[string]interface{}); ok {
+												var port Port
+												if strings.HasSuffix(portKey, "/tcp") {
+													privatePortStr := strings.TrimSuffix(portKey, "/tcp")
+													if privatePort, err := strconv.Atoi(privatePortStr); err == nil {
+														port.PrivatePort = privatePort
+													}
+													port.Type = "tcp"
+												} else if strings.HasSuffix(portKey, "/udp") {
+													privatePortStr := strings.TrimSuffix(portKey, "/udp")
+													if privatePort, err := strconv.Atoi(privatePortStr); err == nil {
+														port.PrivatePort = privatePort
+													}
+													port.Type = "udp"
+												}
+												if hostPort, ok := bindingMap["HostPort"].(string); ok {
+													if publicPort, err := strconv.Atoi(hostPort); err == nil {
+														port.PublicPort = publicPort
+													}
+												}
+												container.Ports = append(container.Ports, port)
 											}
 										}
 									}
 								}
-
-								return container, nil
 							}
+
+							return container, nil
 						}
 					}
+				}
 			}
 		} else {
 			// 尝试识别认证失败
@@ -2824,7 +2838,7 @@ func dockerExec(deviceIP string, dockerPort int, containerID string, cmd []strin
 // stripDockerStreamHeaders 移除 Docker multiplexed stream 的头部并清理输出
 func stripDockerStreamHeaders(data []byte) string {
 	var result []byte
-	
+
 	// Docker stream 格式: [stream_type(1), 0, 0, 0, size(4), payload...]
 	i := 0
 	for i < len(data) {
@@ -2834,35 +2848,35 @@ func stripDockerStreamHeaders(data []byte) string {
 			result = append(result, data[i:]...)
 			break
 		}
-		
+
 		// 读取 stream type (第1字节)
 		// streamType := data[i]
-		
+
 		// 读取 payload size (第5-8字节，大端序)
 		payloadSize := int(data[i+4])<<24 | int(data[i+5])<<16 | int(data[i+6])<<8 | int(data[i+7])
-		
+
 		// 跳过 8 字节头部
 		i += 8
-		
+
 		// 检查是否有足够的数据
 		if i+payloadSize > len(data) {
 			// payload 大小超出剩余数据，可能格式不对，保留原始数据
 			result = append(result, data[i:]...)
 			break
 		}
-		
+
 		// 提取 payload
 		if payloadSize > 0 {
 			result = append(result, data[i:i+payloadSize]...)
 			i += payloadSize
 		}
 	}
-	
+
 	// 如果没有提取到任何数据，可能不是 Docker stream 格式，返回原始数据
 	if len(result) == 0 {
 		result = data
 	}
-	
+
 	// 清理 UTF-8 字符
 	return sanitizeString(string(result))
 }
@@ -2876,14 +2890,14 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 	var opts APKInstallOptions
 	if len(options) > 0 {
 		opts = options[0]
-		log.Printf("[InstallAPK] 安装选项: replace=%v, test=%v, grant=%v, deleteAfterInstall=%v", 
+		log.Printf("[InstallAPK] 安装选项: replace=%v, test=%v, grant=%v, deleteAfterInstall=%v",
 			opts.Replace, opts.Test, opts.Grant, opts.DeleteAfterInstall)
 	} else {
 		// 默认选项：替换、测试、授权（保持向后兼容）
 		opts = APKInstallOptions{
-			Replace: true,
-			Test:    true,
-			Grant:   true,
+			Replace:            true,
+			Test:               true,
+			Grant:              true,
 			DeleteAfterInstall: false,
 		}
 		log.Printf("[InstallAPK] 使用默认安装选项")
@@ -2976,14 +2990,12 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 		}
 	}
 
-
 	// 准备容器内路径
 	fileName := filepath.Base(filePath)
 	uploadPath := "/sdcard/upload/" + fileName
 	// 安装路径使用安全的纯ASCII文件名，避免 sd -c 的 ax shell 无法处理括号/中文等特殊字符
 	safeInstallName := fmt.Sprintf("_install_%d.apk", time.Now().UnixNano())
 	installPath := "/data/local/tmp/" + safeInstallName
-
 
 	// 只复制文件到临时目录，不删除源文件
 	commands := []struct {
@@ -3026,10 +3038,10 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 
 	// ========== 检测文件类型，如果是APK则自动安装 ==========
 	isAPK := strings.HasSuffix(strings.ToLower(fileName), ".apk")
-	
+
 	if isAPK {
 		log.Printf("[InstallAPK] 检测到APK文件，开始自动安装: %s", fileName)
-		
+
 		// 构建安装命令选项
 		var installFlags []string
 		if opts.Replace {
@@ -3041,14 +3053,14 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 		if opts.Grant {
 			installFlags = append(installFlags, "-g") // 自动授权
 		}
-		
+
 		installCmd := fmt.Sprintf("pm install %s %s", strings.Join(installFlags, " "), installPath)
 		log.Printf("[InstallAPK] 执行安装命令: %s", installCmd)
-		
+
 		resultFile := fmt.Sprintf("/data/local/tmp/_install_result_%d.txt", time.Now().UnixNano())
 		scriptFile := fmt.Sprintf("/data/local/tmp/_install_%d.sh", time.Now().UnixNano())
 		installID := fmt.Sprintf("_ID_%d_", time.Now().UnixNano())
-		
+
 		// sd -c 的 ax shell 不支持重定向/&&等操作符
 		// 方案：将安装脚本写入文件，用 sd -c sh 执行脚本
 		// 1) 写入安装脚本（在容器侧直接写，不需要 sd -c）
@@ -3058,18 +3070,18 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 		dockerExec(deviceIP, dockerPort, container.ID,
 			[]string{"sh", "-c", fmt.Sprintf("echo %s | base64 -d > %s && chmod 755 %s", scriptB64, scriptFile, scriptFile)},
 			password, version)
-		
+
 		// 清除旧结果文件
 		dockerExec(deviceIP, dockerPort, container.ID,
 			[]string{"sh", "-c", fmt.Sprintf("rm -f %s", resultFile)}, password, version)
-		
+
 		// 2) 通过 sd -c 执行脚本
 		installResult, err := dockerExec(
 			deviceIP, dockerPort, container.ID,
 			[]string{"sh", "-c", fmt.Sprintf("sd -c 'sh %s'", scriptFile)},
 			password, version,
 		)
-		
+
 		log.Printf("[InstallAPK] 安装命令已发送, dockerExec返回: err=%v, exitCode=%d, stdout=%s", err, installResult.ExitCode, installResult.Stdout)
 
 		// sd -c 返回空输出且无错误，可能是 sd 服务未就绪，等待一下再执行
@@ -3083,33 +3095,33 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 			)
 			log.Printf("[InstallAPK] 重试sd -c返回: err=%v, exitCode=%d, stdout=%s", err, installResult.ExitCode, installResult.Stdout)
 		}
-		
+
 		// sd -c 异步执行，轮询等待结果文件
 		const maxWaitSeconds = 60
 		var installOutput string
-		
+
 		for i := 0; i < maxWaitSeconds; i++ {
 			time.Sleep(2 * time.Second)
-			
+
 			// 在容器内直接读取结果文件（不需要 sd -c，文件在容器文件系统上）
 			readResult, readErr := dockerExec(
 				deviceIP, dockerPort, container.ID,
 				[]string{"sh", "-c", fmt.Sprintf("cat %s 2>/dev/null", resultFile)},
 				password, version,
 			)
-			
+
 			if readErr != nil {
 				log.Printf("[InstallAPK] 读取结果文件失败: %v", readErr)
 				continue
 			}
-			
+
 			readOutput := strings.TrimSpace(readResult.Stdout)
 			if readOutput == "" {
 				// 结果文件还不存在或为空，继续等待
 				log.Printf("[InstallAPK] 等待安装完成... (%d/%ds)", (i+1)*2, maxWaitSeconds*2)
 				continue
 			}
-			
+
 			// verify install id marker
 			if installID != "" && !strings.HasPrefix(readOutput, installID) {
 				log.Printf("[InstallAPK] result id mismatch, waiting... (%d/%ds)", (i+1)*2, maxWaitSeconds*2)
@@ -3128,11 +3140,11 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 			log.Printf("[InstallAPK] install result: %s", installOutput)
 			break
 		}
-		
+
 		// 清理脚本文件
 		dockerExec(deviceIP, dockerPort, container.ID,
 			[]string{"sh", "-c", fmt.Sprintf("rm -f %s", scriptFile)}, password, version)
-		
+
 		// 检查安装结果
 		installFailed := installOutput == "" || strings.Contains(installOutput, "Failure") || !strings.Contains(installOutput, "Success")
 		if installFailed {
@@ -3141,48 +3153,48 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 				failMsg = installOutput
 			}
 			log.Printf("[InstallAPK] 安装失败: exitCode=%d, output=%s, stderr=%s", installResult.ExitCode, installOutput, installResult.Stderr)
-			
+
 			// 清理临时文件和结果文件
-			dockerExec(deviceIP, dockerPort, container.ID, 
+			dockerExec(deviceIP, dockerPort, container.ID,
 				[]string{"sh", "-c", fmt.Sprintf("rm -f %s", resultFile)}, password, version)
-			dockerExec(deviceIP, dockerPort, container.ID, 
-				[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", installPath)}, 
+			dockerExec(deviceIP, dockerPort, container.ID,
+				[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", installPath)},
 				password, version)
-			
+
 			return map[string]interface{}{
-				"success": false,
-				"message": fmt.Sprintf("APK安装失败: %s", failMsg),
+				"success":     false,
+				"message":     fmt.Sprintf("APK安装失败: %s", failMsg),
 				"uploadPath":  uploadPath,
 				"installPath": installPath,
 			}
 		}
-		
+
 		log.Printf("[InstallAPK] APK安装成功: %s", fileName)
-		
+
 		// 清理临时文件和安装结果文件
-		dockerExec(deviceIP, dockerPort, container.ID, 
+		dockerExec(deviceIP, dockerPort, container.ID,
 			[]string{"sh", "-c", fmt.Sprintf("rm -f %s", resultFile)}, password, version)
-		dockerExec(deviceIP, dockerPort, container.ID, 
-			[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", installPath)}, 
+		dockerExec(deviceIP, dockerPort, container.ID,
+			[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", installPath)},
 			password, version)
-		
+
 		// 如果设置了安装后删除，删除上传目录的文件
 		if opts.DeleteAfterInstall {
 			log.Printf("[InstallAPK] 删除安装成功的APK文件: %s", uploadPath)
-			dockerExec(deviceIP, dockerPort, container.ID, 
-				[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", uploadPath)}, 
+			dockerExec(deviceIP, dockerPort, container.ID,
+				[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", uploadPath)},
 				password, version)
 		}
-		
+
 		// 返回安装成功信息
 		return map[string]interface{}{
-			"success":     true,
-			"message":     "APK上传并安装成功",
-			"uploadPath":  uploadPath,  // 上传目录路径 /sdcard/upload/
-			"fileName":    fileName,
-			"localPath":   filePath,
-			"installed":   true,  // 标记已安装
-			"deleted":     opts.DeleteAfterInstall,  // 是否删除了文件
+			"success":    true,
+			"message":    "APK上传并安装成功",
+			"uploadPath": uploadPath, // 上传目录路径 /sdcard/upload/
+			"fileName":   fileName,
+			"localPath":  filePath,
+			"installed":  true,                    // 标记已安装
+			"deleted":    opts.DeleteAfterInstall, // 是否删除了文件
 		}
 	}
 
@@ -3194,24 +3206,24 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 		"installPath": installPath, // 临时安装路径 /data/local/tmp/
 		"fileName":    fileName,
 		"localPath":   filePath, // 本地文件路径
-		"installed":   false,  // 标记未安装（非APK文件）
+		"installed":   false,    // 标记未安装（非APK文件）
 	}
 }
 
 // APKInstallTarget 批量安装APK的目标信息
 type APKInstallTarget struct {
-	DeviceIP      string   `json:"deviceIP"`
-	DeviceVersion string   `json:"deviceVersion"`
-	ContainerID   string   `json:"containerID"`
-	ContainerName string   `json:"containerName"`
-	Password      string   `json:"password"`
+	DeviceIP      string `json:"deviceIP"`
+	DeviceVersion string `json:"deviceVersion"`
+	ContainerID   string `json:"containerID"`
+	ContainerName string `json:"containerName"`
+	Password      string `json:"password"`
 }
 
 // APKInstallOptions 安装选项
 type APKInstallOptions struct {
-	Replace           bool `json:"replace"`            // -r 替换已存在的应用
-	Test              bool `json:"test"`               // -t 允许测试包
-	Grant             bool `json:"grant"`              // -g 授予所有运行时权限
+	Replace            bool `json:"replace"`            // -r 替换已存在的应用
+	Test               bool `json:"test"`               // -t 允许测试包
+	Grant              bool `json:"grant"`              // -g 授予所有运行时权限
 	DeleteAfterInstall bool `json:"deleteAfterInstall"` // 安装后删除上传的文件
 }
 
@@ -3312,8 +3324,8 @@ func (a *App) InstallAPKs(deviceIP string, containerID string, filePath string, 
 		var installResult map[string]interface{}
 		if json.Unmarshal(respBody, &installResult) == nil {
 			result := map[string]interface{}{
-				"success": true,
-				"message": "APK安装包上传成功",
+				"success":       true,
+				"message":       "APK安装包上传成功",
 				"installResult": installResult,
 			}
 			// 尝试从响应中提取安装信息
@@ -3334,7 +3346,7 @@ func (a *App) InstallAPKs(deviceIP string, containerID string, filePath string, 
 // BatchInstallAPK 批量安装APK（并发执行）
 func (a *App) BatchInstallAPK(targets []APKInstallTarget, filePath string, options APKInstallOptions) map[string]interface{} {
 	log.Printf("[BatchInstallAPK] 收到批量安装请求，目标数量: %d, 文件: %s", len(targets), filePath)
-	
+
 	// 验证文件
 	fileInfo, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
@@ -3350,35 +3362,35 @@ func (a *App) BatchInstallAPK(targets []APKInstallTarget, filePath string, optio
 		}
 	}
 	log.Printf("[BatchInstallAPK] 文件验证通过，大小: %d bytes", fileInfo.Size())
-	
+
 	// 并发安装（限制并发数）
 	maxConcurrent := 10
 	semaphore := make(chan struct{}, maxConcurrent)
 	var wg sync.WaitGroup
 	var resultsMutex sync.Mutex
 	results := make([]APKInstallResult, 0, len(targets))
-	
+
 	for i, target := range targets {
 		wg.Add(1)
 		semaphore <- struct{}{} // 获取信号量
-		
+
 		go func(index int, t APKInstallTarget) {
 			defer wg.Done()
 			defer func() { <-semaphore }() // 释放信号量
-			
+
 			startTime := time.Now()
 			log.Printf("[BatchInstallAPK] [%d/%d] 开始处理: %s (%s)", index+1, len(targets), t.DeviceIP, t.ContainerName)
-			
+
 			result := APKInstallResult{
 				DeviceIP:      t.DeviceIP,
 				ContainerName: t.ContainerName,
 				Success:       false,
 			}
-			
+
 			// 调用 InstallAPK（已包含上传+安装逻辑）
 			// 注意: InstallAPK 会自动检测 .apk 文件并安装
 			uploadResult := a.InstallAPK(t.DeviceIP, t.DeviceVersion, t.ContainerID, filePath, t.Password)
-			
+
 			if !uploadResult["success"].(bool) {
 				result.Message = fmt.Sprintf("安装失败: %v", uploadResult["message"])
 				result.Duration = time.Since(startTime).Milliseconds()
@@ -3388,7 +3400,7 @@ func (a *App) BatchInstallAPK(targets []APKInstallTarget, filePath string, optio
 				log.Printf("[BatchInstallAPK] [%d/%d] 安装失败: %s - %s", index+1, len(targets), t.DeviceIP, result.Message)
 				return
 			}
-			
+
 			// 检查是否已安装（InstallAPK 自动安装了）
 			installed, _ := uploadResult["installed"].(bool)
 			if !installed {
@@ -3401,9 +3413,9 @@ func (a *App) BatchInstallAPK(targets []APKInstallTarget, filePath string, optio
 				log.Printf("[BatchInstallAPK] [%d/%d] 错误: %s 不是APK文件", index+1, len(targets), t.DeviceIP)
 				return
 			}
-			
+
 			log.Printf("[BatchInstallAPK] [%d/%d] 安装成功: %s", index+1, len(targets), t.DeviceIP)
-			
+
 			// 可选: 删除上传目录中的文件
 			if options.DeleteAfterInstall {
 				uploadPath, ok := uploadResult["uploadPath"].(string)
@@ -3412,31 +3424,31 @@ func (a *App) BatchInstallAPK(targets []APKInstallTarget, filePath string, optio
 					if t.DeviceVersion == "v3" {
 						dockerPort = 8000
 					}
-					
+
 					container, err := a.getContainerByID(t.DeviceIP, t.ContainerID, t.Password)
 					if err == nil {
 						// 删除上传目录的文件
-						dockerExec(t.DeviceIP, dockerPort, container.ID, 
-							[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", uploadPath)}, 
+						dockerExec(t.DeviceIP, dockerPort, container.ID,
+							[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", uploadPath)},
 							t.Password, t.DeviceVersion)
 						log.Printf("[BatchInstallAPK] [%d/%d] 已删除上传文件: %s", index+1, len(targets), uploadPath)
 					}
 				}
 			}
-			
+
 			result.Success = true
 			result.Message = "安装成功"
 			result.Duration = time.Since(startTime).Milliseconds()
-			
+
 			resultsMutex.Lock()
 			results = append(results, result)
 			resultsMutex.Unlock()
 		}(i, target)
 	}
-	
+
 	// 等待所有任务完成
 	wg.Wait()
-	
+
 	// 统计结果
 	successCount := 0
 	failedCount := 0
@@ -3447,9 +3459,9 @@ func (a *App) BatchInstallAPK(targets []APKInstallTarget, filePath string, optio
 			failedCount++
 		}
 	}
-	
+
 	log.Printf("[BatchInstallAPK] 批量安装完成，成功: %d, 失败: %d", successCount, failedCount)
-	
+
 	return map[string]interface{}{
 		"success":      true,
 		"results":      results,
@@ -3774,7 +3786,7 @@ func (a *App) SelectApkFile() map[string]interface{} {
 		Name string `json:"name"`
 		Size int64  `json:"size"`
 	}
-	
+
 	fileList := make([]FileInfo, 0, len(selections))
 	for _, filePath := range selections {
 		stat, err := os.Stat(filePath)
@@ -3782,7 +3794,7 @@ func (a *App) SelectApkFile() map[string]interface{} {
 			log.Printf("无法获取文件信息: %s, 错误: %v", filePath, err)
 			continue
 		}
-		
+
 		fileList = append(fileList, FileInfo{
 			Path: filePath,
 			Name: filepath.Base(filePath),
@@ -4308,9 +4320,9 @@ func (a *App) InitLLMSession(deviceIP string, embeddingPath string, tokenizerPat
 
 	// 构建请求体
 	requestBody := map[string]string{
-		"embedding_path":  embeddingPath,
-		"tokenizer_path":  tokenizerPath,
-		"system_prompt":   systemPrompt,
+		"embedding_path": embeddingPath,
+		"tokenizer_path": tokenizerPath,
+		"system_prompt":  systemPrompt,
 	}
 
 	jsonData, err := json.Marshal(requestBody)
@@ -4596,7 +4608,7 @@ func (a *App) ChatWithOpenAI(apiKey string, apiBase string, model string, messag
 	// OpenAI API成功响应
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		result["success"] = true
-		
+
 		// 提取回复内容
 		if choices, ok := result["choices"].([]interface{}); ok && len(choices) > 0 {
 			if choice, ok := choices[0].(map[string]interface{}); ok {
@@ -4700,7 +4712,7 @@ func (a *App) ChatWithLocalOpenAIStream(deviceIP string, model string, messages 
 	var usageInfo map[string]interface{}
 	var timingsInfo map[string]interface{} // 添加 timings 信息
 	reader := bufio.NewReader(resp.Body)
-	
+
 	// 用于跟踪 <think> 标签的状态
 	inThinkTag := false
 	var thinkBuffer strings.Builder
@@ -4726,7 +4738,7 @@ func (a *App) ChatWithLocalOpenAIStream(deviceIP string, model string, messages 
 		// 解析 SSE 数据
 		if strings.HasPrefix(line, "data: ") {
 			data := strings.TrimPrefix(line, "data: ")
-			
+
 			var chunk map[string]interface{}
 			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 				log.Printf("[ChatWithLocalOpenAIStream] 解析chunk失败: %v", err)
@@ -4755,15 +4767,15 @@ func (a *App) ChatWithLocalOpenAIStream(deviceIP string, model string, messages 
 							// 实时发送思考过程
 							a.emitEvent("ai-reasoning", reasoningContent)
 						}
-						
+
 						// 提取回复内容
 						if content, ok := delta["content"].(string); ok && content != "" {
 							fullContent.WriteString(content)
-							
+
 							// 实时解析 <think> 标签并分类发送
 							for _, char := range content {
 								charStr := string(char)
-								
+
 								if !inThinkTag && !thinkTagClosed {
 									// 检查是否是 <think> 标签的开始
 									thinkBuffer.WriteString(charStr)
@@ -4814,7 +4826,7 @@ func (a *App) ChatWithLocalOpenAIStream(deviceIP string, model string, messages 
 			}
 		}
 	}
-	
+
 	// 处理剩余的缓冲内容
 	if thinkBuffer.Len() > 0 {
 		remaining := thinkBuffer.String()
@@ -4830,8 +4842,8 @@ func (a *App) ChatWithLocalOpenAIStream(deviceIP string, model string, messages 
 	// 构建最终的内容和思考文本
 	reasoningText := fullReasoning.String()
 	contentText := beforeThinkContent.String() + afterThinkContent.String()
-	
-	log.Printf("[ChatWithLocalOpenAIStream] 接收完成 - 思考: %d字符, 内容: %d字符", 
+
+	log.Printf("[ChatWithLocalOpenAIStream] 接收完成 - 思考: %d字符, 内容: %d字符",
 		len(reasoningText), len(contentText))
 
 	// 发送完成事件
@@ -4839,18 +4851,18 @@ func (a *App) ChatWithLocalOpenAIStream(deviceIP string, model string, messages 
 		"content":   contentText,
 		"reasoning": reasoningText,
 	}
-	
+
 	// 如果有 usage 信息，添加到完成事件中
 	if usageInfo != nil {
 		doneData["usage"] = usageInfo
 	}
-	
+
 	// 如果有 timings 信息，添加到完成事件中
 	if timingsInfo != nil {
 		doneData["timings"] = timingsInfo
 		log.Printf("[ChatWithLocalOpenAIStream] 传递timings到前端: %+v", timingsInfo)
 	}
-	
+
 	a.emitEvent("ai-stream-done", doneData)
 
 	return map[string]interface{}{
@@ -4961,7 +4973,7 @@ func (a *App) ChatWithLocalOpenAI(deviceIP string, model string, messages string
 	// OpenAI API成功响应
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		result["success"] = true
-		
+
 		// 提取回复内容
 		if choices, ok := result["choices"].([]interface{}); ok && len(choices) > 0 {
 			if choice, ok := choices[0].(map[string]interface{}); ok {
@@ -5352,10 +5364,10 @@ func (a *App) GetStoragePath() map[string]interface{} {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return map[string]interface{}{
-			"success":      true,
-			"path":         getDefaultStorageBaseDir(),
-			"isDefault":    true,
-			"defaultPath":  getDefaultStorageBaseDir(),
+			"success":     true,
+			"path":        getDefaultStorageBaseDir(),
+			"isDefault":   true,
+			"defaultPath": getDefaultStorageBaseDir(),
 		}
 	}
 	cfgFile := filepath.Join(configDir, "edgeclient", storageSavePathKey)
@@ -5450,10 +5462,10 @@ func (a *App) ListLocalDirFiles(dirPath string) map[string]interface{} {
 	}
 
 	type fileItem struct {
-		Name string `json:"name"`
-		Path string `json:"path"`
-		IsDir   bool   `json:"isDir"`
-		Size    int64  `json:"size"`
+		Name  string `json:"name"`
+		Path  string `json:"path"`
+		IsDir bool   `json:"isDir"`
+		Size  int64  `json:"size"`
 	}
 
 	var files []fileItem
@@ -5477,10 +5489,10 @@ func (a *App) ListLocalDirFiles(dirPath string) map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"success":  true,
-		"path":     dirPath,
-		"parent":   parent,
-		"files":    files,
+		"success": true,
+		"path":    dirPath,
+		"parent":  parent,
+		"files":   files,
 	}
 }
 
@@ -5740,7 +5752,7 @@ func (a *App) ExportBackupModel(deviceIP, modelName string) map[string]interface
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("[ExportBackupModel] 接口返回错误状态码: %d", resp.StatusCode)
-		
+
 		// 如果是401认证失败，提供更明确的错误信息
 		if resp.StatusCode == 401 {
 			return map[string]interface{}{
@@ -5748,7 +5760,7 @@ func (a *App) ExportBackupModel(deviceIP, modelName string) map[string]interface
 				"message": "认证失败，请检查设备密码是否正确",
 			}
 		}
-		
+
 		return map[string]interface{}{
 			"success": false,
 			"message": fmt.Sprintf("接口返回错误: %d", resp.StatusCode),
@@ -6070,7 +6082,7 @@ func (a *App) DeleteBackupModel(deviceIP, modelName string) map[string]interface
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("[DeleteBackupModel] 接口返回错误状态码: %d", resp.StatusCode)
-		
+
 		// 如果是401认证失败，提供更明确的错误信息
 		if resp.StatusCode == 401 {
 			return map[string]interface{}{
@@ -6078,7 +6090,7 @@ func (a *App) DeleteBackupModel(deviceIP, modelName string) map[string]interface
 				"message": "认证失败，请检查设备密码是否正确",
 			}
 		}
-		
+
 		return map[string]interface{}{
 			"success": false,
 			"message": fmt.Sprintf("接口返回错误: %d, 响应: %s", resp.StatusCode, string(respBody)),
@@ -6204,7 +6216,7 @@ func (a *App) DownloadBackupMachine(deviceIP, machineName string) map[string]int
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("[DownloadBackupMachine] 接口返回错误状态码: %d", resp.StatusCode)
 		respBody, _ := io.ReadAll(resp.Body)
-		
+
 		// 如果是401认证失败，提供更明确的错误信息
 		if resp.StatusCode == 401 {
 			return map[string]interface{}{
@@ -6212,7 +6224,7 @@ func (a *App) DownloadBackupMachine(deviceIP, machineName string) map[string]int
 				"message": "认证失败，请检查设备密码是否正确",
 			}
 		}
-		
+
 		return map[string]interface{}{
 			"success": false,
 			"message": fmt.Sprintf("接口返回错误: %d, 响应: %s", resp.StatusCode, string(respBody)),
@@ -6518,7 +6530,7 @@ func (a *App) ImportBackupMachine(deviceIP, deviceName, machineName string, slot
 	req.ContentLength = int64(body.Len())
 	// 禁用 100-continue（设备端 GoFrame 不响应 100 会导致大文件 body 发送阻塞/异常）
 	req.Header.Set("Expect", "")
-	
+
 	// 添加认证头（如果有密码）
 	if password != "" {
 		req.SetBasicAuth("admin", password)
@@ -7512,9 +7524,9 @@ func (a *App) UpgradeDeviceWithNewAPI(deviceIP interface{}, latestVersion interf
 		finalVer := waitForUpgradeComplete(deviceIPStr, latestVersionStr)
 		return map[string]interface{}{
 			"success":      true,
-			"message":       "SDK包上传成功，设备升级完成",
-			"rawResponse":   string(uploadRespBody),
-			"finalVersion":  finalVer,
+			"message":      "SDK包上传成功，设备升级完成",
+			"rawResponse":  string(uploadRespBody),
+			"finalVersion": finalVer,
 		}
 	}
 
@@ -7555,7 +7567,7 @@ func (a *App) UpgradeDeviceWithNewAPI(deviceIP interface{}, latestVersion interf
 //   - >5000台: 1500并发
 func calculateOptimalConcurrency(deviceCount int) int {
 	cpuCount := runtime.NumCPU()
-	
+
 	switch {
 	case deviceCount <= 10:
 		return deviceCount // 小规模全并发
@@ -7591,13 +7603,13 @@ type BatchUpgradeResult struct {
 // BatchUpgradeDevices 批量升级设备（并发处理）
 func (a *App) BatchUpgradeDevices(devices interface{}) map[string]interface{} {
 	log.Printf("[批量升级] 收到 BatchUpgradeDevices 调用")
-	
+
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("[批量升级] 发生panic: %v", r)
 		}
 	}()
-	
+
 	// ========== 1. 解析设备列表 ==========
 	devicesJSON, err := json.Marshal(devices)
 	if err != nil {
@@ -7607,7 +7619,7 @@ func (a *App) BatchUpgradeDevices(devices interface{}) map[string]interface{} {
 			"message": fmt.Sprintf("解析设备列表失败: %v", err),
 		}
 	}
-	
+
 	var upgradeRequests []BatchUpgradeRequest
 	if err := json.Unmarshal(devicesJSON, &upgradeRequests); err != nil {
 		log.Printf("[批量升级] ❌ 解析设备列表失败: %v", err)
@@ -7616,7 +7628,7 @@ func (a *App) BatchUpgradeDevices(devices interface{}) map[string]interface{} {
 			"message": fmt.Sprintf("解析设备列表失败: %v", err),
 		}
 	}
-	
+
 	if len(upgradeRequests) == 0 {
 		log.Printf("[批量升级] ⚠️ 设备列表为空")
 		return map[string]interface{}{
@@ -7624,7 +7636,7 @@ func (a *App) BatchUpgradeDevices(devices interface{}) map[string]interface{} {
 			"message": "设备列表为空",
 		}
 	}
-	
+
 	log.Printf("[批量升级] 开始批量升级 %d 个设备", len(upgradeRequests))
 
 	// ========== 2. 并发触发设备升级（统一走 GET /server/upgrade） ==========
@@ -7632,35 +7644,35 @@ func (a *App) BatchUpgradeDevices(devices interface{}) map[string]interface{} {
 	maxConcurrency := calculateOptimalConcurrency(len(upgradeRequests))
 
 	log.Printf("[批量升级] 使用 %d 个并发处理 %d 个设备", maxConcurrency, len(upgradeRequests))
-	
+
 	// 创建结果切片和互斥锁
 	results := make([]BatchUpgradeResult, len(upgradeRequests))
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, maxConcurrency)
-	
+
 	// 统计变量
 	var successCount, failCount int32
 	var resultsMutex sync.Mutex
-	
+
 	startTime := time.Now()
-	
+
 	// 🚀 进度追踪(每完成10%输出一次日志,避免5000台设备时日志爆炸)
 	progressInterval := len(upgradeRequests) / 10
 	if progressInterval == 0 {
 		progressInterval = 1
 	}
 	var completedCount int32
-	
+
 	// 并发处理每个设备
 	for i, req := range upgradeRequests {
 		wg.Add(1)
 		go func(index int, request BatchUpgradeRequest) {
 			defer wg.Done()
-			
+
 			// 获取信号量
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-			
+
 			// 触发设备升级（设备自取，无文件上传）
 			taskId := request.TaskID
 			if taskId == "" {
@@ -7683,36 +7695,36 @@ func (a *App) BatchUpgradeDevices(devices interface{}) map[string]interface{} {
 				atomic.AddInt32(&failCount, 1)
 			}
 			resultsMutex.Unlock()
-			
+
 			// 🚀 优化日志输出: 只输出失败的设备和进度节点
 			completed := atomic.AddInt32(&completedCount, 1)
-			
+
 			// 输出失败设备日志
 			if !result.Success {
-				log.Printf("[批量升级] ❌ [%d/%d] 设备 %s 升级失败: %s (错误类型: %s)", 
-					completed, len(upgradeRequests), request.DeviceIP, 
+				log.Printf("[批量升级] ❌ [%d/%d] 设备 %s 升级失败: %s (错误类型: %s)",
+					completed, len(upgradeRequests), request.DeviceIP,
 					result.Message, result.ErrorType)
 			}
-			
+
 			// 每完成10%输出进度日志
-			if int(completed) % progressInterval == 0 || int(completed) == len(upgradeRequests) {
+			if int(completed)%progressInterval == 0 || int(completed) == len(upgradeRequests) {
 				progress := float64(completed) / float64(len(upgradeRequests)) * 100
-				log.Printf("[批量升级] 📊 进度: %.1f%% (%d/%d) | 成功: %d | 失败: %d", 
-					progress, completed, len(upgradeRequests), 
+				log.Printf("[批量升级] 📊 进度: %.1f%% (%d/%d) | 成功: %d | 失败: %d",
+					progress, completed, len(upgradeRequests),
 					atomic.LoadInt32(&successCount), atomic.LoadInt32(&failCount))
 			}
-			
+
 		}(i, req)
 	}
-	
+
 	// 等待所有升级完成
 	wg.Wait()
-	
+
 	totalTime := time.Since(startTime).Seconds()
 	log.Printf("[批量升级] ========== 批量升级完成 ==========")
 	log.Printf("[批量升级] 总耗时: %.2f秒", totalTime)
 	log.Printf("[批量升级] 成功: %d, 失败: %d", successCount, failCount)
-	
+
 	// ========== 4. 刷新成功设备的心跳状态(带重试轮询，等待设备重启恢复) ==========
 	go func() {
 		log.Printf("[批量升级] 开始刷新成功设备的心跳状态(带重试轮询)...")
@@ -7790,7 +7802,7 @@ func (a *App) BatchUpgradeDevices(devices interface{}) map[string]interface{} {
 			log.Printf("[批量升级] ⚠️ %d 台设备在 %v 内未刷新版本(可能仍在重启): %v", len(remaining), maxRetry*retryInterval, remaining)
 		}
 	}()
-	
+
 	// 返回结果
 	return map[string]interface{}{
 		"success":      true,
@@ -7809,7 +7821,7 @@ func (a *App) downloadSDKPackage(version string) (string, error) {
 	updateSDKDir := getUpdateSDKDir()
 	zipFilePath := filepath.Join(updateSDKDir, "myt-sdk.zip")
 	versionFilePath := filepath.Join(updateSDKDir, "myt-sdk.version")
-	
+
 	// 🔧 检查本地是否已存在SDK包
 	if _, err := os.Stat(zipFilePath); err == nil {
 		// SDK包存在,检查版本是否匹配
@@ -7822,30 +7834,30 @@ func (a *App) downloadSDKPackage(version string) (string, error) {
 			log.Printf("[SDK下载] 本地SDK版本(%s)与目标版本(%s)不匹配,需要重新下载", cachedVersion, version)
 		}
 	}
-	
+
 	// 1. 调用API获取下载URL
 	log.Printf("[SDK下载] 获取下载URL，版本: %s", version)
 	sdkURL := fmt.Sprintf("https://newapi.moyunteng.com/api/v1/sdk/download-url?version=%s&filename=myt-sdk.zip&sdk_type=box_sdk", version)
-	
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(sdkURL)
 	if err != nil {
 		return "", fmt.Errorf("获取下载URL失败: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	var sdkResp SDKDownloadResponse
 	if err := json.NewDecoder(resp.Body).Decode(&sdkResp); err != nil {
 		return "", fmt.Errorf("解析下载URL响应失败: %v", err)
 	}
-	
+
 	if sdkResp.CodeID != 200 {
 		return "", fmt.Errorf("获取下载URL失败: %s", sdkResp.Msg)
 	}
-	
+
 	downloadURL := sdkResp.Data.DownloadURL
 	log.Printf("[SDK下载] 下载URL: %s", downloadURL)
-	
+
 	// 2. 下载zip包到updateSDK目录（使用无超时client，避免大文件下载超时）
 	dlClient := &http.Client{}
 	dlResp, err := dlClient.Get(downloadURL)
@@ -7853,22 +7865,22 @@ func (a *App) downloadSDKPackage(version string) (string, error) {
 		return "", fmt.Errorf("下载SDK包失败: %v", err)
 	}
 	defer dlResp.Body.Close()
-	
+
 	out, err := os.Create(zipFilePath)
 	if err != nil {
 		return "", fmt.Errorf("创建SDK包文件失败: %v", err)
 	}
 	defer out.Close()
-	
+
 	if _, err = io.Copy(out, dlResp.Body); err != nil {
 		return "", fmt.Errorf("保存SDK包失败: %v", err)
 	}
-	
+
 	// 🔧 保存版本信息到文件
 	if err := os.WriteFile(versionFilePath, []byte(version), 0644); err != nil {
 		log.Printf("[SDK下载] ⚠️ 保存版本信息失败: %v", err)
 	}
-	
+
 	log.Printf("[SDK下载] ✅ SDK包下载成功: %s (版本: %s)", zipFilePath, version)
 	return zipFilePath, nil
 }
@@ -7876,7 +7888,7 @@ func (a *App) downloadSDKPackage(version string) (string, error) {
 // uploadSDKToDevice 上传SDK包到设备(辅助函数)
 func (a *App) uploadSDKToDevice(deviceIP, password, zipFilePath string) BatchUpgradeResult {
 	uploadURL := fmt.Sprintf("http://%s/server/upgrade/upload", deviceAddr(deviceIP))
-	
+
 	// 打开要上传的文件
 	file, err := os.Open(zipFilePath)
 	if err != nil {
@@ -7887,7 +7899,7 @@ func (a *App) uploadSDKToDevice(deviceIP, password, zipFilePath string) BatchUpg
 		}
 	}
 	defer file.Close()
-	
+
 	// 创建multipart请求
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -7899,7 +7911,7 @@ func (a *App) uploadSDKToDevice(deviceIP, password, zipFilePath string) BatchUpg
 			Message:  fmt.Sprintf("创建multipart请求失败: %v", err),
 		}
 	}
-	
+
 	if _, err = io.Copy(part, file); err != nil {
 		return BatchUpgradeResult{
 			DeviceIP: deviceIP,
@@ -7908,7 +7920,7 @@ func (a *App) uploadSDKToDevice(deviceIP, password, zipFilePath string) BatchUpg
 		}
 	}
 	writer.Close()
-	
+
 	// 创建请求
 	uploadReq, err := http.NewRequest("POST", uploadURL, body)
 	if err != nil {
@@ -7918,15 +7930,15 @@ func (a *App) uploadSDKToDevice(deviceIP, password, zipFilePath string) BatchUpg
 			Message:  fmt.Sprintf("创建上传请求失败: %v", err),
 		}
 	}
-	
+
 	// 设置请求头
 	uploadReq.Header.Set("Content-Type", writer.FormDataContentType())
-	
+
 	// 🔧 添加认证头(处理401)
 	if password != "" {
 		uploadReq.SetBasicAuth("admin", password)
 	}
-	
+
 	// 发送请求
 	uploadClient := &http.Client{Timeout: 120 * time.Second}
 	uploadResp, err := uploadClient.Do(uploadReq)
@@ -7938,7 +7950,7 @@ func (a *App) uploadSDKToDevice(deviceIP, password, zipFilePath string) BatchUpg
 		}
 	}
 	defer uploadResp.Body.Close()
-	
+
 	// 读取响应
 	uploadRespBody, err := io.ReadAll(uploadResp.Body)
 	if err != nil {
@@ -7948,7 +7960,7 @@ func (a *App) uploadSDKToDevice(deviceIP, password, zipFilePath string) BatchUpg
 			Message:  fmt.Sprintf("读取上传响应失败: %v", err),
 		}
 	}
-	
+
 	// 🔧 处理401认证失败
 	if uploadResp.StatusCode == http.StatusUnauthorized {
 		log.Printf("[批量升级] 设备 %s 认证失败(401)", deviceIP)
@@ -7959,11 +7971,11 @@ func (a *App) uploadSDKToDevice(deviceIP, password, zipFilePath string) BatchUpg
 			ErrorType: "auth_required",
 		}
 	}
-	
+
 	// 检查响应状态
 	if uploadResp.StatusCode != http.StatusOK {
 		respStr := string(uploadRespBody)
-		
+
 		// 处理设备空间不足
 		if strings.Contains(strings.ToLower(respStr), "no space left on device") {
 			return BatchUpgradeResult{
@@ -7973,7 +7985,7 @@ func (a *App) uploadSDKToDevice(deviceIP, password, zipFilePath string) BatchUpg
 				ErrorType: "storage_full",
 			}
 		}
-		
+
 		return BatchUpgradeResult{
 			DeviceIP:  deviceIP,
 			Success:   false,
@@ -7981,7 +7993,7 @@ func (a *App) uploadSDKToDevice(deviceIP, password, zipFilePath string) BatchUpg
 			ErrorType: "upload_failed",
 		}
 	}
-	
+
 	// 解析上传响应
 	var uploadResult map[string]interface{}
 	if err := json.Unmarshal(uploadRespBody, &uploadResult); err != nil {
@@ -7992,7 +8004,7 @@ func (a *App) uploadSDKToDevice(deviceIP, password, zipFilePath string) BatchUpg
 			Message:  "SDK包上传成功，设备正在升级中...",
 		}
 	}
-	
+
 	// 检查V3 API响应格式
 	if code, ok := uploadResult["code"].(float64); ok {
 		if code != 0 {
@@ -8007,7 +8019,7 @@ func (a *App) uploadSDKToDevice(deviceIP, password, zipFilePath string) BatchUpg
 			}
 		}
 	}
-	
+
 	return BatchUpgradeResult{
 		DeviceIP: deviceIP,
 		Success:  true,
@@ -10486,21 +10498,21 @@ func (a *App) LoadImageToDevice(deviceIP string, imagePath string, version strin
 
 	// 调用镜像加载逻辑
 	imageName, err := loadImageToDevice(a, deviceIP, version, imagePath, password)
-	
+
 	// 清理上传上下文
 	a.uploadMutex.Lock()
 	a.uploadCancel = nil
 	a.uploadCtx = nil
 	a.uploadMutex.Unlock()
-	
+
 	if err != nil {
 		log.Printf("[IPC] 加载镜像失败: %v", err)
 		// 检查是否是因为取消导致的失败
 		if uploadCtx.Err() == context.Canceled {
 			log.Printf("[IPC] 上传已被取消")
 			return map[string]interface{}{
-				"success": false,
-				"message": "上传已取消",
+				"success":  false,
+				"message":  "上传已取消",
 				"canceled": true,
 			}
 		}
@@ -10544,11 +10556,11 @@ func loadImageToDevice(a *App, deviceIP string, version string, imagePath string
 	a.uploadMutex.Lock()
 	uploadCtx := a.uploadCtx
 	a.uploadMutex.Unlock()
-	
+
 	if uploadCtx != nil && uploadCtx.Err() == context.Canceled {
 		return "", fmt.Errorf("上传已取消")
 	}
-	
+
 	// 参数验证
 	if deviceIP == "" || imagePath == "" {
 		return "", fmt.Errorf("设备IP和镜像路径不能为空")
@@ -10582,12 +10594,12 @@ func loadImageToDevice(a *App, deviceIP string, version string, imagePath string
 			a.uploadMutex.Lock()
 			ctx := a.uploadCtx
 			a.uploadMutex.Unlock()
-			
+
 			if ctx != nil && ctx.Err() == context.Canceled {
 				log.Printf("[上传镜像] 进度回调检测到取消信号")
 				return
 			}
-			
+
 			// 更新全局进度
 			a.progressMutex.Lock()
 			a.imagePullProgress = progress
@@ -11325,7 +11337,7 @@ func (a *App) DownloadImage(metadata interface{}) map[string]interface{} {
 		// 等待一段时间确保旧任务完全停止
 		time.Sleep(500 * time.Millisecond)
 	}
-	
+
 	// 创建新的下载上下文
 	ctx, cancel := context.WithCancel(context.Background())
 	a.downloadCtx = ctx
@@ -11384,7 +11396,7 @@ func (a *App) DownloadImage(metadata interface{}) map[string]interface{} {
 
 	// 创建取消标志位,确保取消日志只输出一次
 	var cancelLogged int32 = 0
-	
+
 	// 设置下载阶段进度回调：原始 progress 0~100 映射到 10%~85%
 	dgetClient.SetProgressCallback(func(progress float64) {
 		// 检查是否已取消
@@ -11503,13 +11515,13 @@ func (a *App) DownloadImage(metadata interface{}) map[string]interface{} {
 
 	// 调用dget库下载镜像，使用目标目录作为工作目录，真实进度会通过回调函数返回
 	log.Printf("[IPC] 开始调用InstallWithTargetDir，参数: registry=%s, pkg=%s, tag=%s, arch=linux/amd64, targetDir=%s", registry, pkg, tag, targetDir)
-	
+
 	// 在goroutine中执行下载，以便可以检测取消信号
 	downloadErr := make(chan error, 1)
 	go func() {
 		downloadErr <- dgetClient.InstallWithTargetDir(3, registry, pkg, tag, "linux/amd64", false, false, "", "", targetDir)
 	}()
-	
+
 	// 等待下载完成或取消
 	select {
 	case <-ctx.Done():
@@ -11713,24 +11725,24 @@ func (a *App) GetDownloadProgress() map[string]interface{} {
 // CancelImageDownload 取消当前的镜像下载任务
 func (a *App) CancelImageDownload() map[string]interface{} {
 	log.Printf("[IPC] 收到取消下载请求")
-	
+
 	a.downloadMutex.Lock()
 	defer a.downloadMutex.Unlock()
-	
+
 	if a.downloadCancel != nil {
 		log.Printf("[IPC] 执行取消下载")
 		a.downloadCancel()
 		a.downloadCancel = nil
 		a.downloadCtx = nil
-		
+
 		// 重置进度
 		a.progressMutex.Lock()
 		a.downloadProgress = 0
 		a.progressMutex.Unlock()
-		
+
 		return map[string]interface{}{"success": true, "message": "下载已取消"}
 	}
-	
+
 	log.Printf("[IPC] 没有正在进行的下载任务")
 	return map[string]interface{}{"success": false, "message": "没有正在进行的下载任务"}
 }
@@ -11738,24 +11750,24 @@ func (a *App) CancelImageDownload() map[string]interface{} {
 // CancelImageUpload 取消当前的镜像上传任务
 func (a *App) CancelImageUpload() map[string]interface{} {
 	log.Printf("[IPC] 收到取消上传请求")
-	
+
 	a.uploadMutex.Lock()
 	defer a.uploadMutex.Unlock()
-	
+
 	if a.uploadCancel != nil {
 		log.Printf("[IPC] 执行取消上传")
 		a.uploadCancel()
 		a.uploadCancel = nil
 		a.uploadCtx = nil
-		
+
 		// 重置进度
 		a.progressMutex.Lock()
 		a.imagePullProgress = 0
 		a.progressMutex.Unlock()
-		
+
 		return map[string]interface{}{"success": true, "message": "上传已取消"}
 	}
-	
+
 	log.Printf("[IPC] 没有正在进行的上传任务")
 	return map[string]interface{}{"success": false, "message": "没有正在进行的上传任务"}
 }
@@ -12291,7 +12303,11 @@ func (a *App) StartProjectionWindow(config ProjectionConfig) map[string]interfac
 
 	// 使用 ip_容器名 作为唯一标识（而不是容器ID）
 	containerName := config.ContainerName
-	if containerName == "" {
+	if config.ContainerID == "batch_control" {
+		// 批量控制主控窗口统一用 batch_control 作窗口标识后缀，
+		// 保证关闭时传 batch_control 能匹配到（否则用容器名导致"投屏窗口不存在"）
+		containerName = "batch_control"
+	} else if containerName == "" {
 		if config.List != "" {
 			containerName = "batch_control"
 		} else if config.ContainerID != "" {
@@ -12300,7 +12316,7 @@ func (a *App) StartProjectionWindow(config ProjectionConfig) map[string]interfac
 			containerName = "unknown"
 		}
 	}
-	
+
 	// 生成唯一的窗口标识：ip_容器名
 	windowID := config.DeviceIP + "_" + containerName
 
@@ -12401,16 +12417,205 @@ func (a *App) StartProjectionWindow(config ProjectionConfig) map[string]interfac
 	}
 }
 
+// matrixBasePort 群控矩阵本地 UDP 端口基址（避开易冲突的业务端口区）
+const matrixBasePort = 50000
+
+// gridMargin 批量投屏网格边距（像素）
+const gridMargin = 2
+
+// gridAspect 批量投屏窗口宽高比（9:16 竖屏）
+const gridAspect = 9.0 / 16.0
+
+// gridLayout 批量投屏网格布局（行列与统一窗口尺寸）
+type gridLayout struct {
+	rows, cols int
+	w, h       int
+}
+
+// calcGridLayout 计算 n 个窗口的网格布局（参考 ArrangeProjectionWindows 的枚举思路）
+// 读取主屏工作区（排除任务栏），枚举列数选窗口面积最大的排布，保证窗口完整落在工作区内
+func calcGridLayout(n int) gridLayout {
+	if n <= 0 {
+		return gridLayout{cols: 1, rows: 1, w: 360, h: 640}
+	}
+	screenW, screenH := getWorkArea()
+	if screenW <= 0 {
+		screenW = 1920
+	}
+	if screenH <= 0 {
+		screenH = 1032 // 1080 - 48 任务栏
+	}
+
+	// 枚举列数，选窗口面积最大且完整落在屏幕内的候选
+	// 竖屏 9:16 窗口：较矮小屏(如1366x768)窗口高度会受限，较宽大屏(如2560x1440)则单行或两行
+	bestArea := -1
+	bestCols := 1
+	bestRows := 1
+	bestW := 0
+	bestH := 0
+	for c := 1; c <= n; c++ {
+		r := (n + c - 1) / c
+		availW := (screenW - (c-1)*gridMargin) / c
+		availH := (screenH - (r-1)*gridMargin) / r
+		winHFromW := int(float64(availW) / gridAspect)
+		winWFromH := int(float64(availH) * gridAspect)
+		var winW, winH int
+		if winWFromH < availW {
+			// 高度受限，用高度推宽度
+			winW, winH = winWFromH, availH
+		} else {
+			// 宽度受限，用宽度推高度
+			winW, winH = availW, winHFromW
+		}
+		if winW <= 0 || winH <= 0 {
+			continue
+		}
+		area := winW * winH
+		if area > bestArea {
+			bestArea = area
+			bestCols = c
+			bestRows = r
+			bestW = winW
+			bestH = winH
+		}
+	}
+	if bestArea <= 0 {
+		fw := 200
+		return gridLayout{rows: n, cols: 1, w: fw, h: int(float64(fw) / gridAspect)}
+	}
+	return gridLayout{rows: bestRows, cols: bestCols, w: bestW, h: bestH}
+}
+
+// cell 返回第 i 个窗口的网格坐标与尺寸（像素）
+func (l gridLayout) cell(i int) (x, y, w, h int) {
+	if l.cols <= 0 {
+		l.cols = 1
+	}
+	if l.rows <= 0 {
+		l.rows = 1
+	}
+	col := i % l.cols
+	row := i / l.cols
+	x = gridMargin + col*(l.w+gridMargin)
+	y = gridMargin + row*(l.h+gridMargin)
+	w = l.w
+	h = l.h
+	return
+}
+
+// StartBatchProjectionWindows 批量投屏：一次启动多个 go_legacy 窗口并排成网格
+// 每个 config 未指定窗口坐标时由后端自动计算网格位置
+func (a *App) StartBatchProjectionWindows(configs []ProjectionConfig) map[string]interface{} {
+	log.Printf("[投屏] 收到 StartBatchProjectionWindows 调用, %d 个窗口", len(configs))
+	if runtime.GOOS != "windows" {
+		return map[string]interface{}{"success": false, "message": "此功能仅支持 Windows 平台"}
+	}
+	if len(configs) == 0 {
+		return map[string]interface{}{"success": false, "message": "没有要打开的投屏"}
+	}
+
+	// 统一关闭 key：ip:port_batch（CloseProjectionWindow 用 batch_control 也能命中）
+	first := configs[0]
+	batchID := fmt.Sprintf("%s:%d_batch", first.DeviceIP, first.ControlPort)
+
+	layout := calcGridLayout(len(configs))
+	results := make([]map[string]interface{}, 0, len(configs))
+	okCount := 0
+	for i := range configs {
+		cfg := configs[i]
+		if cfg.WinX == 0 && cfg.WinY == 0 && cfg.WinW == 0 && cfg.WinH == 0 {
+			cfg.WinX, cfg.WinY, cfg.WinW, cfg.WinH = layout.cell(i)
+		}
+		// 用 batch_ 前缀做 windowID key，便于 CloseProjectionWindow('batch_control') 一次性全杀
+		cfg.ContainerName = fmt.Sprintf("batch_%d", i)
+		if cfg.Term == "" {
+			cfg.Term = fmt.Sprintf("批量投屏 %d", i+1)
+		}
+		cfg.MatrixKey = batchID
+		res := a.StartProjectionWindow(cfg)
+		results = append(results, res)
+		if success, _ := res["success"].(bool); success {
+			okCount++
+		}
+	}
+
+	return map[string]interface{}{
+		"success":  okCount == len(configs),
+		"message":  fmt.Sprintf("批量投屏完成，成功 %d/%d", okCount, len(configs)),
+		"count":    len(configs),
+		"okCount":  okCount,
+		"results":  results,
+		"closeKey": batchID,
+	}
+}
+
+// StartLegacyMatrixProjection 群控矩阵：第 1 个窗口为主控，其余为被控，全部显示画面
+// 主控 -matrixprimary -matrixlisten base -matrixtargets base+1,base+2,...
+// 被控 -matrixlisten base+i -primary 主控地址
+func (a *App) StartLegacyMatrixProjection(configs []ProjectionConfig) map[string]interface{} {
+	log.Printf("[投屏] 收到 StartLegacyMatrixProjection 调用, %d 个窗口", len(configs))
+	if runtime.GOOS != "windows" {
+		return map[string]interface{}{"success": false, "message": "此功能仅支持 Windows 平台"}
+	}
+	if len(configs) < 2 {
+		return map[string]interface{}{"success": false, "message": "群控矩阵至少需要2台容器"}
+	}
+
+	// 主控端口固定用基址，被控依次 base+1, base+2, ...
+	base := matrixBasePort
+	targets := make([]string, 0, len(configs)-1)
+	for j := 1; j < len(configs); j++ {
+		targets = append(targets, strconv.Itoa(base+j))
+	}
+
+	primary := configs[0]
+	primary.MatrixRole = 1
+	primary.MatrixPort = base
+	primary.MatrixTargets = strings.Join(targets, ",")
+	primary.Term = "矩阵主控"
+	primary.ContainerName = "matrix_primary"
+	primary.MatrixKey = fmt.Sprintf("%s:%d_batch", primary.DeviceIP, primary.ControlPort)
+
+	layout := calcGridLayout(len(configs))
+	primary.WinX, primary.WinY, primary.WinW, primary.WinH = layout.cell(0)
+
+	results := make([]map[string]interface{}, 0, len(configs))
+	// 主控先启动（先 listen，被控再连）
+	results = append(results, a.StartProjectionWindow(primary))
+
+	for j := 1; j < len(configs); j++ {
+		cfg := configs[j]
+		cfg.MatrixRole = 2
+		cfg.MatrixPort = base + j
+		cfg.MatrixKey = primary.MatrixKey
+		cfg.PrimaryAddr = fmt.Sprintf("127.0.0.1:%d", base)
+		cfg.ContainerName = fmt.Sprintf("matrix_%d", j)
+		if cfg.Term == "" {
+			cfg.Term = fmt.Sprintf("矩阵被控 %d", j)
+		}
+		cfg.WinX, cfg.WinY, cfg.WinW, cfg.WinH = layout.cell(j)
+		results = append(results, a.StartProjectionWindow(cfg))
+	}
+
+	return map[string]interface{}{
+		"success":   true,
+		"message":   fmt.Sprintf("群控矩阵已启动 %d 个窗口", len(configs)),
+		"count":     len(configs),
+		"results":   results,
+		"matrixKey": primary.MatrixKey,
+	}
+}
+
 func (a *App) startWindowsProjectionProcess(config ProjectionConfig, windowID, windowTitle string) map[string]interface{} {
 	log.Printf("[投屏] ========== 开始处理投屏请求 ==========")
 	log.Printf("[投屏] windowID=%s, IP=%s, 容器=%s", windowID, config.DeviceIP, config.ContainerName)
-	
+
 	projectionLock.Lock()
 	log.Printf("[投屏] 当前runningProjections中有 %d 个进程", len(runningProjections))
 	for key, proc := range runningProjections {
 		log.Printf("[投屏] - %s: PID=%d", key, proc.Pid)
 	}
-	
+
 	if proc, exists := runningProjections[windowID]; exists {
 		log.Printf("[投屏] 找到已存在的进程记录，PID=%d", proc.Pid)
 		if isProcessRunning(proc) {
@@ -12505,16 +12710,66 @@ func (a *App) startWindowsProjectionProcess(config ProjectionConfig, windowID, w
 		}
 	}
 
-	args := []string{
-		"-ip", config.DeviceIP,
-		"-vport", strconv.Itoa(videoPort),
-		"-cport", strconv.Itoa(controlPort),
+	args := []string{"-ip", config.DeviceIP}
+	if videoPort != 0 {
+		args = append(args, "-vport", strconv.Itoa(videoPort))
 	}
+	if controlPort != 0 {
+		args = append(args, "-cport", strconv.Itoa(controlPort))
+	}
+	args = append(args, "-rtsp_tcp")
 	if orient == 1 {
 		args = append(args, "-landscape")
 	}
+	// 统一用受控窗口形态（带标题栏可缩放，兼容批量网格）
+	args = append(args, "-controlled")
+	// 批量控制单窗口模式：-list 指定本次广播的 ip:controlPort 目标列表（# 分隔）
+	// 主窗口显示第一台画面，操作通过 -list 广播到所有目标云机
 	if config.List != "" {
 		args = append(args, "-list", config.List)
+	}
+	// 批量控制全列表：含主控在内的全部控制地址，go_legacy 用于主控切换/重置时重新广播
+	if config.AllList != "" {
+		args = append(args, "-alllist", config.AllList)
+	}
+	// 批量控制主控窗口：-self 标识本窗口自身的控制地址，go_legacy 据以识别主控角色，
+	// 并在侧边栏批量 tab 请求被控云机的实时截图（showpic 缩略图）
+	if config.Self != "" {
+		args = append(args, "-self", config.Self)
+	}
+	if config.Scale != 0 {
+		args = append(args, "-scale", strconv.FormatFloat(config.Scale, 'f', 2, 64))
+	}
+	// 网格窗口尺寸与坐标（后端算好传入）
+	if config.WinW != 0 || config.WinH != 0 {
+		args = append(args, "-winw", strconv.Itoa(config.WinW), "-winh", strconv.Itoa(config.WinH))
+	}
+	if config.WinX != 0 || config.WinY != 0 {
+		args = append(args, "-winx", strconv.Itoa(config.WinX), "-winy", strconv.Itoa(config.WinY))
+	}
+	// 群控矩阵角色
+	switch config.MatrixRole {
+	case 1: // 主控：捕获输入并通过 UDP 广播到被控
+		args = append(args, "-matrixprimary")
+		if config.MatrixPort != 0 {
+			args = append(args, "-matrixlisten", strconv.Itoa(config.MatrixPort))
+		}
+		if config.MatrixTargets != "" {
+			args = append(args, "-matrixtargets", config.MatrixTargets)
+		}
+		if config.Self != "" {
+			args = append(args, "-self", config.Self)
+		}
+	case 2: // 被控：接收主控指令
+		if config.MatrixPort != 0 {
+			args = append(args, "-matrixlisten", strconv.Itoa(config.MatrixPort))
+		}
+		if config.PrimaryAddr != "" {
+			args = append(args, "-primary", config.PrimaryAddr)
+		}
+		if config.Self != "" {
+			args = append(args, "-self", config.Self)
+		}
 	}
 	if term != "" {
 		args = append(args, "-title", term)
@@ -12726,11 +12981,14 @@ func releaseExtractLock(lockFile *os.File, lockPath string) {
 }
 
 func isPlayerExtractReady(dir string) bool {
-	exePath := filepath.Join(dir, "player.exe")
-	readyPath := filepath.Join(dir, ".ready")
-	if st, err := os.Stat(exePath); err == nil && st.Size() > 0 {
-		if _, err := os.Stat(readyPath); err == nil {
-			return true
+	// go_legacy.exe 为当前投屏播放器；同时兼容旧的 player.exe 兜底
+	for _, name := range []string{"go_legacy.exe", "player.exe"} {
+		exePath := filepath.Join(dir, name)
+		readyPath := filepath.Join(dir, ".ready")
+		if st, err := os.Stat(exePath); err == nil && st.Size() > 0 {
+			if _, err := os.Stat(readyPath); err == nil {
+				return true
+			}
 		}
 	}
 	return false
@@ -12738,9 +12996,13 @@ func isPlayerExtractReady(dir string) bool {
 
 func ensureEmbeddedPlayerExtracted() (string, error) {
 	extractStart := time.Now()
-	embeddedExe := "player_dist/player.exe"
+	// 优先 go_legacy.exe（新播放器），其次兼容旧 player.exe
+	embeddedExe := "player_dist/go_legacy.exe"
 	if _, err := fs.Stat(playerAssets, embeddedExe); err != nil {
-		return "", fmt.Errorf("嵌入的 player.exe 不存在，请将 player.exe 放入 player_dist/ 目录并重新构建")
+		embeddedExe = "player_dist/player.exe"
+		if _, err2 := fs.Stat(playerAssets, embeddedExe); err2 != nil {
+			return "", fmt.Errorf("嵌入的 go_legacy.exe 不存在，请将 go_legacy.exe 及 DLL 放入 player_dist/ 目录并重新构建")
+		}
 	}
 
 	hash, err := embeddedPlayerHash()
@@ -12751,7 +13013,7 @@ func ensureEmbeddedPlayerExtracted() (string, error) {
 
 	baseDir := getPlayerExtractRoot()
 	versionDir := getPlayerExtractVersionDir(hash)
-	exePath := filepath.Join(versionDir, "player.exe")
+	exePath := filepath.Join(versionDir, filepath.Base(embeddedExe))
 	readyPath := filepath.Join(versionDir, ".ready")
 
 	if isPlayerExtractReady(versionDir) {
@@ -12865,11 +13127,13 @@ func extractEmbeddedDir(embedRoot, targetDir string) error {
 
 func findPlayerExecutable() (string, error) {
 	// Check local paths FIRST (allows dev override without rebuilding main app)
-	// Search for webview_demo.exe (new) and player.exe (legacy) in local paths
+	// 优先 go_legacy.exe（新播放器），其次兼容旧的 webview_demo.exe / player.exe
 	candidates := []string{}
 
 	if cwd, err := os.Getwd(); err == nil {
 		candidates = append(candidates,
+			filepath.Join(cwd, "player", "go_legacy.exe"),
+			filepath.Join(cwd, "go_legacy.exe"),
 			filepath.Join(cwd, "player", "bin", "webview_demo.exe"),
 			filepath.Join(cwd, "player", "webview_demo.exe"),
 			filepath.Join(cwd, "player", "bin", "player.exe"),
@@ -12881,12 +13145,15 @@ func findPlayerExecutable() (string, error) {
 	if exePath, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exePath)
 		candidates = append(candidates,
+			filepath.Join(exeDir, "player", "go_legacy.exe"),
+			filepath.Join(exeDir, "go_legacy.exe"),
 			filepath.Join(exeDir, "player", "bin", "webview_demo.exe"),
 			filepath.Join(exeDir, "player", "webview_demo.exe"),
 			filepath.Join(exeDir, "player", "bin", "player.exe"),
 			filepath.Join(exeDir, "player", "player.exe"),
 			filepath.Join(exeDir, "player.exe"),
-			filepath.Join(exeDir, "..", "player", "bin", "webview_demo.exe"),
+			filepath.Join(exeDir, "..", "player", "go_legacy.exe"),
+			filepath.Join(exeDir, "..", "player", "..", "player", "bin", "webview_demo.exe"),
 			filepath.Join(exeDir, "..", "player", "player.exe"),
 			filepath.Join(exeDir, "..", "..", "player", "bin", "webview_demo.exe"),
 			filepath.Join(exeDir, "..", "..", "player", "player.exe"),
@@ -12943,26 +13210,22 @@ func findPlayerExecutable() (string, error) {
 				continue
 			}
 			dir := filepath.Join(extractRoot, entry.Name())
-			// 优先找 webview_demo.exe（新版播放器）
-			wvPath := filepath.Join(dir, "webview_demo.exe")
-			if st, err := os.Stat(wvPath); err == nil && st.Size() > 0 {
-				log.Printf("[Player] 使用已解压的投屏程序(兜底): %s", wvPath)
-				return wvPath, nil
-			}
-			// 其次找 player.exe
-			pPath := filepath.Join(dir, "player.exe")
-			if st, err := os.Stat(pPath); err == nil && st.Size() > 0 {
-				log.Printf("[Player] 使用已解压的投屏程序(兜底): %s", pPath)
-				return pPath, nil
+			// 优先找 go_legacy.exe（新播放器），其次 webview_demo.exe，最后 player.exe
+			for _, name := range []string{"go_legacy.exe", "webview_demo.exe", "player.exe"} {
+				cand := filepath.Join(dir, name)
+				if st, err := os.Stat(cand); err == nil && st.Size() > 0 {
+					log.Printf("[Player] 使用已解压的投屏程序(兜底): %s", cand)
+					return cand, nil
+				}
 			}
 		}
 	}
 
 	// 将解压失败的具体原因包含在错误信息中，方便用户反馈
 	if embedErr != nil {
-		return "", fmt.Errorf("未找到投屏程序 player.exe (解压失败: %v)", embedErr)
+		return "", fmt.Errorf("未找到投屏程序 go_legacy.exe (解压失败: %v)", embedErr)
 	}
-	return "", fmt.Errorf("未找到投屏程序 player.exe")
+	return "", fmt.Errorf("未找到投屏程序 go_legacy.exe")
 }
 
 // CloseProjectionWindow 关闭指定投屏窗口
@@ -13026,12 +13289,12 @@ func (a *App) CloseProjectionWindow(windowIDOrContainerID string) map[string]int
 	for id, p := range runningProjections {
 		log.Printf("[投屏] - %s: PID=%d", id, p.Pid)
 	}
-	
+
 	for id, p := range runningProjections {
 		// 支持后缀匹配：ip_batch_control 匹配 batch_control
 		// 或者包含匹配（用于批量投屏控制）
-		if strings.HasSuffix(id, "_"+windowIDOrContainerID) || 
-		   (windowIDOrContainerID == "batch_control" && strings.Contains(id, "批量")) {
+		if strings.HasSuffix(id, "_"+windowIDOrContainerID) ||
+			(windowIDOrContainerID == "batch_control" && strings.Contains(id, "批量")) {
 			if p != nil {
 				log.Printf("[投屏] 找到匹配的进程(模糊匹配)，ID=%s, PID=%d", id, p.Pid)
 				p.Kill()
@@ -13039,6 +13302,15 @@ func (a *App) CloseProjectionWindow(windowIDOrContainerID string) map[string]int
 			delete(runningProjections, id)
 			closedCount++
 			log.Printf("[投屏] 投屏进程已关闭(模糊匹配): %s", id)
+		} else if windowIDOrContainerID == "batch_control" && (strings.Contains(id, "_batch_") || strings.Contains(id, "_matrix_")) {
+			// 批量/矩阵统一关闭：windowID 形如 ip_batch_0 / ip_matrix_primary / ip_matrix_1
+			if p != nil {
+				log.Printf("[投屏] 找到批量/矩阵进程(前缀匹配)，ID=%s, PID=%d", id, p.Pid)
+				p.Kill()
+			}
+			delete(runningProjections, id)
+			closedCount++
+			log.Printf("[投屏] 批量/矩阵进程已关闭: %s", id)
 		}
 	}
 	projectionLock.Unlock()
@@ -13421,7 +13693,7 @@ func (a *App) StartProjection(deviceIP string, containerInfo map[string]interfac
 	}
 
 	log.Printf("[投屏] 投屏进程启动成功，PID=%d, windowID=%s", cmd.Process.Pid, windowID)
-	
+
 	// 记录进程并启动监控
 	projectionLock.Lock()
 	runningProjections[windowID] = cmd.Process
@@ -13675,9 +13947,9 @@ func (a *App) SetDeviceGPS(host string, port int, deviceIP string, language stri
 
 // progressWriter 带进度追踪的 io.Writer 包装器
 type progressWriter struct {
-	writer io.Writer
-	total  int64
-	emit   func(written int64)
+	writer  io.Writer
+	total   int64
+	emit    func(written int64)
 	written int64
 }
 
@@ -13873,8 +14145,10 @@ func (a *App) UploadLLMModel(deviceIP string, filePath string, token string) map
 
 // consumeSSEProgress 消费设备返回的 SSE 流，逐条转发为 import:progress 事件。
 // SSE 行格式：
-//   data: {...json...}
-//   event: progress|complete
+//
+//	data: {...json...}
+//	event: progress|complete
+//
 // 任一阶段成功完成后返回最后一条 data 内容；若流中出现错误或 HTTP 非 2xx，返回 error。
 func (a *App) consumeSSEProgress(resp *http.Response, stage string) (string, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -13934,7 +14208,6 @@ func (a *App) consumeSSEProgress(resp *http.Response, stage string) (string, err
 	return lastData, nil
 }
 
-
 // Logger 简单的日志记录器
 type Logger struct {
 	prefix string
@@ -13957,14 +14230,14 @@ func (l *Logger) Error(format string, args ...interface{}) {
 // ExecuteBatchCommand 立即批量执行命令（前端绑定）
 func (a *App) ExecuteBatchCommand(targets []Target, command string, taskName string) map[string]interface{} {
 	log.Printf("[IPC] 收到 ExecuteBatchCommand 调用: taskName=%s, targets数量=%d", taskName, len(targets))
-	
+
 	if a.BatchTaskService == nil {
 		return map[string]interface{}{
 			"success": false,
 			"message": "批量任务服务未初始化",
 		}
 	}
-	
+
 	history, err := a.BatchTaskService.ExecuteBatchCommand(targets, command, taskName)
 	if err != nil {
 		return map[string]interface{}{
@@ -13972,7 +14245,7 @@ func (a *App) ExecuteBatchCommand(targets []Target, command string, taskName str
 			"message": err.Error(),
 		}
 	}
-	
+
 	return map[string]interface{}{
 		"success": true,
 		"history": history,
@@ -13982,14 +14255,14 @@ func (a *App) ExecuteBatchCommand(targets []Target, command string, taskName str
 // CreateScheduledTask 创建定时任务（前端绑定）
 func (a *App) CreateScheduledTask(task BatchTask) map[string]interface{} {
 	log.Printf("[IPC] 收到 CreateScheduledTask 调用: taskName=%s", task.Name)
-	
+
 	if a.BatchTaskService == nil {
 		return map[string]interface{}{
 			"success": false,
 			"message": "批量任务服务未初始化",
 		}
 	}
-	
+
 	err := a.BatchTaskService.CreateScheduledTask(&task)
 	if err != nil {
 		return map[string]interface{}{
@@ -13997,7 +14270,7 @@ func (a *App) CreateScheduledTask(task BatchTask) map[string]interface{} {
 			"message": err.Error(),
 		}
 	}
-	
+
 	return map[string]interface{}{
 		"success": true,
 		"task":    task,
@@ -14007,14 +14280,14 @@ func (a *App) CreateScheduledTask(task BatchTask) map[string]interface{} {
 // UpdateScheduledTask 更新定时任务（前端绑定）
 func (a *App) UpdateScheduledTask(task BatchTask) map[string]interface{} {
 	log.Printf("[IPC] 收到 UpdateScheduledTask 调用: taskID=%s", task.ID)
-	
+
 	if a.BatchTaskService == nil {
 		return map[string]interface{}{
 			"success": false,
 			"message": "批量任务服务未初始化",
 		}
 	}
-	
+
 	err := a.BatchTaskService.UpdateScheduledTask(&task)
 	if err != nil {
 		return map[string]interface{}{
@@ -14022,7 +14295,7 @@ func (a *App) UpdateScheduledTask(task BatchTask) map[string]interface{} {
 			"message": err.Error(),
 		}
 	}
-	
+
 	return map[string]interface{}{
 		"success": true,
 		"task":    task,
@@ -14032,14 +14305,14 @@ func (a *App) UpdateScheduledTask(task BatchTask) map[string]interface{} {
 // DeleteScheduledTask 删除定时任务（前端绑定）
 func (a *App) DeleteScheduledTask(taskID string) map[string]interface{} {
 	log.Printf("[IPC] 收到 DeleteScheduledTask 调用: taskID=%s", taskID)
-	
+
 	if a.BatchTaskService == nil {
 		return map[string]interface{}{
 			"success": false,
 			"message": "批量任务服务未初始化",
 		}
 	}
-	
+
 	err := a.BatchTaskService.DeleteScheduledTask(taskID)
 	if err != nil {
 		return map[string]interface{}{
@@ -14047,7 +14320,7 @@ func (a *App) DeleteScheduledTask(taskID string) map[string]interface{} {
 			"message": err.Error(),
 		}
 	}
-	
+
 	return map[string]interface{}{
 		"success": true,
 	}
@@ -14056,7 +14329,7 @@ func (a *App) DeleteScheduledTask(taskID string) map[string]interface{} {
 // GetScheduledTasks 获取所有定时任务（前端绑定）
 func (a *App) GetScheduledTasks() map[string]interface{} {
 	log.Printf("[IPC] 收到 GetScheduledTasks 调用")
-	
+
 	if a.BatchTaskService == nil {
 		return map[string]interface{}{
 			"success": false,
@@ -14064,9 +14337,9 @@ func (a *App) GetScheduledTasks() map[string]interface{} {
 			"tasks":   []interface{}{},
 		}
 	}
-	
+
 	tasks := a.BatchTaskService.GetScheduledTasks()
-	
+
 	return map[string]interface{}{
 		"success": true,
 		"tasks":   tasks,
@@ -14076,14 +14349,14 @@ func (a *App) GetScheduledTasks() map[string]interface{} {
 // GetScheduledTask 获取单个定时任务（前端绑定）
 func (a *App) GetScheduledTask(taskID string) map[string]interface{} {
 	log.Printf("[IPC] 收到 GetScheduledTask 调用: taskID=%s", taskID)
-	
+
 	if a.BatchTaskService == nil {
 		return map[string]interface{}{
 			"success": false,
 			"message": "批量任务服务未初始化",
 		}
 	}
-	
+
 	task, err := a.BatchTaskService.GetScheduledTask(taskID)
 	if err != nil {
 		return map[string]interface{}{
@@ -14091,7 +14364,7 @@ func (a *App) GetScheduledTask(taskID string) map[string]interface{} {
 			"message": err.Error(),
 		}
 	}
-	
+
 	return map[string]interface{}{
 		"success": true,
 		"task":    task,
@@ -14101,14 +14374,14 @@ func (a *App) GetScheduledTask(taskID string) map[string]interface{} {
 // SaveCommandTemplate 保存命令模板（前端绑定）
 func (a *App) SaveCommandTemplate(template CommandTemplate) map[string]interface{} {
 	log.Printf("[IPC] 收到 SaveCommandTemplate 调用: templateName=%s", template.Name)
-	
+
 	if a.BatchTaskService == nil {
 		return map[string]interface{}{
 			"success": false,
 			"message": "批量任务服务未初始化",
 		}
 	}
-	
+
 	err := a.BatchTaskService.SaveCommandTemplate(&template)
 	if err != nil {
 		return map[string]interface{}{
@@ -14116,7 +14389,7 @@ func (a *App) SaveCommandTemplate(template CommandTemplate) map[string]interface
 			"message": err.Error(),
 		}
 	}
-	
+
 	return map[string]interface{}{
 		"success":  true,
 		"template": template,
@@ -14126,7 +14399,7 @@ func (a *App) SaveCommandTemplate(template CommandTemplate) map[string]interface
 // GetCommandTemplates 获取所有命令模板（前端绑定）
 func (a *App) GetCommandTemplates() map[string]interface{} {
 	log.Printf("[IPC] 收到 GetCommandTemplates 调用")
-	
+
 	if a.BatchTaskService == nil {
 		return map[string]interface{}{
 			"success":   false,
@@ -14134,9 +14407,9 @@ func (a *App) GetCommandTemplates() map[string]interface{} {
 			"templates": []interface{}{},
 		}
 	}
-	
+
 	templates := a.BatchTaskService.GetCommandTemplates()
-	
+
 	return map[string]interface{}{
 		"success":   true,
 		"templates": templates,
@@ -14146,14 +14419,14 @@ func (a *App) GetCommandTemplates() map[string]interface{} {
 // DeleteCommandTemplate 删除命令模板（前端绑定）
 func (a *App) DeleteCommandTemplate(templateID string) map[string]interface{} {
 	log.Printf("[IPC] 收到 DeleteCommandTemplate 调用: templateID=%s", templateID)
-	
+
 	if a.BatchTaskService == nil {
 		return map[string]interface{}{
 			"success": false,
 			"message": "批量任务服务未初始化",
 		}
 	}
-	
+
 	err := a.BatchTaskService.DeleteCommandTemplate(templateID)
 	if err != nil {
 		return map[string]interface{}{
@@ -14161,7 +14434,7 @@ func (a *App) DeleteCommandTemplate(templateID string) map[string]interface{} {
 			"message": err.Error(),
 		}
 	}
-	
+
 	return map[string]interface{}{
 		"success": true,
 	}
@@ -14170,7 +14443,7 @@ func (a *App) DeleteCommandTemplate(templateID string) map[string]interface{} {
 // GetExecutionHistory 获取执行历史（前端绑定）
 func (a *App) GetExecutionHistory(limit int, offset int) map[string]interface{} {
 	log.Printf("[IPC] 收到 GetExecutionHistory 调用: limit=%d, offset=%d", limit, offset)
-	
+
 	if a.BatchTaskService == nil {
 		return map[string]interface{}{
 			"success": false,
@@ -14179,7 +14452,7 @@ func (a *App) GetExecutionHistory(limit int, offset int) map[string]interface{} 
 			"total":   0,
 		}
 	}
-	
+
 	history, total, err := a.BatchTaskService.GetExecutionHistory(limit, offset)
 	if err != nil {
 		return map[string]interface{}{
@@ -14189,7 +14462,7 @@ func (a *App) GetExecutionHistory(limit int, offset int) map[string]interface{} 
 			"total":   0,
 		}
 	}
-	
+
 	return map[string]interface{}{
 		"success": true,
 		"history": history,
@@ -14200,14 +14473,14 @@ func (a *App) GetExecutionHistory(limit int, offset int) map[string]interface{} 
 // ExportExecutionHistory 导出执行历史（前端绑定）
 func (a *App) ExportExecutionHistory(format string) map[string]interface{} {
 	log.Printf("[IPC] 收到 ExportExecutionHistory 调用: format=%s", format)
-	
+
 	if a.BatchTaskService == nil {
 		return map[string]interface{}{
 			"success": false,
 			"message": "批量任务服务未初始化",
 		}
 	}
-	
+
 	filePath, err := a.BatchTaskService.ExportExecutionHistory(format)
 	if err != nil {
 		return map[string]interface{}{
@@ -14215,7 +14488,7 @@ func (a *App) ExportExecutionHistory(format string) map[string]interface{} {
 			"message": err.Error(),
 		}
 	}
-	
+
 	return map[string]interface{}{
 		"success":  true,
 		"filePath": filePath,
@@ -14265,7 +14538,7 @@ func (a *App) StartBatchImport(backupFileName string, devicesConfig []DeviceSlot
 			"message": err.Error(),
 		}
 	}
-	
+
 	// 保存任务引用以便前端轮询
 	a.currentBatchImportTask = task
 
@@ -14284,9 +14557,9 @@ func (a *App) GetBatchImportProgress() map[string]interface{} {
 			"message": "没有正在进行的任务",
 		}
 	}
-	
+
 	task := a.currentBatchImportTask
-	
+
 	// 序列化 details 数组
 	detailsArray := make([]map[string]interface{}, len(task.Progress.Details))
 	for i, d := range task.Progress.Details {
@@ -14299,7 +14572,7 @@ func (a *App) GetBatchImportProgress() map[string]interface{} {
 			"duration":     d.Duration,
 		}
 	}
-	
+
 	return map[string]interface{}{
 		"success": true,
 		"task_id": task.ID,

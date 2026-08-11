@@ -36,3 +36,14 @@ func findWindowByPidAndTitle(pid int, title string) (WindowHandle, error) {
 func isWindowsProcessRunning(pid int) bool {
 	return false
 }
+
+// getScreenSize 非Windows平台无 GetSystemMetrics，返回默认值
+func getScreenSize() (int, int) {
+	return 1920, 1080
+}
+
+// getWorkArea 非Windows平台无工作区概念，使用 getScreenSize 减去默认任务栏高度
+func getWorkArea() (int, int) {
+	w, h := getScreenSize()
+	return w, h - 48
+}

@@ -1136,7 +1136,7 @@ import { Delete, Refresh, List, HelpFilled, Plus, Download, Calendar, DataAnalys
 import { Events } from '@wailsio/runtime';
 import AddDeviceDialog from './AddDeviceDialog.vue';
 import { SyncAuthorization, UpgradeSDK, BatchUpgradeDevices, GetPhoneVCode, UnbindHost } from '../../bindings/edgeclient/app';
-import { getDevicePassword, startProjection, startProjectionBatchControl } from '../services/api.js';
+import { getDevicePassword, startProjection, startBatchProjection, startProjectionBatchControl } from '../services/api.js';
 
 // 国际化支持
 const { proxy } = getCurrentInstance()
@@ -3027,32 +3027,28 @@ const handleBatchAction = async (action, selectedItems, cardOrientation = null) 
           const customOrient = cardOrientation ? (cardOrientation === 'horizontal' ? 1 : 0) : null
           console.log('[批量投屏] cardOrientation:', cardOrientation, ', customOrient:', customOrient)
           
-          // 执行批量投屏操作，不使用任务队列
-          let successCount = 0
-          let failCount = 0
-          
-          for (const container of projectionContainersToOperate) {
-            try {
-              if (cloudManageMode.value === 'slot' && selectedCloudDevice.value) {
-                // 坑位模式
-                await startProjection({ ip: selectedCloudDevice.value.ip }, container, customOrient)
-              } else {
-                // 批量模式
-                await startProjection({ ip: container.deviceIp }, container, customOrient)
-              }
-              successCount++
-            } catch (error) {
-              console.error(`对云机 ${container.name || container.ID} 打开投屏失败:`, error)
-              failCount++
+          // 执行批量投屏操作：一次批量启动多窗口网格
+          try {
+            const deviceIp = cloudManageMode.value === 'slot'
+              ? (selectedCloudDevice.value?.ip || projectionContainersToOperate[0]?.deviceIp)
+              : (projectionContainersToOperate[0]?.deviceIp)
+            const batchResult = await startBatchProjection(
+              { ip: deviceIp },
+              projectionContainersToOperate,
+              customOrient
+            )
+            const ok = batchResult?.okCount ?? 0
+            const total = projectionContainersToOperate.length
+            if (ok === total) {
+              ElMessage.success(`成功对 ${total} 个云机打开投屏`)
+            } else if (ok > 0) {
+              ElMessage.warning(`成功 ${ok} 个，失败 ${total - ok} 个`)
+            } else {
+              ElMessage.error(batchResult?.message || `批量投屏失败`)
             }
-          }
-          
-          // 显示操作结果
-          if (successCount > 0) {
-            ElMessage.success(`成功对 ${successCount} 个云机打开投屏`)
-          }
-          if (failCount > 0) {
-            ElMessage.warning(`对 ${failCount} 个云机打开投屏失败`)
+          } catch (error) {
+            console.error('批量投屏失败:', error)
+            ElMessage.error(`批量投屏失败: ${error.message || '未知错误'}`)
           }
         } catch (error) {
           if (error === 'cancel') {

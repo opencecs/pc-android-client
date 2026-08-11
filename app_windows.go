@@ -16,8 +16,8 @@ import (
 // ---- 现代 IFileOpenDialog 文件夹选择器 (Vista+) ----
 
 var (
-	ole32  = windows.NewLazySystemDLL("ole32.dll")
-	shell  = windows.NewLazySystemDLL("shell32.dll")
+	ole32 = windows.NewLazySystemDLL("ole32.dll")
+	shell = windows.NewLazySystemDLL("shell32.dll")
 
 	procCoInitializeEx          = ole32.NewProc("CoInitializeEx")
 	procCoUninitialize          = ole32.NewProc("CoUninitialize")
@@ -34,11 +34,11 @@ var (
 )
 
 const (
-	FOS_PICKFOLDERS     = 0x00000020
-	FOS_FORCEFILESYSTEM = 0x00000040
-	SIGDN_FILESYSPATH   = 0x80058000
+	FOS_PICKFOLDERS          = 0x00000020
+	FOS_FORCEFILESYSTEM      = 0x00000040
+	SIGDN_FILESYSPATH        = 0x80058000
 	COINIT_APARTMENTTHREADED = 0x2
-	ERROR_CANCELLED     = 0x800704C7
+	ERROR_CANCELLED          = 0x800704C7
 )
 
 // IFileOpenDialog vtable offsets
@@ -231,6 +231,35 @@ func bringProcessToFront(pid int) error {
 	return bringWindowToFront(hwnd)
 }
 
+// getScreenSize 返回当前主屏尺寸（像素）。SM_CXSCREEN=0, SM_CYSCREEN=1
+func getScreenSize() (int, int) {
+	width, _, _ := procGetSystemMetrics.Call(0)  // SM_CXSCREEN
+	height, _, _ := procGetSystemMetrics.Call(1) // SM_CYSCREEN
+	if width <= 0 || height <= 0 {
+		return 1920, 1080
+	}
+	return int(width), int(height)
+}
+
+// getWorkArea 返回主屏工作区尺寸（像素），排除任务栏等区域
+// SPI_GETWORKAREA=0x0030，返回 RECT 结构（left/top/right/bottom，4 个 LONG）
+func getWorkArea() (int, int) {
+	var rect [4]int32
+	const spiGetWorkArea = 0x0030
+	r1, _, _ := procSystemParametersInfoW.Call(
+		uintptr(spiGetWorkArea),
+		0,
+		uintptr(unsafe.Pointer(&rect[0])),
+		0,
+	)
+	if r1 == 0 || rect[2] <= 0 || rect[3] <= 0 {
+		// 调用失败，回退到全屏尺寸再预留底部 48px 任务栏高度
+		w, h := getScreenSize()
+		return w, h - 48
+	}
+	return int(rect[2] - rect[0]), int(rect[3] - rect[1])
+}
+
 var (
 	user32                     = windows.NewLazySystemDLL("user32.dll")
 	procEnumWindows            = user32.NewProc("EnumWindows")
@@ -240,11 +269,13 @@ var (
 	procShowWindow             = user32.NewProc("ShowWindow")
 	procGetWindowTextLengthW   = user32.NewProc("GetWindowTextLengthW")
 	procGetWindowTextW         = user32.NewProc("GetWindowTextW")
-	
-	kernel32                   = windows.NewLazySystemDLL("kernel32.dll")
-	procOpenProcess            = kernel32.NewProc("OpenProcess")
-	procCloseHandle            = kernel32.NewProc("CloseHandle")
-	procGetExitCodeProcess     = kernel32.NewProc("GetExitCodeProcess")
+	procGetSystemMetrics       = user32.NewProc("GetSystemMetrics")
+	procSystemParametersInfoW  = user32.NewProc("SystemParametersInfoW")
+
+	kernel32               = windows.NewLazySystemDLL("kernel32.dll")
+	procOpenProcess        = kernel32.NewProc("OpenProcess")
+	procCloseHandle        = kernel32.NewProc("CloseHandle")
+	procGetExitCodeProcess = kernel32.NewProc("GetExitCodeProcess")
 )
 
 const (
@@ -257,26 +288,26 @@ func isWindowsProcessRunning(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	
+
 	// 尝试打开进程句柄
 	handle, _, _ := procOpenProcess.Call(
 		uintptr(PROCESS_QUERY_INFORMATION),
 		uintptr(0),
 		uintptr(pid),
 	)
-	
+
 	if handle == 0 {
 		return false
 	}
 	defer procCloseHandle.Call(handle)
-	
+
 	// 检查进程退出码：STILL_ACTIVE (259) 表示进程仍在运行
 	var exitCode uint32
 	ret, _, _ := procGetExitCodeProcess.Call(handle, uintptr(unsafe.Pointer(&exitCode)))
 	if ret == 0 {
 		return false // GetExitCodeProcess 调用失败
 	}
-	
+
 	return exitCode == 259 // STILL_ACTIVE
 }
 

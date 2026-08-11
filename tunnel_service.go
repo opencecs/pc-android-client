@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
@@ -105,7 +106,7 @@ func (a *App) InstallTunnel(deviceIP string, serverAddr string, serverPort int, 
 	// 等待frpc启动并查看日志
 	time.Sleep(3 * time.Second)
 	frpcLog, _ := runSSHCmd(sshClient, "tail -20 /home/user/logs/frpc.log 2>/dev/null || echo no-log")
-		log.Printf("[公网穿透] frpc日志:\n%s", frpcLog)
+	log.Printf("[公网穿透] frpc日志:\n%s", frpcLog)
 
 	// 检查frpc进程是否真正运行（重试3次）
 	frpcRunning := false
@@ -122,6 +123,13 @@ func (a *App) InstallTunnel(deviceIP string, serverAddr string, serverPort int, 
 		return map[string]interface{}{"success": false, "message": "frpc启动失败，可能架构不匹配，请确认frpc为ARM64版本"}
 	}
 	// 查询frps获取实际分配的远程端口
+	// 使用安装时填写的 dashboard 凭据查询，避免复用已安装的 frps 时密码不匹配导致 401
+	if webUser == "" {
+		webUser = "admin"
+	}
+	if webPassword == "" {
+		webPassword = "admin"
+	}
 	remoteAddress := ""
 	webAddress := ""
 	// 代理名称包含设备IP后缀，用于在frps中精确匹配本设备的代理
@@ -132,13 +140,17 @@ func (a *App) InstallTunnel(deviceIP string, serverAddr string, serverPort int, 
 		time.Sleep(2 * time.Second)
 		dashboardURL := fmt.Sprintf("http://%s:7500/api/proxy/tcp", serverAddr)
 		req, _ := http.NewRequest("GET", dashboardURL, nil)
-		req.SetBasicAuth("admin", "admin")
+		req.SetBasicAuth(webUser, webPassword)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			continue
 		}
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		if resp.StatusCode == http.StatusUnauthorized {
+			log.Printf("[公网穿透] frps面板 %s 拒绝访问(401)，管理界面账号密码不匹配，无法获取远程地址", dashboardURL)
+			break
+		}
 		var result struct {
 			Proxies []struct {
 				Name string `json:"name"`
@@ -174,12 +186,59 @@ func (a *App) InstallTunnel(deviceIP string, serverAddr string, serverPort int, 
 		}
 		msg = fmt.Sprintf("公网穿透安装成功，%s", strings.Join(parts, "，"))
 	}
-	return map[string]interface{}{
-		"success":       true,
-		"message":       msg,
-		"remoteAddress": remoteAddress,
-		"webAddress":    webAddress,
+	// 读回设备上实际生效的 frpc 管理界面凭据，保证"Web管理界面"按钮能免密登录
+	realWebUser, realWebPassword := readFrpcWebServerCreds(sshClient)
+	if realWebUser == "" {
+		realWebUser = webUser
 	}
+	if realWebPassword == "" {
+		realWebPassword = webPassword
+	}
+	log.Printf("[公网穿透] 设备 frpc 管理界面凭据: user=%s, password=***", realWebUser)
+	return map[string]interface{}{
+		"success":         true,
+		"message":         msg,
+		"remoteAddress":   remoteAddress,
+		"webAddress":      webAddress,
+		"serverAddr":      serverAddr,
+		"serverPort":      serverPort,
+		"frpcWebUser":     realWebUser,
+		"frpcWebPassword": realWebPassword,
+	}
+}
+
+// readFrpcWebServerCreds 从设备已安装的 frpc.toml 中读取 [webServer] 实际 user/password
+// 用于按钮免密登录设备 frpc 管理界面，兼容历史安装写入的任意密码
+func readFrpcWebServerCreds(client *ssh.Client) (string, string) {
+	output, err := sshExecCommandWithOutput(client, "cat /home/user/frpc.toml 2>/dev/null")
+	if err != nil || strings.TrimSpace(output) == "" {
+		return "", ""
+	}
+	return parseTomlUserPassword(output)
+}
+
+// parseTomlUserPassword 从 TOML 文本中提取 user/password（用于 [webServer] 或分段统一解析）
+func parseTomlUserPassword(toml string) (string, string) {
+	user := ""
+	password := ""
+	scanner := bufio.NewScanner(strings.NewReader(toml))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		key := strings.TrimSpace(strings.SplitN(line, "=", 2)[0])
+		if user == "" && (key == "user") && strings.Contains(line, "=") {
+			val := strings.Trim(strings.TrimSpace(strings.SplitN(line, "=", 2)[1]), `"`)
+			if val != "" {
+				user = val
+			}
+		}
+		if password == "" && (key == "password") && strings.Contains(line, "=") {
+			val := strings.Trim(strings.TrimSpace(strings.SplitN(line, "=", 2)[1]), `"`)
+			if val != "" {
+				password = val
+			}
+		}
+	}
+	return user, password
 }
 
 // UninstallTunnel 卸载公网穿透(frpc)
@@ -504,17 +563,17 @@ func (a *App) InstallTunnelServer(serverIP string, sshUser string, sshPassword s
 
 	// 4. SSH连接到用户服务器
 	sshConfig := &ssh.ClientConfig{
-		User:            sshUser,
+		User: sshUser,
 		Auth: []ssh.AuthMethod{
-				ssh.Password(sshPassword),
-				ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
-					answers := make([]string, len(questions))
-					for i := range answers {
-						answers[i] = sshPassword
-					}
-					return answers, nil
-				}),
-			},
+			ssh.Password(sshPassword),
+			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
+				answers := make([]string, len(questions))
+				for i := range answers {
+					answers[i] = sshPassword
+				}
+				return answers, nil
+			}),
+		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         15 * time.Second,
 	}
@@ -534,14 +593,31 @@ func (a *App) InstallTunnelServer(serverIP string, sshUser string, sshPassword s
 		if strings.TrimSpace(portOutput) != "" {
 			log.Printf("[公网穿透服务端] frps 已在运行且端口 %d 正在监听，跳过重新安装", bindPort)
 			dashboardURL := fmt.Sprintf("http://%s:%d", serverIP, dashboardPort)
+			// 读取服务器上已安装 frps 的真实 dashboard 凭据，避免凭据不匹配导致后续查询 401
+			realUser, realPassword := readFrpsDashboardCreds(sshClient)
+			if realUser == "" {
+				realUser = dashboardUser
+			}
+			if realPassword == "" {
+				realPassword = dashboardPassword
+			}
+			// 若本次输入的密码与服务端当前真实密码不一致，则同步更新服务端密码并重启，
+			// 保证 frpc 与 frps 使用同一套账号密码
+			if realUser != dashboardUser || realPassword != dashboardPassword {
+				log.Printf("[公网穿透服务端] 用户填入的凭据与服务端当前不一致，正在同步更新 frps 凭据")
+				syncFrpsDashboardCreds(sshClient, sshPassword, dashboardUser, dashboardPassword)
+				realUser = dashboardUser
+				realPassword = dashboardPassword
+			}
 			return map[string]interface{}{
-				"success":       true,
-				"message":       fmt.Sprintf("frps 服务端已安装且正在运行，无需重复安装。绑定端口: %d，管理面板: %s", bindPort, dashboardURL),
-				"serverAddr":    serverIP,
-				"bindPort":      bindPort,
-				"dashboardURL":  dashboardURL,
-				"dashboardUser": dashboardUser,
-				"alreadyInstalled": true,
+				"success":           true,
+				"message":           fmt.Sprintf("frps 服务端已安装且正在运行，无需重复安装。绑定端口: %d，管理面板: %s", bindPort, dashboardURL),
+				"serverAddr":        serverIP,
+				"bindPort":          bindPort,
+				"dashboardURL":      dashboardURL,
+				"dashboardUser":     realUser,
+				"dashboardPassword": realPassword,
+				"alreadyInstalled":  true,
 			}
 		}
 	}
@@ -595,7 +671,7 @@ func (a *App) InstallTunnelServer(serverIP string, sshUser string, sshPassword s
 		}
 	}
 
-// 7. 等待启动并验证
+	// 7. 等待启动并验证
 	time.Sleep(3 * time.Second)
 	frspRunning := false
 	for i := 0; i < 3; i++ {
@@ -607,15 +683,15 @@ func (a *App) InstallTunnelServer(serverIP string, sshUser string, sshPassword s
 		}
 	}
 	if !frspRunning {
-			// 输出诊断信息
-			runOutput, _ := sshExecCommandWithOutput(sshClient, fmt.Sprintf("echo '%s' | sudo -S timeout 5 /usr/local/bin/frps -c /etc/frps/frps.toml 2>&1 || true", sshPassword))
-			log.Printf("[公网穿透服务端] 运行frps输出: %s", runOutput)
-			configOutput, _ := sshExecCommandWithOutput(sshClient, "cat /etc/frps/frps.toml")
-			log.Printf("[公网穿透服务端] 配置文件: %s", configOutput)
-			return map[string]interface{}{"success": false, "message": fmt.Sprintf("frps启动失败\n运行输出: %s", strings.TrimSpace(runOutput))}
-		}
+		// 输出诊断信息
+		runOutput, _ := sshExecCommandWithOutput(sshClient, fmt.Sprintf("echo '%s' | sudo -S timeout 5 /usr/local/bin/frps -c /etc/frps/frps.toml 2>&1 || true", sshPassword))
+		log.Printf("[公网穿透服务端] 运行frps输出: %s", runOutput)
+		configOutput, _ := sshExecCommandWithOutput(sshClient, "cat /etc/frps/frps.toml")
+		log.Printf("[公网穿透服务端] 配置文件: %s", configOutput)
+		return map[string]interface{}{"success": false, "message": fmt.Sprintf("frps启动失败\n运行输出: %s", strings.TrimSpace(runOutput))}
+	}
 
-		// 检查端口是否监听
+	// 检查端口是否监听
 	portOutput, _ := sshExecCommandWithOutput(sshClient, fmt.Sprintf("ss -tlnp | grep ':%d '", bindPort))
 	if strings.TrimSpace(portOutput) == "" {
 		log.Printf("[公网穿透服务端] 端口 %d 未监听", bindPort)
@@ -635,6 +711,36 @@ func (a *App) InstallTunnelServer(serverIP string, sshUser string, sshPassword s
 	}
 }
 
+// readFrpsDashboardCreds 从服务器已安装的 frps.toml 中读取真实 dashboard 凭据
+// 用于复用已安装的 frps 服务端时，保证后续查询面板接口能通过鉴权
+func readFrpsDashboardCreds(client *ssh.Client) (string, string) {
+	output, err := sshExecCommandWithOutput(client, "cat /etc/frps/frps.toml 2>/dev/null")
+	if err != nil || strings.TrimSpace(output) == "" {
+		return "", ""
+	}
+	user, password := parseTomlUserPassword(output)
+	log.Printf("[公网穿透服务端] 已读取已安装frps的dashboard凭据: user=%s, password=***", user)
+	return user, password
+}
+
+// syncFrpsDashboardCreds 将 frps.toml 中的 [webServer] 凭据更新为指定值并重启 frps 服务
+// 通过 sed 就地替换 user/password 行，保留配置其余内容；失败时不阻塞主流程
+func syncFrpsDashboardCreds(client *ssh.Client, sshPassword string, newUser string, newPassword string) {
+	escUser := strings.ReplaceAll(newUser, `"`, `\"`)
+	escPass := strings.ReplaceAll(newPassword, `"`, `\"`)
+	cmds := []string{
+		fmt.Sprintf("echo '%s' | sudo -S sed -i '0,/^user\\s*=.*/s//user = \"%s\"/' /etc/frps/frps.toml", sshPassword, escUser),
+		fmt.Sprintf("echo '%s' | sudo -S sed -i '0,/^password\\s*=.*/s//password = \"%s\"/' /etc/frps/frps.toml", sshPassword, escPass),
+	}
+	for _, cmd := range cmds {
+		runSSHCmd(client, cmd)
+	}
+	// 停旧进程并重新拉起：优先 systemd，其次 openrc，最后直接后台启动，确保配置变更生效
+	runSSHCmd(client, fmt.Sprintf("echo '%s' | sudo -S sh -c 'systemctl restart frps 2>/dev/null || rc-service frps restart 2>/dev/null || { killall frps 2>/dev/null; sleep 1; nohup /usr/local/bin/frps -c /etc/frps/frps.toml >/var/log/frps.log 2>&1 & }'", sshPassword))
+	time.Sleep(2 * time.Second)
+	log.Printf("[公网穿透服务端] 已同步 frps 管理凭据: user=%s, password=***", newUser)
+}
+
 // UninstallTunnelServer 卸载公网穿透服务端(frps)
 func (a *App) UninstallTunnelServer(serverIP string, sshUser string, sshPassword string, sshPort int) map[string]interface{} {
 	log.Printf("[公网穿透服务端] 开始卸载: %s", serverIP)
@@ -647,7 +753,7 @@ func (a *App) UninstallTunnelServer(serverIP string, sshUser string, sshPassword
 	}
 
 	sshConfig := &ssh.ClientConfig{
-		User:            sshUser,
+		User: sshUser,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(sshPassword),
 			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {

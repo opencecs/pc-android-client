@@ -26,6 +26,8 @@ import {
   UpdateDevicePasswords,
   StartProjectionWindow,
   CloseProjectionWindow,
+  StartBatchProjectionWindows,
+  StartLegacyMatrixProjection,
   SetDeviceGPS,
   CleanupProjectionWindows,
   CleanupProjectionProcesses,
@@ -811,6 +813,87 @@ async function startProjection(device, containerInfo, customOrient = null) {
 
 // 获取Docker网络列表
 
+// 批量投屏：多台云机各开一个 go_legacy 窗口并排成网格（后端统一算网格坐标）
+async function startBatchProjection(device, containers, customOrient = null) {
+  try {
+    if (!isWindowsPlatform()) {
+      throw new Error('此功能仅支持 Windows 平台');
+    }
+    if (!Array.isArray(containers) || containers.length == 0) {
+      throw new Error('没有要操作的容器');
+    }
+
+    const runningContainers = containers.filter(container => container.status === 'running');
+    if (runningContainers.length == 0) {
+      throw new Error('没有处于运行状态的容器');
+    }
+
+    const baseDeviceIp = (device && device.ip) || runningContainers[0].deviceIp || runningContainers[0].deviceIP || runningContainers[0].ip;
+    if (!baseDeviceIp) {
+      throw new Error('无法获取设备IP');
+    }
+
+    const configs = [];
+    for (const container of runningContainers) {
+      const isMyt = container.NetworkName === 'myt' ||
+        container.NetworkMode === 'myt' ||
+        container.network === 'myt' ||
+        container.networkName === 'myt' ||
+        container.networkMode === 'myt';
+
+      let deviceIP, videoPort, controlPort;
+      if (isMyt && container.ip) {
+        deviceIP = container.ip;
+        videoPort = 10000;
+        controlPort = 10001;
+      } else {
+        deviceIP = container.deviceIp || container.deviceIP || baseDeviceIp;
+        const vport = container.portBindings
+          ? (getMappedPort(container.portBindings, '10000/tcp') || getMappedPort(container.portBindings, '10000/udp'))
+          : 0;
+        const cport = container.portBindings
+          ? (getMappedPort(container.portBindings, '10001/tcp') || getMappedPort(container.portBindings, '10001/udp'))
+          : 0;
+        const portMap = findPortMap(deviceIP || baseDeviceIp);
+        videoPort = (portMap && vport) ? (portMap.get(vport) || vport) : vport;
+        controlPort = (portMap && cport) ? (portMap.get(cport) || cport) : cport;
+        if (deviceIP && deviceIP.includes(':')) deviceIP = deviceIP.split(':')[0];
+      }
+
+      if (!deviceIP || !videoPort || !controlPort) {
+        console.warn('跳过端口信息不完整的容器:', container);
+        continue;
+      }
+
+      const width = parseInt(container.width, 10) || 360;
+      const height = parseInt(container.height, 10) || 640;
+      const name = container.name || container.ID || container.id || 'batch';
+      configs.push({
+        DeviceIP: deviceIP,
+        TCPPort: videoPort,
+        UDPPort: controlPort,
+        ControlPort: controlPort,
+        Orient: customOrient !== null ? customOrient : (width >= height ? 1 : 0),
+        Term: `${name}`,
+        ContainerID: container.ID || container.id || name,
+        ContainerName: name,
+        Width: width,
+        Height: height
+      });
+    }
+
+    if (configs.length == 0) {
+      throw new Error('没有有效的容器列表');
+    }
+
+    const result = await StartBatchProjectionWindows(configs);
+    return result;
+  } catch (error) {
+    console.error('批量投屏失败:', error);
+    throw error;
+  }
+}
+
 async function startProjectionBatchControl(device, containers, term = '批量投屏控制', customOrient = null) {
   try {
     if (!isWindowsPlatform()) {
@@ -825,106 +908,94 @@ async function startProjectionBatchControl(device, containers, term = '批量投
       throw new Error('没有处于运行状态的容器');
     }
 
-    const firstContainer = runningContainers[0];
-    if (!firstContainer) {
-      throw new Error('容器信息不完整');
-    }
+    // 批量控制只打开 1 个投屏窗口（第一台），其余云机通过 -list 单窗广播控制
+    // 同步画面由云机管理页的实时截图网格（后端 500ms 截图缓存 + 前端轮询）展示
+    const primaryContainer = runningContainers[0];
 
-    const baseDeviceIp = (device && device.ip) || firstContainer.deviceIp || firstContainer.deviceIP || firstContainer.ip;
-    if (!baseDeviceIp) {
-      throw new Error('无法获取设备IP');
-    }
-
-    // 判断是否是myt或macvlan网络（使用容器IP直连）
-    const isMytOrMacvlan = firstContainer.NetworkName === 'myt' ||
-      firstContainer.NetworkMode === 'myt' ||
-      firstContainer.network === 'myt' ||
-      firstContainer.networkName === 'myt' ||
-      firstContainer.networkMode === 'myt';
-
-    let videoPort, controlPort;
-    if (isMytOrMacvlan && firstContainer.ip) {
-      // myt/macvlan网络：使用容器IP直连，端口固定为10000和10001
-      videoPort = 10000;
-      controlPort = 10001;
-    } else {
-      // 普通网络：需要端口映射
-      if (!firstContainer.portBindings) {
-        throw new Error('容器端口绑定信息不完整');
-      }
-      videoPort = getMappedPort(firstContainer.portBindings, '10000/tcp') || getMappedPort(firstContainer.portBindings, '10000/udp');
-      controlPort = getMappedPort(firstContainer.portBindings, '10001/tcp') || getMappedPort(firstContainer.portBindings, '10001/udp');
-      // OpenCecs 公网设备：将 HostPort 转换为公网端口
-      const portMap = findPortMap(baseDeviceIp)
-      if (portMap) {
-        videoPort = portMap.get(videoPort) || videoPort
-        controlPort = portMap.get(controlPort) || controlPort
-      }
-    }
-
-    if (!videoPort || !controlPort) {
-      throw new Error('无法获取视频或控制端口');
-    }
-
-    const listItems = [];
-    for (const container of runningContainers) {
-      // 判断当前容器是否是myt/macvlan网络
-      const containerIsMyt = container.NetworkName === 'myt' ||
+    // 解析每台容器的设备IP与端口（myt/macvlan 直连或端口映射）
+    const resolveTarget = (container) => {
+      const isMyt = container.NetworkName === 'myt' ||
         container.NetworkMode === 'myt' ||
         container.network === 'myt' ||
         container.networkName === 'myt' ||
         container.networkMode === 'myt';
 
-      let containerDeviceIp, cport;
-      if (containerIsMyt && container.ip) {
-        // myt/macvlan网络：使用容器IP + 固定端口10001
-        containerDeviceIp = container.ip;
-        cport = 10001;
+      let deviceIP, controlPort;
+      if (isMyt && container.ip) {
+        deviceIP = container.ip;
+        controlPort = 10001;
       } else {
-        // 普通网络：使用设备IP + 端口映射
-        containerDeviceIp = container.deviceIp || container.deviceIP || baseDeviceIp;
-        cport = container.portBindings
+        deviceIP = container.deviceIp || container.deviceIP || container.ip || (device && device.ip);
+        controlPort = container.portBindings
           ? (getMappedPort(container.portBindings, '10001/tcp') || getMappedPort(container.portBindings, '10001/udp'))
           : 0;
-        // OpenCecs 公网设备：解析端口映射并提取纯 IP
-        const portMap = findPortMap(containerDeviceIp)
-        if (portMap && cport) {
-          cport = portMap.get(cport) || cport
+        if (controlPort) {
+          const portMap = findPortMap(deviceIP);
+          if (portMap) controlPort = portMap.get(controlPort) || controlPort;
         }
-        if (containerDeviceIp.includes(':')) {
-          containerDeviceIp = containerDeviceIp.split(':')[0]
-        }
+        if (deviceIP && deviceIP.includes(':')) deviceIP = deviceIP.split(':')[0];
       }
+      if (!deviceIP || !controlPort) return null;
+      return `${deviceIP}:${controlPort}`;
+    };
 
-      if (!containerDeviceIp || !cport) {
-        console.warn('跳过无效的容器:', container);
-        continue;
+    // 解析第一台的完整投屏信息（视频端口等）
+    const baseDeviceIp = (device && device.ip) || primaryContainer.deviceIp || primaryContainer.deviceIP || primaryContainer.ip;
+    const primIsMyt = primaryContainer.NetworkName === 'myt' ||
+      primaryContainer.NetworkMode === 'myt' ||
+      primaryContainer.network === 'myt' ||
+      primaryContainer.networkName === 'myt' ||
+      primaryContainer.networkMode === 'myt';
+
+    let primaryDeviceIp, videoPort, controlPort;
+    if (primIsMyt && primaryContainer.ip) {
+      primaryDeviceIp = primaryContainer.ip;
+      videoPort = 10000;
+      controlPort = 10001;
+    } else {
+      primaryDeviceIp = primaryContainer.deviceIp || primaryContainer.deviceIP || baseDeviceIp;
+      videoPort = primaryContainer.portBindings
+        ? (getMappedPort(primaryContainer.portBindings, '10000/tcp') || getMappedPort(primaryContainer.portBindings, '10000/udp'))
+        : 0;
+      controlPort = primaryContainer.portBindings
+        ? (getMappedPort(primaryContainer.portBindings, '10001/tcp') || getMappedPort(primaryContainer.portBindings, '10001/udp'))
+        : 0;
+      const portMap = findPortMap(primaryDeviceIp || baseDeviceIp);
+      if (portMap) {
+        if (videoPort) videoPort = portMap.get(videoPort) || videoPort;
+        if (controlPort) controlPort = portMap.get(controlPort) || controlPort;
       }
-      listItems.push(`${containerDeviceIp}:${cport}`);
+      if (primaryDeviceIp && primaryDeviceIp.includes(':')) primaryDeviceIp = primaryDeviceIp.split(':')[0];
     }
 
-    if (listItems.length == 0) {
-      throw new Error('没有有效的容器列表');
+    if (!primaryDeviceIp || !videoPort || !controlPort) {
+      throw new Error('无法获取第一台云机的视频或控制端口');
     }
 
-    const width = parseInt(firstContainer.width, 10) || 360;
-    const height = parseInt(firstContainer.height, 10) || 640;
-    // 如果传入了 customOrient，使用自定义值；否则根据宽高自动判断
-    const orient = customOrient !== null ? customOrient : (width >= height ? 1 : 0);
-    const resolvedTerm = term || '批量投屏控制';
+    // -list 广播目标：除第一台自身外的其余运行中云机（ip:controlPort 用 # 分隔）
+    // 参考 go_legacy 集成：BuildCtrlList 排除主控，主控窗口靠 -list + -self 识别主控角色
+    const listTargets = [];
+    for (const container of runningContainers) {
+      if (container === primaryContainer) continue;
+      const target = resolveTarget(container);
+      if (target) listTargets.push(target);
+    }
 
-    // 判断使用哪个IP：myt/macvlan网络使用容器IP，其他使用设备IP
-    let deviceIP = isMytOrMacvlan && firstContainer.ip ? firstContainer.ip : baseDeviceIp;
-    // OpenCecs 公网设备：提取纯 IP
-    if (deviceIP && deviceIP.includes(':')) deviceIP = deviceIP.split(':')[0]
+    const width = parseInt(primaryContainer.width, 10) || 360;
+    const height = parseInt(primaryContainer.height, 10) || 640;
+    const primaryName = primaryContainer.name || primaryContainer.ID || primaryContainer.id || '批量投屏控制';
+    const resolvedTerm = term && term !== '批量投屏控制' ? term : primaryName;
 
     const result = await StartProjectionWindow({
-      DeviceIP: deviceIP,
+      DeviceIP: primaryDeviceIp,
       TCPPort: videoPort,
       UDPPort: controlPort,
       ControlPort: controlPort,
-      Orient: orient,
-      List: listItems.join('#'),
+      Orient: customOrient !== null ? customOrient : (width >= height ? 1 : 0),
+      List: listTargets.join('#'),
+      // AllList 含主控 + 全部被控，供 go_legacy 主控切换/重置时重新广播
+      AllList: [`${primaryDeviceIp}:${controlPort}`, ...listTargets].join('#'),
+      Self: `${primaryDeviceIp}:${controlPort}`,
       Term: resolvedTerm,
       ContainerID: 'batch_control',
       ContainerName: resolvedTerm,
@@ -935,11 +1006,7 @@ async function startProjectionBatchControl(device, containers, term = '批量投
     if (result.success) {
       console.log('批量投屏控制成功:', result);
       if (typeof ElMessage !== 'undefined') {
-        if (result.focused) {
-          ElMessage.info('批量投屏控制窗口已聚焦');
-        } else {
-          ElMessage.success(result.message || '批量投屏控制成功');
-        }
+        ElMessage.success(result.message || '批量投屏控制成功');
       }
     } else {
       console.error('批量投屏控制失败:', result.message);
@@ -953,6 +1020,102 @@ async function startProjectionBatchControl(device, containers, term = '批量投
     console.error('批量投屏控制失败:', error);
     if (typeof ElMessage !== 'undefined') {
       ElMessage.error('批量投屏控制失败: ' + (error.message || '未知错误'));
+    }
+    throw error;
+  }
+}
+
+// 群控矩阵：主控窗口 + 各被控窗口全部显示画面，主控捕获输入广播到被控
+async function startLegacyMatrixProjection(device, containers, customOrient = null) {
+  try {
+    if (!isWindowsPlatform()) {
+      throw new Error('此功能仅支持 Windows 平台');
+    }
+    if (!Array.isArray(containers) || containers.length < 2) {
+      throw new Error('群控矩阵至少需要2台容器');
+    }
+
+    const runningContainers = containers.filter(container => container.status === 'running');
+    if (runningContainers.length < 2) {
+      throw new Error('群控矩阵至少需要2台运行中的容器');
+    }
+
+    const baseDeviceIp = (device && device.ip) || runningContainers[0].deviceIp || runningContainers[0].deviceIP || runningContainers[0].ip;
+    if (!baseDeviceIp) {
+      throw new Error('无法获取设备IP');
+    }
+
+    const configs = [];
+    for (const container of runningContainers) {
+      const isMyt = container.NetworkName === 'myt' ||
+        container.NetworkMode === 'myt' ||
+        container.network === 'myt' ||
+        container.networkName === 'myt' ||
+        container.networkMode === 'myt';
+
+      let deviceIP, videoPort, controlPort;
+      if (isMyt && container.ip) {
+        deviceIP = container.ip;
+        videoPort = 10000;
+        controlPort = 10001;
+      } else {
+        deviceIP = container.deviceIp || container.deviceIP || baseDeviceIp;
+        const vport = container.portBindings
+          ? (getMappedPort(container.portBindings, '10000/tcp') || getMappedPort(container.portBindings, '10000/udp'))
+          : 0;
+        const cport = container.portBindings
+          ? (getMappedPort(container.portBindings, '10001/tcp') || getMappedPort(container.portBindings, '10001/udp'))
+          : 0;
+        const portMap = findPortMap(deviceIP || baseDeviceIp);
+        videoPort = (portMap && vport) ? (portMap.get(vport) || vport) : vport;
+        controlPort = (portMap && cport) ? (portMap.get(cport) || cport) : cport;
+        if (deviceIP && deviceIP.includes(':')) deviceIP = deviceIP.split(':')[0];
+      }
+
+      if (!deviceIP || !videoPort || !controlPort) {
+        console.warn('跳过端口信息不完整的容器:', container);
+        continue;
+      }
+
+      const width = parseInt(container.width, 10) || 360;
+      const height = parseInt(container.height, 10) || 640;
+      const name = container.name || container.ID || container.id || 'matrix';
+      configs.push({
+        DeviceIP: deviceIP,
+        TCPPort: videoPort,
+        UDPPort: controlPort,
+        ControlPort: controlPort,
+        Orient: customOrient !== null ? customOrient : (width >= height ? 1 : 0),
+        ContainerID: container.ID || container.id || name,
+        ContainerName: name,
+        Width: width,
+        Height: height
+      });
+    }
+
+    if (configs.length < 2) {
+      throw new Error('群控矩阵至少需要2台运行中的容器');
+    }
+
+    const result = await StartLegacyMatrixProjection(configs);
+
+    if (result.success) {
+      console.log('群控矩阵启动成功:', result);
+      if (typeof ElMessage !== 'undefined') {
+        ElMessage.success(result.message || '群控矩阵启动成功');
+      }
+    } else {
+      console.error('群控矩阵启动失败:', result.message);
+      if (typeof ElMessage !== 'undefined') {
+        ElMessage.error('群控矩阵启动失败: ' + result.message);
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.error('群控矩阵启动失败:', error);
+    if (typeof ElMessage !== 'undefined') {
+      ElMessage.error('群控矩阵启动失败: ' + (error.message || '未知错误'));
     }
     throw error;
   }
@@ -1697,7 +1860,9 @@ export {
   getVpcProxies,
   getVpcHosts,
   startProjection,
+  startBatchProjection,
   startProjectionBatchControl,
+  startLegacyMatrixProjection,
   stopProjectionBatchControl,
   getDockerNetworks,
   createDockerNetwork,

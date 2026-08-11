@@ -43,7 +43,7 @@ import {
   containersMemoryCache,
 
   startProjection,
-
+  startBatchProjection,
   startProjectionBatchControl,
   stopProjectionBatchControl,
   getDockerNetworks,
@@ -5965,27 +5965,25 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
           const customOrient = cardOrientation ? (cardOrientation === 'horizontal' ? 1 : 0) : null
           console.log('[App.vue 批量投屏] cardOrientation:', cardOrientation, ', customOrient:', customOrient)
           
-          // 执行批量投屏操作，不使用任务队列
-          let successCount = 0
-          let failCount = 0
-          
-          for (const container of projectionContainersToOperate) {
-            try {
-              // 使用容器自身的deviceIp，避免用户切换设备后IP不一致
-              await startProjection({ ip: container.deviceIp || selectedCloudDevice.value?.ip }, container, customOrient)
-              successCount++
-            } catch (error) {
-              console.error(`对云机 ${container.name || container.ID} 打开投屏失败:`, error)
-              failCount++
+          // 执行批量投屏操作：一次批量启动多窗口网格
+          try {
+            const batchResult = await startBatchProjection(
+              { ip: selectedCloudDevice.value?.ip },
+              projectionContainersToOperate,
+              customOrient
+            )
+            const ok = batchResult?.okCount ?? 0
+            const total = projectionContainersToOperate.length
+            if (ok === total) {
+              ElMessage.success(`成功对 ${total} 个云机打开投屏`)
+            } else if (ok > 0) {
+              ElMessage.warning(`成功 ${ok} 个，失败 ${total - ok} 个`)
+            } else {
+              ElMessage.error(batchResult?.message || `批量投屏失败`)
             }
-          }
-          
-          // 显示操作结果
-          if (successCount > 0) {
-            ElMessage.success(`成功对 ${successCount} 个云机打开投屏`)
-          }
-          if (failCount > 0) {
-            ElMessage.warning(`对 ${failCount} 个云机打开投屏失败`)
+          } catch (error) {
+            console.error('批量投屏失败:', error)
+            ElMessage.error(`批量投屏失败: ${error.message || '未知错误'}`)
           }
         } catch (error) {
           if (error === 'cancel') {
