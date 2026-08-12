@@ -270,13 +270,22 @@
             <el-option :label="t('common.list')" value="list"></el-option>
           </el-select>
           <!-- 横竖屏切换按钮 -->
-          <el-button 
-            v-if="layoutMode === 'grid'" 
-            size="small" 
+          <el-button
+            v-if="layoutMode === 'grid'"
+            size="small"
             @click="cardOrientation = cardOrientation === 'vertical' ? 'horizontal' : 'vertical'"
             :title="cardOrientation === 'vertical' ? t('common.switchToHorizontal') : t('common.switchToVertical')"
           >
             {{ cardOrientation === 'vertical' ? t('common.vertical') : t('common.horizontal') }}
+          </el-button>
+          <!-- 投屏设置按钮 -->
+          <el-button
+            size="small"
+            @click="projectionSettingsVisible = true"
+            :title="t('common.projectionSettings')"
+          >
+            <el-icon style="margin-right: 4px;"><Setting /></el-icon>
+            {{ t('common.projectionSettings') }}
           </el-button>
         </el-space>
       </div>
@@ -859,6 +868,55 @@
       <el-button type="primary" @click="confirmCopyMachine">{{ t('common.confirmCopy') }}</el-button>
     </template>
   </el-dialog>
+
+  <!-- 投屏设置对话框：GPU 加速 / 侧边栏开关 -->
+  <el-dialog
+    v-model="projectionSettingsVisible"
+    :title="t('common.projectionSettings')"
+    width="520px"
+    append-to-body
+  >
+    <div class="projection-settings-dialog">
+      <!-- GPU 加速开关 -->
+      <div class="projection-settings-item">
+        <div class="projection-settings-row">
+          <div class="projection-settings-label">
+            <span class="projection-settings-title">{{ t('common.gpuAcceleration') }}</span>
+            <el-switch v-model="projectionSettings.hwaccel" />
+          </div>
+          <div class="projection-settings-desc">{{ t('common.gpuAccelerationDesc') }}</div>
+        </div>
+      </div>
+
+      <!-- 侧边栏开关：打开=显示侧边栏，关闭=关闭侧边栏（传 -nosidebar），默认打开 -->
+      <div class="projection-settings-item">
+        <div class="projection-settings-row">
+          <div class="projection-settings-label">
+            <span class="projection-settings-title">{{ t('common.sidebarSwitch') }}</span>
+            <el-switch v-model="projectionSettings.sidebar" />
+          </div>
+          <div class="projection-settings-desc">{{ t('common.sidebarSwitchDesc') }}</div>
+        </div>
+      </div>
+
+      <!-- 注意事项 -->
+      <el-divider content-position="left">
+        <span style="font-size: 13px; color: #606266;">{{ t('common.projectionNotes') }}</span>
+      </el-divider>
+      <ul class="projection-settings-notes">
+        <li>{{ t('common.projectionNote1') }}</li>
+        <li>{{ t('common.projectionNote2') }}</li>
+        <li>{{ t('common.projectionNote3') }}</li>
+        <li>{{ t('common.projectionNote4') }}</li>
+        <li>{{ t('common.projectionNote5') }}</li>
+        <li>{{ t('common.projectionNote6') }}</li>
+      </ul>
+    </div>
+    <template #footer>
+      <el-button @click="projectionSettingsVisible = false">{{ t('common.close') }}</el-button>
+      <el-button type="primary" @click="saveProjectionSettingsHandler">{{ t('common.save') }}</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -874,7 +932,7 @@ const getDeviceAddr = (ip) => {
 
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue'
 import { ElMessage, ElMessageBox, ElLoading, ElTree, ElSelect, ElOption, ElTable, ElTableColumn, ElCheckbox, ElCheckboxGroup, ElDialog, ElEmpty, ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
-import { Plus, Refresh, VideoCamera, Warning, Loading, ArrowDown, ArrowRight, Rank, Search, InfoFilled } from '@element-plus/icons-vue'
+import { Plus, Refresh, VideoCamera, Warning, Loading, ArrowDown, ArrowRight, Rank, Search, InfoFilled, Setting } from '@element-plus/icons-vue'
 import axios from 'axios'
 import * as api from '../services/api.js'
 import * as cloudMachineFunctions from '../services/cloudMachineFunctions.js'
@@ -922,6 +980,38 @@ const layoutMode = ref('grid') // grid: 网格布局, list: 列表布局
 const cardOrientation = ref('vertical') // vertical: 竖屏, horizontal: 横屏
 const zoomLevel = ref('low') // high, medium, low
 const screenshotScale = ref(80) // 截图缩放比例，25%-150%，默认80%
+
+// 投屏设置：GPU 加速 / 侧边栏开关（持久化，下次投屏生效）
+// - hwaccel: true(默认)=硬解，false=软解
+// - sidebar: true(默认)=显示侧边栏，false=关闭侧边栏（传 -nosidebar）
+const projectionSettingsVisible = ref(false)
+const projectionSettings = ref({ hwaccel: true, sidebar: true })
+// 初始化：从 localStorage 读取
+try {
+  const raw = localStorage.getItem('projectionSettings')
+  if (raw) {
+    const obj = JSON.parse(raw)
+    projectionSettings.value = {
+      hwaccel: obj.hwaccel === false ? false : true,
+      // 兼容旧字段 nosidebar：nosidebar=true 表示关闭侧边栏，即 sidebar=false
+      sidebar: obj.sidebar === false ? false : (obj.nosidebar === true ? false : true)
+    }
+  }
+} catch (e) {
+  console.warn('[CloudManagement] 读取投屏设置失败:', e)
+}
+const saveProjectionSettingsHandler = () => {
+  try {
+    localStorage.setItem('projectionSettings', JSON.stringify({
+      hwaccel: projectionSettings.value.hwaccel === false ? false : true,
+      sidebar: projectionSettings.value.sidebar === false ? false : true
+    }))
+    ElMessage.success(t('common.projectionSettingsSaved'))
+  } catch (e) {
+    ElMessage.error(t('common.projectionSettingsSaveFailed'))
+  }
+  projectionSettingsVisible.value = false
+}
 
 // 云机相关数据
 const instances = ref([]) // 实例列表
@@ -3386,5 +3476,43 @@ onBeforeUnmount(() => {
 
 
 
+
+/* 投屏设置弹窗 */
+.projection-settings-dialog {
+  padding: 0 4px;
+}
+.projection-settings-item {
+  padding: 8px 0;
+}
+.projection-settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.projection-settings-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.projection-settings-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+}
+.projection-settings-desc {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
+}
+.projection-settings-notes {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: #606266;
+  line-height: 1.7;
+}
+.projection-settings-notes li {
+  list-style-type: disc;
+}
 
 </style>

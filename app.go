@@ -168,6 +168,13 @@ type ProjectionConfig struct {
 	MatrixTargets string  // 主控广播目标端口（逗号分隔）
 	Self          string  // 本窗口控制地址 ip:port
 	PrimaryAddr   string  // 主控地址 ip:port（被控侧边栏显示）
+
+	// 投屏设置（前端持久化注入，nil/零值=go_legacy 默认行为）
+	HwAccel       *bool // GPU 硬件加速开关；nil=默认(硬解)，false=软解，true=硬解
+	NoSidebar     bool  // 禁用 WebView2 侧边栏（省约 900MB/窗口内存）
+
+	// 设备 API 端口（MYTOS API，短信/剪贴板等；0=禁用，go_legacy 默认）
+	ApiPort       int // myt 网络填 9082；普通网络填端口映射后的 9082 HostPort
 }
 
 // CheckPortOpen 检查本地端口是否开放
@@ -12770,6 +12777,18 @@ func (a *App) startWindowsProjectionProcess(config ProjectionConfig, windowID, w
 		if config.Self != "" {
 			args = append(args, "-self", config.Self)
 		}
+	}
+	// 投屏设置：GPU 加速开关（nil=默认硬解，false=软解）
+	if config.HwAccel != nil {
+		args = append(args, "-hwaccel="+strconv.FormatBool(*config.HwAccel))
+	}
+	// 投屏设置：禁用 WebView2 侧边栏（省约 900MB/窗口内存，且无黑边）
+	if config.NoSidebar {
+		args = append(args, "-nosidebar")
+	}
+	// 设备 API 端口（MYTOS API，短信/剪贴板等；0=禁用）
+	if config.ApiPort != 0 {
+		args = append(args, "-apiport", strconv.Itoa(config.ApiPort))
 	}
 	if term != "" {
 		args = append(args, "-title", term)

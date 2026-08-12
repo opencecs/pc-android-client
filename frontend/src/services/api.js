@@ -770,7 +770,7 @@ async function startProjection(device, containerInfo, customOrient = null) {
     // OpenCecs 公网设备：提取纯 IP
     if (deviceIP && deviceIP.includes(':')) deviceIP = deviceIP.split(':')[0]
 
-    const result = await StartProjectionWindow({
+    const result = await StartProjectionWindow(applyProjectionSettings({
       DeviceIP: deviceIP,
       TCPPort: tcpPort,
       UDPPort: isWindows ? controlPort : udpPort,
@@ -780,8 +780,9 @@ async function startProjection(device, containerInfo, customOrient = null) {
       ContainerID: containerID,
       ContainerName: containerName,
       Width: width,
-      Height: height
-    });
+      Height: height,
+      ApiPort: resolveApiPort(containerInfo, device.ip)
+    }));
 
     if (result.success) {
       console.log('投屏窗口操作成功:', result);
@@ -812,6 +813,62 @@ async function startProjection(device, containerInfo, customOrient = null) {
 }
 
 // 获取Docker网络列表
+
+// 投屏设置持久化：GPU 加速开关 / 侧边栏开关
+// - GPU 加速：默认 true（D3D11VA 硬解）。false 时走 CPU 软解。
+// - 侧边栏：默认 true（显示侧边栏）。false 时传 -nosidebar 关闭侧边栏省内存。
+const PROJECTION_SETTINGS_KEY = 'projectionSettings';
+
+function getProjectionSettings() {
+  try {
+    const raw = localStorage.getItem(PROJECTION_SETTINGS_KEY);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      return {
+        // hwaccel 默认 true（硬解）；显式存 false 时才走软解
+        hwaccel: obj.hwaccel === false ? false : true,
+        // sidebar 默认 true（显示侧边栏）；兼容旧字段 nosidebar（true=关闭侧边栏）
+        sidebar: obj.sidebar === false ? false : (obj.nosidebar === true ? false : true)
+      };
+    }
+  } catch (e) {
+    console.warn('[api.js] 读取投屏设置失败，使用默认值:', e);
+  }
+  return { hwaccel: true, sidebar: true };
+}
+
+function applyProjectionSettings(config) {
+  const settings = getProjectionSettings();
+  // GPU 加速：仅显式关闭时传 false，默认硬解
+  config.HwAccel = settings.hwaccel === false ? false : true;
+  // 侧边栏：false 时传 -nosidebar 关闭侧边栏
+  config.NoSidebar = settings.sidebar === false;
+  return config;
+}
+
+// 计算设备 API 端口（MYTOS API，go_legacy 用于剪贴板/短信等）
+// - myt/macvlan 网络：容器有独立 IP，直接用原始 9082
+// - 普通网络：从 portBindings 取 9082 的 HostPort
+// - OpenCecs 公网设备：再过 findPortMap 把内网端口转公网端口
+function resolveApiPort(container, baseDeviceIp) {
+  const isMyt = container &&
+    (container.NetworkName === 'myt' || container.NetworkMode === 'myt' ||
+     container.network === 'myt' || container.networkName === 'myt' ||
+     container.networkMode === 'myt');
+  if (isMyt && container.ip) {
+    return 9082;
+  }
+  if (!container || !container.portBindings) return 0;
+  const hostPort = getMappedPort(container.portBindings, '9082/tcp') ||
+    getMappedPort(container.portBindings, '9082/udp') || 0;
+  if (!hostPort) return 0;
+  const deviceIp = container.deviceIp || container.deviceIP || baseDeviceIp;
+  const portMap = findPortMap(deviceIp);
+  if (portMap) {
+    return portMap.get(hostPort) || hostPort;
+  }
+  return hostPort;
+}
 
 // 批量投屏：多台云机各开一个 go_legacy 窗口并排成网格（后端统一算网格坐标）
 async function startBatchProjection(device, containers, customOrient = null) {
@@ -878,13 +935,21 @@ async function startBatchProjection(device, containers, customOrient = null) {
         ContainerID: container.ID || container.id || name,
         ContainerName: name,
         Width: width,
-        Height: height
+        Height: height,
+        ApiPort: resolveApiPort(container, baseDeviceIp)
       });
     }
 
     if (configs.length == 0) {
       throw new Error('没有有效的容器列表');
     }
+
+    // 注入投屏设置（GPU/侧边栏）到每个 config
+    const settings = getProjectionSettings();
+    configs.forEach(cfg => {
+      cfg.HwAccel = settings.hwaccel === false ? false : true;
+      cfg.NoSidebar = settings.sidebar === false;
+    });
 
     const result = await StartBatchProjectionWindows(configs);
     return result;
@@ -986,7 +1051,7 @@ async function startProjectionBatchControl(device, containers, term = '批量投
     const primaryName = primaryContainer.name || primaryContainer.ID || primaryContainer.id || '批量投屏控制';
     const resolvedTerm = term && term !== '批量投屏控制' ? term : primaryName;
 
-    const result = await StartProjectionWindow({
+    const result = await StartProjectionWindow(applyProjectionSettings({
       DeviceIP: primaryDeviceIp,
       TCPPort: videoPort,
       UDPPort: controlPort,
@@ -1000,8 +1065,9 @@ async function startProjectionBatchControl(device, containers, term = '批量投
       ContainerID: 'batch_control',
       ContainerName: resolvedTerm,
       Width: width,
-      Height: height
-    });
+      Height: height,
+      ApiPort: resolveApiPort(primaryContainer, baseDeviceIp)
+    }));
 
     if (result.success) {
       console.log('批量投屏控制成功:', result);
@@ -1089,13 +1155,21 @@ async function startLegacyMatrixProjection(device, containers, customOrient = nu
         ContainerID: container.ID || container.id || name,
         ContainerName: name,
         Width: width,
-        Height: height
+        Height: height,
+        ApiPort: resolveApiPort(container, baseDeviceIp)
       });
     }
 
     if (configs.length < 2) {
       throw new Error('群控矩阵至少需要2台运行中的容器');
     }
+
+    // 注入投屏设置（GPU/侧边栏）到每个 config
+    const settings = getProjectionSettings();
+    configs.forEach(cfg => {
+      cfg.HwAccel = settings.hwaccel === false ? false : true;
+      cfg.NoSidebar = settings.sidebar === false;
+    });
 
     const result = await StartLegacyMatrixProjection(configs);
 
@@ -1901,5 +1975,22 @@ export {
   getScreenshotVersions,
   getScreenshots,
   clearScreenshotCache,
-  saveDeviceCache
+  saveDeviceCache,
+  getProjectionSettings,
+  saveProjectionSettings
 };
+
+// 保存投屏设置（GPU 加速 / 侧边栏开关），持久化到 localStorage
+function saveProjectionSettings(settings) {
+  try {
+    const obj = {
+      hwaccel: settings.hwaccel === false ? false : true,
+      sidebar: settings.sidebar === false ? false : true
+    };
+    localStorage.setItem(PROJECTION_SETTINGS_KEY, JSON.stringify(obj));
+    return true;
+  } catch (e) {
+    console.error('[api.js] 保存投屏设置失败:', e);
+    return false;
+  }
+}

@@ -1545,15 +1545,13 @@ const getFilteredImages = (images, model) => {
   return images.filter(img => {
     // 1. 模拟器 vs 容器
     if (imageCategory.value === 'simulator') {
-      // Q/P 系列模拟器：sys_ver == 5
-      if (img.sys_ver != 5) return false
+      // Q/P 系列模拟器：sys_ver == 5；特质版（sys_ver == 4）也属于模拟器分类
+      if (img.sys_ver != 5 && !(img.sys_ver == 4 && img.sys_ver_des === '特质版')) return false
       return img.os_ver == `and${simulatorAndroidVersion.value}`
     } else {
-      // 容器：sys_ver != 5
+      // 容器：sys_ver != 5（排除模拟器与特质版）
       if (img.sys_ver == 5) return false
-      
-      // 2. 安卓版本筛选
-      // 假设 sys_ver 对应安卓版本 (10, 12, 14)
+      if (img.sys_ver == 4 && img.sys_ver_des === '特质版') return false
       return img.os_ver == `and${containerAndroidVersion.value}`
     }
   })
