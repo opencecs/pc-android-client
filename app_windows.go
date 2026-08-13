@@ -260,6 +260,29 @@ func getWorkArea() (int, int) {
 	return int(rect[2] - rect[0]), int(rect[3] - rect[1])
 }
 
+// adjustWindowRectForClient 根据期望的客户区尺寸计算所需的窗口尺寸（含标题栏+边框）
+// 使用 Win32 AdjustWindowRect，风格为 WS_OVERLAPPEDWINDOW（带标题栏、可缩放边框）
+// 返回 (winW, winH)
+func adjustWindowRectForClient(clientW, clientH int) (int, int) {
+	type rect struct {
+		Left, Top, Right, Bottom int32
+	}
+	r := rect{0, 0, int32(clientW), int32(clientH)}
+	// WS_OVERLAPPEDWINDOW = WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX = 0x00CF0000
+	const wsOverlappedWindow = 0x00CF0000
+	ret, _, _ := procAdjustWindowRect.Call(
+		uintptr(unsafe.Pointer(&r)),
+		uintptr(wsOverlappedWindow),
+		0, // bMenu = FALSE
+	)
+	if ret == 0 {
+		// AdjustWindowRect 失败，回退到手动补偿
+		// Windows 标准标题栏 ~30px + 边框 ~2px
+		return clientW + 2*2, clientH + 30 + 2*2
+	}
+	return int(r.Right - r.Left), int(r.Bottom - r.Top)
+}
+
 var (
 	user32                     = windows.NewLazySystemDLL("user32.dll")
 	procEnumWindows            = user32.NewProc("EnumWindows")
@@ -271,6 +294,7 @@ var (
 	procGetWindowTextW         = user32.NewProc("GetWindowTextW")
 	procGetSystemMetrics       = user32.NewProc("GetSystemMetrics")
 	procSystemParametersInfoW  = user32.NewProc("SystemParametersInfoW")
+	procAdjustWindowRect       = user32.NewProc("AdjustWindowRect")
 
 	kernel32               = windows.NewLazySystemDLL("kernel32.dll")
 	procOpenProcess        = kernel32.NewProc("OpenProcess")

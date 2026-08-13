@@ -815,7 +815,7 @@ async function startProjection(device, containerInfo, customOrient = null) {
 // 获取Docker网络列表
 
 // 投屏设置持久化：GPU 加速开关 / 侧边栏开关
-// - GPU 加速：默认 true（D3D11VA 硬解）。false 时走 CPU 软解。
+// - GPU 加速：默认 false（CPU 软解）。true 时走 D3D11VA 硬解。
 // - 侧边栏：默认 true（显示侧边栏）。false 时传 -nosidebar 关闭侧边栏省内存。
 const PROJECTION_SETTINGS_KEY = 'projectionSettings';
 
@@ -825,8 +825,8 @@ function getProjectionSettings() {
     if (raw) {
       const obj = JSON.parse(raw);
       return {
-        // hwaccel 默认 true（硬解）；显式存 false 时才走软解
-        hwaccel: obj.hwaccel === false ? false : true,
+        // hwaccel 默认 false（软解）；显式存 true 时才走硬解
+        hwaccel: obj.hwaccel === true ? true : false,
         // sidebar 默认 true（显示侧边栏）；兼容旧字段 nosidebar（true=关闭侧边栏）
         sidebar: obj.sidebar === false ? false : (obj.nosidebar === true ? false : true)
       };
@@ -834,13 +834,13 @@ function getProjectionSettings() {
   } catch (e) {
     console.warn('[api.js] 读取投屏设置失败，使用默认值:', e);
   }
-  return { hwaccel: true, sidebar: true };
+  return { hwaccel: false, sidebar: true };
 }
 
 function applyProjectionSettings(config) {
   const settings = getProjectionSettings();
-  // GPU 加速：仅显式关闭时传 false，默认硬解
-  config.HwAccel = settings.hwaccel === false ? false : true;
+  // GPU 加速：仅显式开启时传 true，默认软解
+  config.HwAccel = settings.hwaccel === true ? true : false;
   // 侧边栏：false 时传 -nosidebar 关闭侧边栏
   config.NoSidebar = settings.sidebar === false;
   return config;
@@ -947,7 +947,7 @@ async function startBatchProjection(device, containers, customOrient = null) {
     // 注入投屏设置（GPU/侧边栏）到每个 config
     const settings = getProjectionSettings();
     configs.forEach(cfg => {
-      cfg.HwAccel = settings.hwaccel === false ? false : true;
+      cfg.HwAccel = settings.hwaccel === true ? true : false;
       cfg.NoSidebar = settings.sidebar === false;
     });
 
@@ -1167,7 +1167,7 @@ async function startLegacyMatrixProjection(device, containers, customOrient = nu
     // 注入投屏设置（GPU/侧边栏）到每个 config
     const settings = getProjectionSettings();
     configs.forEach(cfg => {
-      cfg.HwAccel = settings.hwaccel === false ? false : true;
+      cfg.HwAccel = settings.hwaccel === true ? true : false;
       cfg.NoSidebar = settings.sidebar === false;
     });
 
@@ -1984,7 +1984,7 @@ export {
 function saveProjectionSettings(settings) {
   try {
     const obj = {
-      hwaccel: settings.hwaccel === false ? false : true,
+      hwaccel: settings.hwaccel === true ? true : false,
       sidebar: settings.sidebar === false ? false : true
     };
     localStorage.setItem(PROJECTION_SETTINGS_KEY, JSON.stringify(obj));

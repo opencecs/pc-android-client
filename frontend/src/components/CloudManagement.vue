@@ -982,17 +982,17 @@ const zoomLevel = ref('low') // high, medium, low
 const screenshotScale = ref(80) // 截图缩放比例，25%-150%，默认80%
 
 // 投屏设置：GPU 加速 / 侧边栏开关（持久化，下次投屏生效）
-// - hwaccel: true(默认)=硬解，false=软解
+// - hwaccel: false(默认)=软解，true=硬解
 // - sidebar: true(默认)=显示侧边栏，false=关闭侧边栏（传 -nosidebar）
 const projectionSettingsVisible = ref(false)
-const projectionSettings = ref({ hwaccel: true, sidebar: true })
+const projectionSettings = ref({ hwaccel: false, sidebar: true })
 // 初始化：从 localStorage 读取
 try {
   const raw = localStorage.getItem('projectionSettings')
   if (raw) {
     const obj = JSON.parse(raw)
     projectionSettings.value = {
-      hwaccel: obj.hwaccel === false ? false : true,
+      hwaccel: obj.hwaccel === true ? true : false,
       // 兼容旧字段 nosidebar：nosidebar=true 表示关闭侧边栏，即 sidebar=false
       sidebar: obj.sidebar === false ? false : (obj.nosidebar === true ? false : true)
     }
@@ -1003,7 +1003,7 @@ try {
 const saveProjectionSettingsHandler = () => {
   try {
     localStorage.setItem('projectionSettings', JSON.stringify({
-      hwaccel: projectionSettings.value.hwaccel === false ? false : true,
+      hwaccel: projectionSettings.value.hwaccel === true ? true : false,
       sidebar: projectionSettings.value.sidebar === false ? false : true
     }))
     ElMessage.success(t('common.projectionSettingsSaved'))

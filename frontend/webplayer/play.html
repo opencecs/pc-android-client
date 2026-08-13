@@ -53,12 +53,76 @@
             return window.callMainWindow('ArrangeProjectionWindows', params);
         };
         
-        console.log('[Wails V3] 子窗口通信层初始化完成');
-        
-        // 通知主窗口已就绪
-        setTimeout(() => {
-            console.log('[Wails V3] 子窗口已就绪');
-        }, 500);
+    console.log('[Wails V3] 子窗口通信层初始化完成');
+    
+    // 通知主窗口已就绪
+    setTimeout(() => {
+        console.log('[Wails V3] 子窗口已就绪');
+    }, 500);
+
+    // ===== 动态调整视频容器尺寸，消除黑边 =====
+    // 根据 URL 中的视频分辨率参数或视频实际分辨率，
+    // 将 #container/#uicontainer 设置为与视频完全一致的宽高比，
+    // 在可用区域（除去侧边栏和底部控制栏）内居中。
+    (function() {
+        var SIDEBAR_W = 42;   // 右侧侧边栏宽度
+        var BOTTOM_H  = 52;   // 底部控制栏+间隙高度
+        function getVideoAspect() {
+            // 优先从 URL 参数获取
+            var p = new URLSearchParams(location.search);
+            var vw = parseInt(p.get('vw'), 10);
+            var vh = parseInt(p.get('vh'), 10);
+            if (vw > 0 && vh > 0) return vw / vh;
+            // 从 video 元素实际分辨率获取
+            var v = document.querySelector('video');
+            if (v && v.videoWidth > 0 && v.videoHeight > 0) return v.videoWidth / v.videoHeight;
+            return null;
+        }
+        function resizeContainer() {
+            var container = document.getElementById('container');
+            if (!container) return;
+            var ui = document.getElementById('uicontainer');
+            var aspect = getVideoAspect();
+            // 可用区域
+            var availW = window.innerWidth - SIDEBAR_W;
+            var availH = window.innerHeight - BOTTOM_H;
+            if (!aspect || availW <= 0 || availH <= 0) {
+                // 未知比例时回退到可用区域全填充
+                container.style.width  = availW + 'px';
+                container.style.height = availH + 'px';
+                if (ui) { ui.style.width = availW + 'px'; ui.style.height = availH + 'px'; }
+                return;
+            }
+            // 等比缩放到可用区域
+            var w, h;
+            if (availW / availH > aspect) {
+                h = availH;
+                w = Math.round(h * aspect);
+            } else {
+                w = availW;
+                h = Math.round(w / aspect);
+            }
+            container.style.width  = w + 'px';
+            container.style.height = h + 'px';
+            if (ui) { ui.style.width = w + 'px'; ui.style.height = h + 'px'; }
+        }
+        window.__resizeContainer = resizeContainer;
+        window.addEventListener('resize', resizeContainer);
+        // DOM 就绪后立即尝试，并持续监听 video 元素加载
+        document.addEventListener('DOMContentLoaded', resizeContainer);
+        // 定期重试以捕获 video 元素动态插入
+        var retryCount = 0;
+        var retryTimer = setInterval(function() {
+            resizeContainer();
+            var v = document.querySelector('video');
+            if (v && v.videoWidth > 0) {
+                clearInterval(retryTimer);
+                v.addEventListener('loadedmetadata', resizeContainer);
+                resizeContainer();
+            }
+            if (++retryCount > 50) clearInterval(retryTimer);
+        }, 200);
+    })();
     </script>
     
     <style>
@@ -85,38 +149,34 @@
 			z-index: 50;
 		}
 		
-		/* 视频容器 - 调整高度，留出底部控制栏空间 */
+		/* 视频容器 - JS 动态计算尺寸使宽高比与视频一致，消除黑边 */
 		#container {
 			position: absolute;
 			top: 0;
 			left: 0;
-			width: calc(100vw - 42px);
-			height: calc(100vh - 52px);
 			background-color: #000;
 			z-index: 10;
 			overflow: hidden;
 		}
 		
-		/* 视频样式 */
+		/* 视频样式 - 填满容器（容器已按视频比例计算好，无需 contain） */
 		video {
 			position: absolute;
 			top: 0;
 			left: 0;
 			width: 100%;
 			height: 100%;
-			object-fit: contain;
+			object-fit: fill;
 			display: block;
 			z-index: 100;
 			opacity: 1;
 		}
 		
-		/* UI容器 - 透明背景，不遮挡视频 */
+		/* UI容器 - 透明背景，不遮挡视频，与 container 同步尺寸 */
 		#uicontainer {
 			position: absolute;
 			top: 0;
 			left: 0;
-			width: calc(100vw - 42px);
-			height: calc(100vh - 52px);
 			background: transparent !important;
 			z-index: 50;
 			pointer-events: none;

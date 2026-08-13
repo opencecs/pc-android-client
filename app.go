@@ -12370,12 +12370,14 @@ func (a *App) StartProjectionWindow(config ProjectionConfig) map[string]interfac
 	height := config.Height
 
 	playerURL := fmt.Sprintf(
-		"/webplayer/play.html?shost=%s&sport=%d&q=1&v=h264&rtc_i=%s&rtc_p=%d&container_name=%s",
+		"/webplayer/play.html?shost=%s&sport=%d&q=1&v=h264&rtc_i=%s&rtc_p=%d&container_name=%s&vw=%d&vh=%d",
 		config.DeviceIP,
 		config.TCPPort,
 		config.DeviceIP,
 		config.UDPPort,
 		url.QueryEscape(config.ContainerName),
+		config.Width,
+		config.Height,
 	)
 
 	log.Printf("[IPC] 创建投屏窗口，URL: %s", playerURL)
@@ -12430,8 +12432,11 @@ const matrixBasePort = 50000
 // gridMargin 批量投屏网格边距（像素）
 const gridMargin = 2
 
-// gridAspect 批量投屏窗口宽高比（9:16 竖屏）
-const gridAspect = 9.0 / 16.0
+// go_legacy 内部布局常量（参考 player/cmd/webview_demo/main_windows.go）
+const (
+	legacySidebarW  = 52 // 有侧边栏时 sideW=52（文档值），-nosidebar 时为 0
+	legacyNavBarH   = 48 // navBarHeight: 底部导航栏高度
+)
 
 // gridLayout 批量投屏网格布局（行列与统一窗口尺寸）
 type gridLayout struct {
@@ -12439,11 +12444,21 @@ type gridLayout struct {
 	w, h       int
 }
 
-// calcGridLayout 计算 n 个窗口的网格布局（参考 ArrangeProjectionWindows 的枚举思路）
-// 读取主屏工作区（排除任务栏），枚举列数选窗口面积最大的排布，保证窗口完整落在工作区内
-func calcGridLayout(n int) gridLayout {
+// calcGridLayout 计算 n 个窗口的网格布局
+// videoAspect 为视频宽高比（Width/Height），sidebarW 为侧边栏宽度（0=无侧边栏）
+// go_legacy 的 SDL 渲染区域 = (winW - sidebarW) × (winH - navBarH)，
+// 其中 winW/winH 是窗口外尺寸（含标题栏+边框，由 go_legacy 内部 AdjustWindowRectEx 处理）。
+// 但 -winw/-winh 直接覆盖 baseWinW/baseWinH（即 AdjustWindowRect 后的值），
+// 所以传给 -winw/-winh 的值就是 baseWinW/baseWinH。
+// SDL 区域 = (baseWinW - sidebarW) × (baseWinH - navBarH)。
+// 要消除黑边：(baseWinW - sidebarW) / (baseWinH - navBarH) = videoAspect。
+func calcGridLayout(n int, videoAspect float64, sidebarW int) gridLayout {
+	navBarH := legacyNavBarH
 	if n <= 0 {
-		return gridLayout{cols: 1, rows: 1, w: 360, h: 640}
+		return gridLayout{cols: 1, rows: 1, w: 360 + sidebarW, h: 640 + navBarH}
+	}
+	if videoAspect <= 0 {
+		videoAspect = 9.0 / 16.0 // 回退到 9:16
 	}
 	screenW, screenH := getWorkArea()
 	if screenW <= 0 {
@@ -12454,7 +12469,6 @@ func calcGridLayout(n int) gridLayout {
 	}
 
 	// 枚举列数，选窗口面积最大且完整落在屏幕内的候选
-	// 竖屏 9:16 窗口：较矮小屏(如1366x768)窗口高度会受限，较宽大屏(如2560x1440)则单行或两行
 	bestArea := -1
 	bestCols := 1
 	bestRows := 1
@@ -12464,14 +12478,30 @@ func calcGridLayout(n int) gridLayout {
 		r := (n + c - 1) / c
 		availW := (screenW - (c-1)*gridMargin) / c
 		availH := (screenH - (r-1)*gridMargin) / r
-		winHFromW := int(float64(availW) / gridAspect)
-		winWFromH := int(float64(availH) * gridAspect)
+
+		// SDL 区域 = (winW - sidebarW) × (winH - navBarH)
+		// 要 (winW - sidebarW) / (winH - navBarH) = videoAspect
+		// winW = videoAspect * (winH - navBarH) + sidebarW
+		// winH = (winW - sidebarW) / videoAspect + navBarH
+
+		// 从宽度推：sdlW = availW - sidebarW, sdlH = sdlW / videoAspect, winH = sdlH + navBarH
+		sdlW := availW - sidebarW
+		if sdlW <= 0 {
+			continue
+		}
+		winHFromW := int(float64(sdlW)/videoAspect) + navBarH
+
+		// 从高度推：sdlH = availH - navBarH, sdlW = sdlH * videoAspect, winW = sdlW + sidebarW
+		sdlH := availH - navBarH
+		if sdlH <= 0 {
+			continue
+		}
+		winWFromH := int(float64(sdlH)*videoAspect) + sidebarW
+
 		var winW, winH int
 		if winWFromH < availW {
-			// 高度受限，用高度推宽度
 			winW, winH = winWFromH, availH
 		} else {
-			// 宽度受限，用宽度推高度
 			winW, winH = availW, winHFromW
 		}
 		if winW <= 0 || winH <= 0 {
@@ -12487,8 +12517,10 @@ func calcGridLayout(n int) gridLayout {
 		}
 	}
 	if bestArea <= 0 {
+		// 回退：按 videoAspect 给一个最小窗口
 		fw := 200
-		return gridLayout{rows: n, cols: 1, w: fw, h: int(float64(fw) / gridAspect)}
+		fh := int(float64(fw) / videoAspect)
+		return gridLayout{rows: n, cols: 1, w: fw + sidebarW, h: fh + navBarH}
 	}
 	return gridLayout{rows: bestRows, cols: bestCols, w: bestW, h: bestH}
 }
@@ -12525,7 +12557,22 @@ func (a *App) StartBatchProjectionWindows(configs []ProjectionConfig) map[string
 	first := configs[0]
 	batchID := fmt.Sprintf("%s:%d_batch", first.DeviceIP, first.ControlPort)
 
-	layout := calcGridLayout(len(configs))
+	// 从第一个 config 获取视频宽高比和侧边栏设置
+	videoW := first.Width
+	if videoW == 0 {
+		videoW = 360
+	}
+	videoH := first.Height
+	if videoH == 0 {
+		videoH = 640
+	}
+	videoAspect := float64(videoW) / float64(videoH)
+	sidebarW := 0
+	if !first.NoSidebar {
+		sidebarW = legacySidebarW
+	}
+
+	layout := calcGridLayout(len(configs), videoAspect, sidebarW)
 	results := make([]map[string]interface{}, 0, len(configs))
 	okCount := 0
 	for i := range configs {
@@ -12583,7 +12630,22 @@ func (a *App) StartLegacyMatrixProjection(configs []ProjectionConfig) map[string
 	primary.ContainerName = "matrix_primary"
 	primary.MatrixKey = fmt.Sprintf("%s:%d_batch", primary.DeviceIP, primary.ControlPort)
 
-	layout := calcGridLayout(len(configs))
+	// 从主控 config 获取视频宽高比和侧边栏设置
+	matrixVideoW := primary.Width
+	if matrixVideoW == 0 {
+		matrixVideoW = 360
+	}
+	matrixVideoH := primary.Height
+	if matrixVideoH == 0 {
+		matrixVideoH = 640
+	}
+	matrixVideoAspect := float64(matrixVideoW) / float64(matrixVideoH)
+	matrixSidebarW := 0
+	if !primary.NoSidebar {
+		matrixSidebarW = legacySidebarW
+	}
+
+	layout := calcGridLayout(len(configs), matrixVideoAspect, matrixSidebarW)
 	primary.WinX, primary.WinY, primary.WinW, primary.WinH = layout.cell(0)
 
 	results := make([]map[string]interface{}, 0, len(configs))
@@ -12698,6 +12760,43 @@ func (a *App) startWindowsProjectionProcess(config ProjectionConfig, windowID, w
 	// 横屏模式下，如果宽<高则交换宽高，确保传给player的尺寸与方向一致
 	if orient == 1 && config.Width < config.Height {
 		config.Width, config.Height = config.Height, config.Width
+	}
+
+	// 单次点击投屏：传 -winw/-winh 固定窗口尺寸，防止 go_legacy 在检测到多个同类窗口时
+	// 自动缩小（updateMatrixUIScale + fitWindowToVideo）。
+	// 窗口尺寸按文档公式计算：winw = (winh - navBar - 边框) × 视频比例 + sideW + 边框
+	// 其中 sideW=52（有侧边栏）或 0（无侧边栏），navBar=48，边框由 AdjustWindowRectEx 计算。
+	if config.WinW == 0 && config.WinH == 0 {
+		const (
+			sideBarW    = 52 // 有侧边栏时 sideW=52（文档值），无侧边栏=0
+			navBarH     = 48 // 底部导航栏高度
+		)
+
+		sideW := 0
+		if !config.NoSidebar {
+			sideW = sideBarW
+		}
+
+		videoAspect := float64(config.Width) / float64(config.Height)
+
+		// 目标 SDL 区域高度
+		var sdlH int
+		if orient == 1 {
+			sdlH = 480 // 横屏
+		} else {
+			sdlH = 732 // 竖屏（与 go_legacy 内部 targetH 一致）
+		}
+		sdlW := int(float64(sdlH) * videoAspect)
+
+		// 客户区 = SDL区域 + sideW + navBar
+		clientW := sdlW + sideW
+		clientH := sdlH + navBarH
+
+		// 转为窗口外尺寸（含标题栏+边框）
+		config.WinW, config.WinH = adjustWindowRectForClient(clientW, clientH)
+
+		log.Printf("[投屏] 计算窗口尺寸: video=%dx%d aspect=%.4f sideW=%d sdl=%dx%d client=%dx%d -> WinW=%d WinH=%d",
+			config.Width, config.Height, videoAspect, sideW, sdlW, sdlH, clientW, clientH, config.WinW, config.WinH)
 	}
 
 	term := config.Term

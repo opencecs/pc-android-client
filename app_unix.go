@@ -47,3 +47,8 @@ func getWorkArea() (int, int) {
 	w, h := getScreenSize()
 	return w, h - 48
 }
+
+// adjustWindowRectForClient 非Windows平台回退：手动补偿标题栏(30px)+边框(2*2px)
+func adjustWindowRectForClient(clientW, clientH int) (int, int) {
+	return clientW + 4, clientH + 34
+}
