@@ -165,6 +165,100 @@
                 </el-tab-pane>
 
                 <!-- 备份管理 -->
+                <el-tab-pane :label="t('backup.backupManage')" name="backup-manage">
+                    <div class="tab-content">
+                        <div class="left-panel">
+                            <div class="panel-header"
+                                style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>{{ t('backup.deviceList') }}</span>
+                                <el-select v-model="localGroupFilter" size="small" style="width: 90px;"
+                                    :placeholder="t('backup.group')">
+                                    <el-option :label="t('backup.all')" value="全部"></el-option>
+                                    <el-option v-for="group in deviceGroups" :key="group" :label="group"
+                                        :value="group"></el-option>
+                                </el-select>
+                            </div>
+                            <div class="device-list">
+                                <div v-for="device in deviceList" :key="device.ip"
+                                    :class="['device-item', { active: selectedDeviceIP === device.ip }]"
+                                    :title="device.ip"
+                                    @click="selectDevice(device)">
+                                    <span class="device-ip">{{ device.ip }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="right-panel">
+                            <el-tabs v-model="backupManageSubTab" class="backup-manage-subtabs"
+                                @tab-change="handleBackupManageSubTabChange">
+                                <!-- 本地备份 -->
+                                <el-tab-pane :label="t('backup.localBackup')" name="local">
+                                    <div class="panel-header"
+                                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                        <span>{{ t('backup.localBackup') }}</span>
+                                        <div style="display: flex; gap: 8px; align-items: center;">
+                                            <el-button size="small" @click="handleOpenBackupMachineDir">{{ t('backup.openLocalBackupMachine') }}</el-button>
+                                            <el-input v-model="localBackupSearchText" :placeholder="t('backup.searchModelName')" size="small"
+                                                style="width: 180px;" clearable>
+                                                <template #prefix>
+                                                    <el-icon><Search /></el-icon>
+                                                </template>
+                                            </el-input>
+                                            <el-button size="small" @click="fetchLocalBackups">{{ t('common.refresh') }}</el-button>
+                                        </div>
+                                    </div>
+                                    <el-table :data="filteredLocalBackupList" style="width: 100%" v-loading="localBackupLoading" stripe max-height="800">
+                                        <el-table-column type="index" :label="t('backup.index')" align="center" width="100" />
+                                        <el-table-column prop="name" :label="t('backup.machineName')" align="center" show-overflow-tooltip />
+                                        <el-table-column :label="t('backup.size')" align="center" width="140">
+                                            <template #default="scope">
+                                                {{ formatFileSize(scope.row.size) }}
+                                            </template>
+                                        </el-table-column>
+                                        <el-table-column :label="t('backup.operation')" align="center" width="160">
+                                            <template #default="scope">
+                                                <el-button size="mini" type="success"
+                                                    @click="handleImportBackupMachine(scope.row)">
+                                                    {{ t('backup.import') }}
+                                                </el-button>
+                                            </template>
+                                        </el-table-column>
+                                    </el-table>
+                                </el-tab-pane>
+                                <!-- 云机备份 -->
+                                <el-tab-pane :label="t('backup.cloudBackup')" name="cloud">
+                                    <div class="panel-header"
+                                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                        <span>{{ t('backup.cloudBackup') }}</span>
+                                        <div style="display: flex; gap: 8px; align-items: center;">
+                                            <el-input v-model="cloudBackupSearchText" :placeholder="t('backup.searchModelName')" size="small"
+                                                style="width: 180px;" clearable>
+                                                <template #prefix>
+                                                    <el-icon><Search /></el-icon>
+                                                </template>
+                                            </el-input>
+                                            <el-button size="small" @click="fetchCloudBackupsForManage">{{ t('common.refresh') }}</el-button>
+                                        </div>
+                                    </div>
+                                    <el-table :data="filteredCloudBackupList" style="width: 100%" v-loading="cloudBackupLoading" stripe max-height="800">
+                                        <el-table-column type="index" :label="t('backup.index')" align="center" width="100" />
+                                        <el-table-column prop="name" :label="t('backup.machineName')" align="center" show-overflow-tooltip />
+                                        <el-table-column :label="t('backup.operation')" align="center" width="180">
+                                            <template #default="scope">
+                                                <el-button size="mini" type="success" :loading="isDownloading(scope.row.name)"
+                                                    :disabled="!selectedDeviceIP"
+                                                    @click="handleImportCloudBackup(scope.row)">
+                                                    {{ isDownloading(scope.row.name) ? t('backup.downloading') : t('backup.import') }}
+                                                </el-button>
+                                            </template>
+                                        </el-table-column>
+                                    </el-table>
+                                </el-tab-pane>
+                            </el-tabs>
+                        </div>
+                    </div>
+                </el-tab-pane>
+
+                <!-- 云机管理 -->
                 <el-tab-pane :label="t('backup.cloudManage')" name="cloud-manage">
                     <div class="tab-content">
                         <div class="left-panel">
@@ -272,7 +366,7 @@
                     <div style="margin: 20px; padding: 0;">
                         <div style="padding: 14px 18px; background: #f0f9ff; border-left: 4px solid #409EFF; border-radius: 4px;">
                             <div style="font-weight: bold; color: #409EFF; font-size: 14px; margin-bottom: 12px;">
-                                📖 备份管理使用说明
+                                📖 云机管理使用说明
                             </div>
                             <el-collapse v-model="activeHelpSections" style="border: none; background: transparent;">
 
@@ -328,10 +422,10 @@
                                     </div>
                                 </el-collapse-item>
 
-                                <!-- 备份管理 -->
+                                <!-- 云机管理 -->
                                 <el-collapse-item name="cloud-manage-help" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">🖥️ 备份管理</span>
+                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">🖥️ 云机管理</span>
                                     </template>
                                     <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
                                         <p>用于按坑位管理和操作设备上的云机实例，支持开机、关机、删除、修改名称等操作。</p>
@@ -568,6 +662,10 @@
                 <el-form-item :label="t('backup.machineName')">
                     <el-input v-model="importBackupMachineName" :placeholder="t('backup.enterMachineName')" size="medium" style="width: 100%;" />
                 </el-form-item>
+                <el-form-item :label="t('backup.powerOnAfterImport')" v-if="importBackupDeviceIP">
+                    <el-switch v-model="importBackupStart" />
+                    <span style="font-size: 12px; color: #909399; margin-left: 8px;">{{ t('backup.powerOnAfterImportTip') }}</span>
+                </el-form-item>
             </el-form>
             <template #footer>
                 <el-button @click="importBackupDialogVisible = false">{{ t('backup.cancel') }}</el-button>
@@ -593,7 +691,7 @@ const getDeviceAddr = (ip) => {
 import { ref, onMounted, computed, watch, getCurrentInstance, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus, InfoFilled } from '@element-plus/icons-vue';
-import { ExportBackupModel, CheckBackupModelExists, GetAllBackupModels, ImportBackupModel, DeleteBackupModel, DownloadBackupMachine, CheckBackupMachineFileExists, CheckBackupMachineFilesExistBatch, ImportBackupMachine, DeleteLocalBackupMachine, OpenBackupModelDir, OpenBackupMachineDir, GetMirrorList } from '../../bindings/edgeclient/app';
+import { ExportBackupModel, CheckBackupModelExists, GetAllBackupModels, ImportBackupModel, DeleteBackupModel, DownloadBackupMachine, CheckBackupMachineFileExists, CheckBackupMachineFilesExistBatch, ImportBackupMachine, DeleteLocalBackupMachine, OpenBackupModelDir, OpenBackupMachineDir, ListLocalDirFiles, GetStoragePath, GetMirrorList } from '../../bindings/edgeclient/app';
 import BatchImportContent from './BatchImport.vue';
 
 // 国际化支持
@@ -636,6 +734,16 @@ const containerList = ref([])
 const selectedContainer = ref(null)
 const modelName = ref('')
 const localBackupModelSet = ref(new Set())
+
+// 备份管理 tab（本地备份 / 云机备份）
+const backupManageSubTab = ref('local')
+const localBackupList = ref([])           // 本地 .zip 文件列表 { name, path, size, isDir, deleting }
+const localBackupLoading = ref(false)
+const localBackupSearchText = ref('')
+const localBackupDirPath = ref('')        // cloudMachineBackup 目录绝对路径
+const cloudBackupList = ref([])           // 云机备份列表（/backup 接口）
+const cloudBackupLoading = ref(false)
+const cloudBackupSearchText = ref('')
 const importDialogVisible = ref(false)
 const importMachineList = ref([])
 const selectedImportMachines = ref([])
@@ -668,8 +776,10 @@ const importBackupSlot = ref(1)
 const importBackupMachineName = ref('')
 const importBackupSlotList = ref([])
 const importBackupLoading = ref(false)
+const importBackupStart = ref(false)   // 导入完成后是否开机
+const importBackupFromCloud = ref(false) // 导入来源：true=云机备份(走设备 /android/importLocal)，false=本地备份(走后端上传)
 
-// 备份管理 - 云机管理
+// 云机管理 - 云机管理
 const cloudImageList = ref([])
 
 const loadCloudImageList = async () => {
@@ -731,7 +841,7 @@ const cloudManageSlotOptions = ref([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 const cloudManageSelectedRows = ref([])
 const cloudManageSearchKeyword = ref('')
 
-// 备份管理-云机列表搜索过滤
+// 云机管理-云机列表搜索过滤
 const filteredCloudMachineList = computed(() => {
     const keyword = cloudManageSearchKeyword.value.trim().toLowerCase()
     if (!keyword) return cloudMachineList.value
@@ -1033,7 +1143,7 @@ const handleConfirmAdd = async () => {
     }
 }
 
-// 备份管理 - 云机管理
+// 云机管理 - 云机管理
 const fetchCloudMachines = async () => {
     if (!selectedDeviceIP.value) {
         cloudMachineList.value = []
@@ -1271,6 +1381,13 @@ const selectDevice = async (device) => {
     if (activeTab.value === 'cloud-manage') {
         tasks.push(fetchCloudMachines())
     }
+    if (activeTab.value === 'backup-manage') {
+        // 本地备份 + 云机备份均依赖选中设备
+        tasks.push(fetchLocalBackups())
+        if (backupManageSubTab.value === 'cloud') {
+            tasks.push(fetchCloudBackupsForManage())
+        }
+    }
     await Promise.all(tasks)
 }
 
@@ -1421,6 +1538,137 @@ const handleOpenBackupMachineDir = async () => {
     }
 }
 
+// ============ 备份管理 tab：本地备份 + 云机备份 ============
+
+// 格式化文件大小
+const formatFileSize = (bytes) => {
+    if (!bytes || bytes < 0) return '0 B'
+    const units = ['B', 'KB', 'MB', 'GB']
+    let i = 0
+    let size = bytes
+    while (size >= 1024 && i < units.length - 1) {
+        size /= 1024
+        i++
+    }
+    return `${size.toFixed(i === 0 ? 0 : 2)} ${units[i]}`
+}
+
+// 本地备份列表（从 cloudMachineBackup 目录读取 .zip 文件）
+const fetchLocalBackups = async () => {
+    // 与云机备份一致：未选择设备时不加载（左侧设备列表驱动右侧数据）
+    if (!selectedDeviceIP.value) {
+        localBackupList.value = []
+        return
+    }
+    localBackupLoading.value = true
+    try {
+        // 先拿到本地备份目录绝对路径（用 GetStoragePath 取存储根目录，不打开资源管理器）
+        if (!localBackupDirPath.value) {
+            const sp = await GetStoragePath()
+            if (sp?.success && sp.path) {
+                localBackupDirPath.value = sp.path.replace(/[\\/]+$/, '') + '/cloudMachineBackup'
+            }
+        }
+        if (!localBackupDirPath.value) {
+            ElMessage.error('无法获取本地备份目录')
+            localBackupList.value = []
+            return
+        }
+        const result = await ListLocalDirFiles(localBackupDirPath.value)
+        if (result?.success && Array.isArray(result.files)) {
+            localBackupList.value = result.files
+                .filter(f => !f.isDir && f.name && (f.name.toLowerCase().endsWith('.tar.gz') || f.name.toLowerCase().endsWith('.zip')))
+                .map(f => ({ ...f, deleting: false }))
+        } else {
+            // 目录尚未创建（无任何本地备份）时后端返回 success:false，按空列表处理
+            localBackupList.value = []
+        }
+    } catch (error) {
+        console.error('获取本地备份列表失败:', error)
+        ElMessage.error('获取本地备份列表失败')
+        localBackupList.value = []
+    } finally {
+        localBackupLoading.value = false
+    }
+}
+
+// 本地备份搜索过滤
+const filteredLocalBackupList = computed(() => {
+    if (!localBackupSearchText.value.trim()) return localBackupList.value
+    const kw = localBackupSearchText.value.trim().toLowerCase()
+    return localBackupList.value.filter(f => f.name && f.name.toLowerCase().includes(kw))
+})
+
+// 云机备份列表（调用设备 /backup 接口）
+const fetchCloudBackupsForManage = async () => {
+    if (!selectedDeviceIP.value) {
+        cloudBackupList.value = []
+        return
+    }
+    const selectedDevice = props.devices.find(d => d.ip === selectedDeviceIP.value)
+    if (!selectedDevice || props.devicesStatusCache.get(selectedDevice.id) !== 'online') {
+        cloudBackupList.value = []
+        return
+    }
+    cloudBackupLoading.value = true
+    try {
+        const response = await fetchWithTimeout(
+            `http://${getDeviceAddr(selectedDeviceIP.value)}/backup?name=`,
+            { headers: getAuthHeaders(selectedDeviceIP.value) }
+        )
+        if (response.ok) {
+            const data = await response.json()
+            if (data.code == 0) {
+                cloudBackupList.value = data.data.list || []
+            } else {
+                cloudBackupList.value = []
+                ElMessage.error(data.message || '获取云机备份列表失败')
+            }
+        } else {
+            cloudBackupList.value = []
+            ElMessage.error('接口请求失败')
+        }
+    } catch (error) {
+        ElMessage.error('获取云机备份列表失败，请检查网络连接')
+        cloudBackupList.value = []
+    } finally {
+        cloudBackupLoading.value = false
+    }
+}
+
+// 云机备份搜索过滤
+const filteredCloudBackupList = computed(() => {
+    if (!cloudBackupSearchText.value.trim()) return cloudBackupList.value
+    const kw = cloudBackupSearchText.value.trim().toLowerCase()
+    return cloudBackupList.value.filter(m => m.name && m.name.toLowerCase().includes(kw))
+})
+
+// 导入云机备份（云机备份在远端设备上：直接调用设备 /android/importLocal 导入，无需下载到本地）
+const handleImportCloudBackup = async (row) => {
+    if (!selectedDeviceIP.value) {
+        ElMessage.warning(t('backup.selectDevice'))
+        return
+    }
+    // 云机备份仅存在于当前选中设备上，目标设备锁定为该设备
+    importBackupMachineRow.value = row
+    importBackupFromCloud.value = true
+    importBackupDeviceIP.value = selectedDeviceIP.value
+    importBackupDeviceName.value = row.name
+    importBackupMachineName.value = ''
+    importBackupStart.value = false
+    await handleImportBackupDeviceChange(selectedDeviceIP.value)
+    importBackupDialogVisible.value = true
+}
+
+// 备份管理子 tab 切换
+const handleBackupManageSubTabChange = async (subTab) => {
+    if (subTab === 'local') {
+        await fetchLocalBackups()
+    } else if (subTab === 'cloud') {
+        await fetchCloudBackupsForManage()
+    }
+}
+
 const handleTabChange = async (tab) => {
     // if (selectedDevice.value) {
         loading.value = true;
@@ -1432,6 +1680,13 @@ const handleTabChange = async (tab) => {
                 await fetchCloudMachines();
                 backupModelList.value = [];
                 backupMachineList.value = [];
+            } else if (tab === 'backup-manage') {
+                // 备份管理：本地备份 + 云机备份均依赖选中设备（fetchLocalBackups 内部已做未选设备置空处理）
+                const tasks = [fetchLocalBackups()]
+                if (backupManageSubTab.value === 'cloud' && selectedDeviceIP.value) {
+                    tasks.push(fetchCloudBackupsForManage())
+                }
+                await Promise.all(tasks)
             } else {
                 await fetchBackupMachines();
                 backupModelList.value = [];
@@ -1573,14 +1828,37 @@ const handleDownloadMachine = async (row) => {
         return;
     }
 
+    // 下载完成后是否删除设备上的备份包（默认 false=保留）
+    let deleteAfterDownload = false;
+    try {
+        await ElMessageBox.confirm(
+            '下载完成后是否删除设备上的备份包？',
+            '下载备份云机',
+            {
+                confirmButtonText: '下载并删除备份包',
+                cancelButtonText: '下载并保留备份包',
+                distinguishCancelAndClose: true,
+                type: 'warning',
+            }
+        );
+        // 点「下载并删除备份包」
+        deleteAfterDownload = true;
+    } catch (action) {
+        // cancel = 用户选择保留；close = 关闭弹窗，视为放弃下载
+        if (action === 'close') {
+            return;
+        }
+        deleteAfterDownload = false;
+    }
+
     try {
         // 标记为下载中
         downloadingSet.value.add(row.name);
-        
+
         ElMessage.info('开始下载备份云机...');
         backupMachineLoading.value = true;
 
-        const result = await DownloadBackupMachine(selectedDeviceIP.value, row.name);
+        const result = await DownloadBackupMachine(selectedDeviceIP.value, row.name, deleteAfterDownload);
 
         if (result.success) {
             ElMessage.success('下载成功');
@@ -1601,11 +1879,13 @@ const handleDownloadMachine = async (row) => {
 
 const handleImportBackupMachine = (row) => {
     importBackupMachineRow.value = row
+    importBackupFromCloud.value = false
     importBackupDeviceIP.value = ''
     importBackupDeviceName.value = row.name
     importBackupSlot.value = 1
     importBackupMachineName.value = ''
     importBackupSlotList.value = []
+    importBackupStart.value = false
     importBackupDialogVisible.value = true
 };
 
@@ -1638,22 +1918,57 @@ const handleConfirmImportBackupMachine = async () => {
     try {
         importBackupLoading.value = true
 
-        // 获取目标设备版本，区分V2/V3导入接口
-        const targetDevice = props.devices.find(d => d.ip === importBackupDeviceIP.value)
-        const targetVersion = targetDevice?.version || 'v3'
-
-        const result = await ImportBackupMachine(
-            importBackupDeviceIP.value,
-            importBackupDeviceName.value,
-            importBackupMachineName.value.trim(),
-            importBackupSlot.value,
-            targetVersion
-        )
-
-        if (result.success) {
-            ElMessage.success('导入成功')
+        if (importBackupFromCloud.value) {
+            // 云机备份：直接调用设备 /android/importLocal（备份已在设备上，无需上传）
+            const backupName = importBackupMachineRow.value?.name || ''
+            const resp = await fetchWithTimeout(
+                `http://${getDeviceAddr(importBackupDeviceIP.value)}/android/importLocal`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders(importBackupDeviceIP.value) },
+                    body: JSON.stringify({
+                        backupName,
+                        indexNum: importBackupSlot.value,
+                        name: importBackupMachineName.value.trim(),
+                        start: !!importBackupStart.value
+                    })
+                },
+                300000
+            )
+            const data = await resp.json()
+            if (data.code == 0) {
+                ElMessage.success('导入成功')
+                await fetchCloudBackupsForManage()
+            } else {
+                const msg = data.message || '导入失败'
+                if (msg.length > 50) {
+                    ElMessageBox.alert(msg, '导入失败', { type: 'error', confirmButtonText: t('backup.confirm') })
+                } else {
+                    ElMessage.warning(msg)
+                }
+            }
         } else {
-            ElMessage.warning(result.message || '导入失败')
+            // 本地备份：走后端上传到设备 /android/import
+            const targetDevice = props.devices.find(d => d.ip === importBackupDeviceIP.value)
+            const targetVersion = targetDevice?.version || 'v3'
+
+            const result = await ImportBackupMachine(
+                importBackupDeviceIP.value,
+                importBackupDeviceName.value,
+                importBackupMachineName.value.trim(),
+                importBackupSlot.value,
+                targetVersion
+            )
+
+            if (result.success) {
+                ElMessage.success('导入成功')
+                // 勾选「是否开机」：导入成功后开机新云机（坑位已有运行中云机先关机）
+                if (importBackupStart.value) {
+                    await bootImportedMachine()
+                }
+            } else {
+                ElMessage.warning(result.message || '导入失败')
+            }
         }
     } catch (error) {
         console.error('导入备份云机失败:', error)
@@ -1663,6 +1978,60 @@ const handleConfirmImportBackupMachine = async () => {
         importBackupDialogVisible.value = false
     }
 };
+
+// 导入后开机：若所选坑位已有运行中的云机先关机，再开机新导入的云机
+const bootImportedMachine = async () => {
+    const deviceIP = importBackupDeviceIP.value
+    const slot = importBackupSlot.value
+    const newName = importBackupMachineName.value.trim()
+    if (!deviceIP || !newName) return
+    try {
+        // 1. 查询目标坑位中运行中的云机并先关机
+        try {
+            const resp = await fetchWithTimeout(
+                `http://${getDeviceAddr(deviceIP)}/android?name=&running=false&indexNum=${slot}`,
+                { headers: getAuthHeaders(deviceIP) },
+                30000
+            )
+            if (resp.ok) {
+                const data = await resp.json()
+                if (data.code == 0) {
+                    const running = (data.data?.list || []).filter(m => m.status === 'running' && m.name !== newName)
+                    for (const m of running) {
+                        try {
+                            await fetchWithTimeout(
+                                `http://${getDeviceAddr(deviceIP)}/android/stop`,
+                                { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders(deviceIP) }, body: JSON.stringify({ name: m.name }) },
+                                30000
+                            )
+                        } catch (e) { /* ignore */ }
+                    }
+                    if (running.length > 0) await new Promise(r => setTimeout(r, 2000))
+                }
+            }
+        } catch (e) { /* 查询失败不阻断开机 */ }
+
+        // 2. 开机新导入的云机
+        const startResp = await fetchWithTimeout(
+            `http://${getDeviceAddr(deviceIP)}/android/start`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders(deviceIP) }, body: JSON.stringify({ name: newName }) },
+            30000
+        )
+        const startData = await startResp.json()
+        if (startData.code == 0) {
+            ElMessage.success(t('backup.powerOnSuccess'))
+        } else {
+            const msg = startData.message || t('backup.powerOnFail')
+            if (msg.length > 50) {
+                ElMessageBox.alert(msg, t('backup.powerOnFail'), { type: 'error', confirmButtonText: t('backup.confirm') })
+            } else {
+                ElMessage.warning(msg)
+            }
+        }
+    } catch (error) {
+        ElMessage.error(t('backup.powerOnFail'))
+    }
+}
 
 const handleDeleteMachine = async (row) => {
     try {

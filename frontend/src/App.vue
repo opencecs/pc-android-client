@@ -191,7 +191,7 @@ const instances = ref([]) // 当前选中设备的容器列表，每个坑位只
 const allInstances = ref([]) // 当前选中设备的所有容器，用于备份切换
 const cloudMachines = ref([]) // 当前选中设备的云机列表
 const deviceCloudMachinesCache = ref(new Map()) // 设备云机缓存，存储每个设备的云机列表，键为设备IP
-const deviceAllInstancesCache = ref(new Map()) // 设备全量容器缓存（含备份），用于批量模式切换备份
+const deviceAllInstancesCache = ref(new Map()) // 设备全量容器缓存（含备份），用于批量模式切换云机
 const cloudManageMode = ref('slot') // slot: 坑位模式, batch: 批量模式
 const cloudMachineGroups = ref([]) // 云机分组数据
 const selectedCloudDevice = ref(null) // 当前选中的云机设备
@@ -203,7 +203,7 @@ const updateInfo = ref(null) // 更新信息
 
 const layoutMode = ref('grid')
 const loading = ref(false)
-const backupLoading = ref(false) // 切换备份时的加载状态
+const backupLoading = ref(false) // 切换云机时的加载状态
 const activeTab = ref('host-management')
 // 批量投屏控制状态管理
 // 批量模式：使用单独的 ref
@@ -437,7 +437,7 @@ const instanceManagementRef = ref(null)
 // 网络管理组件引用
 const networkManagementRef = ref(null)
 
-// 备份管理组件引用
+// 云机管理组件引用
 const backupManagementRef = ref(null)
 
 // AI助理组件引用
@@ -6142,8 +6142,8 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
         }
         break
       case 'switch-backup':
-        // 实现批量切换备份功能（自动切换到创建时间最新的备份）
-        console.log(`执行批量切换备份操作`)
+        // 实现批量切换云机功能（自动切换到创建时间最新的备份）
+        console.log(`执行批量切换云机操作`)
         
         {
           let switchBackupContainersToOperate = []
@@ -6227,7 +6227,7 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
           try {
             await ElMessageBox.confirm(
               `确定要对选中的 ${switchBackupTargets.length} 个云机切换到最新备份吗？\n操作将依次关闭当前运行容器并启动最新备份。`,
-              '批量切换备份',
+              '批量切换云机',
               {
                 confirmButtonText: '确定',
                 cancelButtonText: '取消',
@@ -6281,7 +6281,7 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
                 progressItem.message = '切换成功'
                 successCount++
               } catch (err) {
-                console.error(`坑位 ${target.slotNum} 切换备份失败:`, err)
+                console.error(`坑位 ${target.slotNum} 切换云机失败:`, err)
                 progressItem.status = 'failed'
                 progressItem.message = err.message || '切换失败'
                 failCount++
@@ -6291,7 +6291,7 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
             }
             
             // 3. 刷新容器列表（按设备分组刷新）
-            // 切换备份刚 stop/start 完，后端缓存可能仍是旧容器状态，
+            // 切换云机刚 stop/start 完，后端缓存可能仍是旧容器状态，
             // 必须用 isUserInitiated=true 强制后端立即刷新，否则拿到的是旧数据。
             const deviceIpSet = new Set(switchBackupTargets.map(t => t.deviceIp))
             for (const ip of deviceIpSet) {
@@ -6299,7 +6299,7 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
               if (d) await fetchAndroidContainers(d, true)
             }
 
-            // 4. 切换备份后容器名变更，原选中的云机 id 全部失效。
+            // 4. 切换云机后容器名变更，原选中的云机 id 全部失效。
             //    按坑位重新匹配新容器并恢复选中状态，避免用户选中状态被取消。
             if (cloudManageMode.value === 'batch' && successCount > 0) {
               const slotKeys = new Set()
@@ -6408,17 +6408,17 @@ const handleBatchAction = async (action, selectedData = [], cardOrientation = nu
             }
 
             if (successCount > 0) {
-              ElMessage.success(`批量切换备份成功：${successCount} 个`)
+              ElMessage.success(`批量切换云机成功：${successCount} 个`)
             }
             if (failCount > 0) {
               ElMessage.warning(`${failCount} 个切换失败`)
             }
           } catch (error) {
             if (error === 'cancel') {
-              ElMessage.info('已取消批量切换备份操作')
+              ElMessage.info('已取消批量切换云机操作')
             } else {
-              console.error('批量切换备份失败:', error)
-              ElMessage.error(`批量切换备份失败: ${error.message || '未知错误'}`)
+              console.error('批量切换云机失败:', error)
+              ElMessage.error(`批量切换云机失败: ${error.message || '未知错误'}`)
             }
           }
         }
@@ -8304,14 +8304,14 @@ const treeSelectedKeys = ref([]) // 存储树形结构选中的节点ID
 const backupListVisible = ref(false) // 备份列表显示状态
 const backupTableRef = ref(null) // 备份列表表格引用
 const backupCurrentSlot = ref(0) // 当前操作的坑位（备份相关）
-const switchingBackupSlot = ref(null) // 当前正在切换备份的坑位
+const switchingBackupSlot = ref(null) // 当前正在切换云机的坑位
 const backupList = ref([]) // 备份列表数据
 const selectedBackupList = ref([]) // 选中的备份列表（用于批量操作）
 const backupGroups = ref(['默认分组', '测试分组', '生产分组']) // 备份分组
 const selectedBackupGroup = ref('默认分组') // 当前选中的分组
 const sortBy = ref('createTime') // 排序字段
 
-// 批量切换备份进度对话框
+// 批量切换云机进度对话框
 const batchSwitchBackupProgressVisible = ref(false) // 进度对话框显示状态
 const batchSwitchBackupProgressList = ref([]) // 每条进度项: { slotNum, currentName, backupName, status: 'pending'|'running'|'success'|'failed', message }
 const batchSwitchBackupTotal = ref(0) // 总数
@@ -11033,7 +11033,7 @@ const executeBatchUpdateImage = async () => {
   })()
 }
 
-// 切换备份
+// 切换云机
 const switchBackup = async (backupId) => {
   console.log(`切换坑位 ${backupCurrentSlot.value} 到备份 ${backupId}`)
 
@@ -11106,7 +11106,7 @@ const switchBackup = async (backupId) => {
       await new Promise(resolve => setTimeout(resolve, 1000))
     }
 
-    // 4. 批量模式下：切换备份后容器名变更，原选中的云机 id 失效，
+    // 4. 批量模式下：切换云机后容器名变更，原选中的云机 id 失效，
     //    按坑位重新匹配新容器并恢复选中状态。
     if (cloudManageMode.value === 'batch') {
       const newCm = (() => {
@@ -11127,8 +11127,8 @@ const switchBackup = async (backupId) => {
       }
     }
   } catch (error) {
-    console.error('切换备份失败:', error)
-    ElMessage.error('切换备份失败: ' + (error.message || '未知错误'))
+    console.error('切换云机失败:', error)
+    ElMessage.error('切换云机失败: ' + (error.message || '未知错误'))
   } finally {
     backupLoading.value = false
     backupListVisible.value = false
@@ -12158,9 +12158,9 @@ const handleTabChange = (tabName) => {
     networkManagementRef.value.fetchNetworks()
   }
 
-  // 切换到备份管理页面时，触发备份列表数据获取
+  // 切换到云机管理页面时，触发备份列表数据获取
   if (tabName === 'backup-management') {
-    console.log('切换到备份管理页面，触发备份列表数据获取')
+    console.log('切换到云机管理页面，触发备份列表数据获取')
     backupManagementRef.value.fetchBackups()
   }
 
@@ -20080,7 +20080,7 @@ const handleBindsTest = async () => {
         </el-tab-pane>
 
 
-        <!-- 备份管理 -->
+        <!-- 云机管理 -->
         <el-tab-pane :label="t('menu.backupManagement')" name="backup-management">
           <BackupManagement
             ref="backupManagementRef"
@@ -20346,13 +20346,13 @@ const handleBindsTest = async () => {
     </template>
   </el-dialog>
   
-  <!-- 切换备份悬浮窗口 -->
+  <!-- 切换云机悬浮窗口 -->
   <el-dialog
     v-model="backupListVisible"
     :title="t('cloudMachine.switchBackup')"
     width="70%"
   >
-    <!-- 切换备份时的覆盖层 -->
+    <!-- 切换云机时的覆盖层 -->
     <div 
       v-if="backupLoading" 
       class="switching-backup-overlay-dialog"
@@ -20490,10 +20490,10 @@ const handleBindsTest = async () => {
     </div>
   </el-dialog>
   
-  <!-- 批量切换备份进度对话框 -->
+  <!-- 批量切换云机进度对话框 -->
   <el-dialog
     v-model="batchSwitchBackupProgressVisible"
-    title="批量切换备份进度"
+    title="批量切换云机进度"
     width="520px"
     :close-on-click-modal="false"
     :close-on-press-escape="false"
@@ -26671,7 +26671,7 @@ el-icon.is-loading {
   background-color: #a8a8a8;
 }
 
-/* 切换备份时的覆盖层样式 */
+/* 切换云机时的覆盖层样式 */
 .switching-backup-overlay {
   position: absolute;
   top: 0;
@@ -26689,7 +26689,7 @@ el-icon.is-loading {
   border-radius: 8px;
 }
 
-/* 切换备份弹窗的覆盖层样式 */
+/* 切换云机弹窗的覆盖层样式 */
 .switching-backup-overlay-dialog {
   position: absolute;
   top: 0;

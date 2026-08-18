@@ -311,7 +311,7 @@
               :class="`card-${cardOrientation}`"
               @contextmenu="handleContextMenu($event, i)"
             >
-              <!-- 切换备份时的覆盖层 -->
+              <!-- 切换云机时的覆盖层 -->
               <div 
                 v-if="switchingBackupSlot === i" 
                 class="switching-backup-overlay"
@@ -455,7 +455,7 @@
                   
                   
                   <template v-if="props.selectedCloudDevice && props.instances.find(inst => inst.indexNum === i)">
-                    <!-- 有容器实例的坑位显示切换备份按钮 -->
+                    <!-- 有容器实例的坑位显示切换云机按钮 -->
                     <el-button 
                       size="small" 
                       type="primary" 
@@ -1304,7 +1304,7 @@ const confirmAddDevicesToGroup = () => {
 // 截图管理相关 - 现在由父组件App.vue处理
 
 // 备份相关
-const switchingBackupSlot = ref(null) // 当前正在切换备份的坑位
+const switchingBackupSlot = ref(null) // 当前正在切换云机的坑位
 
 // 添加设备对话框相关
 const addDeviceDialogVisible = ref(false)
@@ -2502,14 +2502,14 @@ watch(() => props.treeSelectedKeys, (newKeys) => {
   }
   batchCheckedMachineIds.value = next
   // 同步更新 currentCheckedKeys，保证后续 cloudMachineGroups 重建时
-  // watch 能用最新的选中 id 重算 selectedCloudMachines（如切换备份后新 id）
+  // watch 能用最新的选中 id 重算 selectedCloudMachines（如切换云机后新 id）
   currentCheckedKeys = [...next]
 }, { immediate: true, deep: true })
 
 // 监听云机数据变化，剔除已不存在的云机 id
-// 注意：数据刷新（如批量切换备份、关机后 fetchAndroidContainers）会重建 cloudMachineGroups，
+// 注意：数据刷新（如批量切换云机、关机后 fetchAndroidContainers）会重建 cloudMachineGroups，
 // 新云机对象的 id 形如 `${device.ip}_${inst.name}`，容器名变了 id 也变。
-// 若这里主动剔除"已不存在的 id"，会把切换备份前选中的状态清空，影响用户连续操作。
+// 若这里主动剔除"已不存在的 id"，会把切换云机前选中的状态清空，影响用户连续操作。
 // 因此这里不主动剔除失效 id，仅在 syncSelectedToParent 时跳过已不存在的云机。
 // watch(() => props.cloudMachineGroups, () => {}, { deep: true })
 
@@ -2525,7 +2525,7 @@ watch(() => props.cloudMachineGroups, (newGroups) => {
     // 分组数据更新后，用当前勾选 key 从新数据中重新提取 selectedCloudMachines
     // 避免截图区域仍显示旧对象引用（status 等字段不更新）
     if (currentCheckedKeys.length > 0) {
-      // 先按云机 id 精确匹配；若全部失效（如切换备份后容器名变化导致 id 变更），
+      // 先按云机 id 精确匹配；若全部失效（如切换云机后容器名变化导致 id 变更），
       // 退化为按"设备IP + 坑位号"匹配，保留选中状态。
       const recalc = recalcSelectedMachines(currentCheckedKeys, newGroups)
       if (recalc.length > 0) {
@@ -2556,7 +2556,7 @@ watch(() => props.cloudMachineGroups, (newGroups) => {
   }
 }, { deep: true })
 
-// 按"设备IP + 坑位号"重算选中云机（用于切换备份后容器名变更的场景）
+// 按"设备IP + 坑位号"重算选中云机（用于切换云机后容器名变更的场景）
 // checkedKeys 中 id 形如 `${deviceIp}_${containerName}`，
 // containerName 形如 `8569541a74175bfe052739c4321ea31b_2_T0002`，
 // 整体 split('_') 后为 [deviceIp, hash, slot, name]，坑位号在第 2 段（索引 2）。

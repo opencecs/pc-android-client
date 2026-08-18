@@ -172,9 +172,14 @@ type ProjectionConfig struct {
 	// 投屏设置（前端持久化注入，nil/零值=go_legacy 默认行为）
 	HwAccel       *bool // GPU 硬件加速开关；nil=默认(硬解)，false=软解，true=硬解
 	NoSidebar     bool  // 禁用 WebView2 侧边栏（省约 900MB/窗口内存）
+	PlayArg       string // RTSP SETUP 额外参数（如 imagelevel#1#platform#1#heartbeat#5）
 
 	// 设备 API 端口（MYTOS API，短信/剪贴板等；0=禁用，go_legacy 默认）
 	ApiPort       int // myt 网络填 9082；普通网络填端口映射后的 9082 HostPort
+
+	// 摄像头推流：设备 camera TCP 端口（云机映射 10006；0=不传）
+	// 由前端按 10006 映射端口注入；go_legacy 侧边栏据此控制推流启停
+	CameraTcpPort int
 }
 
 // CheckPortOpen 检查本地端口是否开放
@@ -3057,9 +3062,9 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 		if opts.Test {
 			installFlags = append(installFlags, "-t") // 允许测试应用
 		}
-		if opts.Grant {
-			installFlags = append(installFlags, "-g") // 自动授权
-		}
+		// if opts.Grant {
+		// 	installFlags = append(installFlags, "-g") // 自动授权
+		// }
 
 		installCmd := fmt.Sprintf("pm install %s %s", strings.Join(installFlags, " "), installPath)
 		log.Printf("[InstallAPK] 执行安装命令: %s", installCmd)
@@ -6171,8 +6176,8 @@ func (a *App) DeleteBackupModel(deviceIP, modelName string) map[string]interface
 	}
 }
 
-func (a *App) DownloadBackupMachine(deviceIP, machineName string) map[string]interface{} {
-	log.Printf("[DownloadBackupMachine] 开始下载备份云机: deviceIP=%s, machineName=%s", deviceIP, machineName)
+func (a *App) DownloadBackupMachine(deviceIP, machineName string, deleteAfterDownload bool) map[string]interface{} {
+	log.Printf("[DownloadBackupMachine] 开始下载备份云机: deviceIP=%s, machineName=%s, deleteAfterDownload=%v", deviceIP, machineName, deleteAfterDownload)
 
 	// 获取设备认证信息（密码）
 	a.devicePasswordsMutex.RLock()
@@ -6188,7 +6193,8 @@ func (a *App) DownloadBackupMachine(deviceIP, machineName string) map[string]int
 		}
 	}
 
-	apiURL := fmt.Sprintf("http://%s/backup/download?name=%s", deviceAddr(deviceIP), url.QueryEscape(machineName))
+	// delete 参数：下载完成后是否删除设备上的备份包（true=删除，false=保留，默认 false）
+	apiURL := fmt.Sprintf("http://%s/backup/download?name=%s&delete=%v", deviceAddr(deviceIP), url.QueryEscape(machineName), deleteAfterDownload)
 	log.Printf("[DownloadBackupMachine] API URL: %s", apiURL)
 
 	client := &http.Client{}
@@ -12824,6 +12830,13 @@ func (a *App) startWindowsProjectionProcess(config ProjectionConfig, windowID, w
 		args = append(args, "-cport", strconv.Itoa(controlPort))
 	}
 	args = append(args, "-rtsp_tcp")
+	// RTSP SETUP 额外参数：imagelevel#1#platform#1#heartbeat#5
+	// heartbeat#5 = 心跳间隔5秒，保持 RTSP 连接稳定
+	if config.PlayArg != "" {
+		args = append(args, "-playarg", config.PlayArg)
+	} else {
+		args = append(args, "-playarg", "imagelevel#1#platform#1#heartbeat#5")
+	}
 	if orient == 1 {
 		args = append(args, "-landscape")
 	}
@@ -12888,6 +12901,19 @@ func (a *App) startWindowsProjectionProcess(config ProjectionConfig, windowID, w
 	// 设备 API 端口（MYTOS API，短信/剪贴板等；0=禁用）
 	if config.ApiPort != 0 {
 		args = append(args, "-apiport", strconv.Itoa(config.ApiPort))
+	}
+	// 摄像头推流：注入 -cam-ffmpeg（ffmpeg.exe 路径）+ -cam-tcp-port（云机映射 10006 端口）
+	// go_legacy 侧边栏据此控制推流启停。ffmpeg.exe 与 go_legacy.exe 同目录（player_dist/），
+	// 运行时一起解压到投屏运行目录，故直接在 playerExe 所在目录查找。
+	// ffmpeg.exe 不存在则不传（go_legacy 默认禁用摄像头推流），不影响投屏本身。
+	if config.CameraTcpPort != 0 {
+		ffmpegPath := filepath.Join(filepath.Dir(playerExe), "ffmpeg.exe")
+		if _, statErr := os.Stat(ffmpegPath); statErr == nil {
+			args = append(args, "-cam-ffmpeg", ffmpegPath, "-cam-tcp-port", strconv.Itoa(config.CameraTcpPort))
+			log.Printf("[投屏] 摄像头推流参数注入: cam-ffmpeg=%s cam-tcp-port=%d", ffmpegPath, config.CameraTcpPort)
+		} else {
+			log.Printf("[投屏] 摄像头推流未启用：ffmpeg.exe 不存在于 %s（请将 ffmpeg.exe 放入 player_dist/ 与 go_legacy.exe 同目录）", ffmpegPath)
+		}
 	}
 	if term != "" {
 		args = append(args, "-title", term)

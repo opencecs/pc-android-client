@@ -781,7 +781,8 @@ async function startProjection(device, containerInfo, customOrient = null) {
       ContainerName: containerName,
       Width: width,
       Height: height,
-      ApiPort: resolveApiPort(containerInfo, device.ip)
+      ApiPort: resolveApiPort(containerInfo, device.ip),
+      CameraTcpPort: resolveCameraPort(containerInfo, device.ip)
     }));
 
     if (result.success) {
@@ -870,6 +871,30 @@ function resolveApiPort(container, baseDeviceIp) {
   return hostPort;
 }
 
+// 计算设备摄像头推流 TCP 端口（go_legacy -cam-tcp-port，云机映射 10006）
+// - myt/macvlan 网络：容器独立 IP，直接用 10006
+// - 普通网络：从 portBindings 取 10006 的 HostPort
+// - OpenCecs 公网设备：再过 findPortMap 把内网端口转公网端口
+function resolveCameraPort(container, baseDeviceIp) {
+  const isMyt = container &&
+    (container.NetworkName === 'myt' || container.NetworkMode === 'myt' ||
+     container.network === 'myt' || container.networkName === 'myt' ||
+     container.networkMode === 'myt');
+  if (isMyt && container.ip) {
+    return 10006;
+  }
+  if (!container || !container.portBindings) return 0;
+  const hostPort = getMappedPort(container.portBindings, '10006/tcp') ||
+    getMappedPort(container.portBindings, '10006/udp') || 0;
+  if (!hostPort) return 0;
+  const deviceIp = container.deviceIp || container.deviceIP || baseDeviceIp;
+  const portMap = findPortMap(deviceIp);
+  if (portMap) {
+    return portMap.get(hostPort) || hostPort;
+  }
+  return hostPort;
+}
+
 // 批量投屏：多台云机各开一个 go_legacy 窗口并排成网格（后端统一算网格坐标）
 async function startBatchProjection(device, containers, customOrient = null) {
   try {
@@ -936,7 +961,8 @@ async function startBatchProjection(device, containers, customOrient = null) {
         ContainerName: name,
         Width: width,
         Height: height,
-        ApiPort: resolveApiPort(container, baseDeviceIp)
+        ApiPort: resolveApiPort(container, baseDeviceIp),
+        CameraTcpPort: resolveCameraPort(container, baseDeviceIp)
       });
     }
 
@@ -1066,7 +1092,8 @@ async function startProjectionBatchControl(device, containers, term = '批量投
       ContainerName: resolvedTerm,
       Width: width,
       Height: height,
-      ApiPort: resolveApiPort(primaryContainer, baseDeviceIp)
+      ApiPort: resolveApiPort(primaryContainer, baseDeviceIp),
+      CameraTcpPort: resolveCameraPort(primaryContainer, baseDeviceIp)
     }));
 
     if (result.success) {
@@ -1156,7 +1183,8 @@ async function startLegacyMatrixProjection(device, containers, customOrient = nu
         ContainerName: name,
         Width: width,
         Height: height,
-        ApiPort: resolveApiPort(container, baseDeviceIp)
+        ApiPort: resolveApiPort(container, baseDeviceIp),
+        CameraTcpPort: resolveCameraPort(container, baseDeviceIp)
       });
     }
 
