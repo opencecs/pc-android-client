@@ -5821,6 +5821,364 @@ func (a *App) ExportBackupModel(deviceIP, modelName string) map[string]interface
 	}
 }
 
+// ExportAndroidContainer 导出安卓云机（容器级备份）。
+// V3 模拟器模式调用设备 /android/export，V2 容器模式调用 /androidV2/export。
+// exportName 为自定义导出名（不含 .tar.gz 后缀），留空则设备端自动生成。
+// 设备端以 SSE 流式返回分阶段进度事件（config → snapshot(pause/sync/snapshot/
+// unpause/e2fsck/resize2fs/gzip) → collect → pack → complete），本方法逐条读取并
+// 转发为 "androidExport:progress" 事件供前端实时展示；消费逻辑复用 SDK 升级那套
+// SSE 模式（250ms 节流 + 旧版"整段非 SSE JSON"响应兼容，避免破坏既有设备行为）。
+func (a *App) ExportAndroidContainer(deviceIP, name, exportName string, isV2 bool) map[string]interface{} {
+	log.Printf("[ExportAndroidContainer] 开始导出云机: deviceIP=%s, name=%s, exportName=%s, isV2=%v", deviceIP, name, exportName, isV2)
+
+	taskId := fmt.Sprintf("export_%d_%s", time.Now().UnixNano(), randText(6))
+
+	// 节流：普通进度事件至少间隔 250ms 才推送一次，避免高频 SSE（copy/gzip 的 current/total）把前端主线程卡住
+	var lastEmitAt int64
+	emitProgress := func(stage string, progress int, msg string, extra map[string]interface{}) {
+		now := time.Now().UnixNano()
+		isTerminal := stage == "complete" || stage == "failed"
+		if !isTerminal && now-lastEmitAt < int64(250*time.Millisecond) {
+			return
+		}
+		lastEmitAt = now
+		payload := map[string]interface{}{
+			"taskId":   taskId,
+			"deviceIP": deviceIP,
+			"stage":    stage,
+			"progress": progress,
+			"msg":      msg,
+		}
+		for k, v := range extra {
+			payload[k] = v
+		}
+		a.emitEvent("androidExport:progress", payload)
+	}
+
+	fail := func(message string) map[string]interface{} {
+		emitProgress("failed", 0, message, nil)
+		return map[string]interface{}{"success": false, "message": message, "taskId": taskId}
+	}
+
+	// 导出名称校验：不允许中文等非 ASCII 字符（兜底，前端已实时过滤）
+	if exportName != "" {
+		for i := 0; i < len(exportName); i++ {
+			if exportName[i] > 0x7f {
+				return fail("导出名称不允许包含中文，仅支持英文字母、数字和 _ . -")
+			}
+		}
+	}
+
+	path := "/android/export"
+	if isV2 {
+		path = "/androidV2/export"
+	}
+	apiURL := fmt.Sprintf("http://%s%s", deviceAddr(deviceIP), path)
+
+	a.devicePasswordsMutex.RLock()
+	password := a.devicePasswords[deviceIP]
+	a.devicePasswordsMutex.RUnlock()
+
+	// exportName：自定义导出名（不含 .tar.gz），留空则设备端自动生成
+	body, _ := json.Marshal(map[string]interface{}{"name": name, "exportName": exportName})
+	req, err := http.NewRequest("POST", apiURL, strings.NewReader(string(body)))
+	if err != nil {
+		return fail(fmt.Sprintf("创建请求失败: %v", err))
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	if password != "" {
+		req.SetBasicAuth("admin", password)
+	}
+
+	// 导出可能持续数分钟（快照 + 压缩），不设整体超时，依赖流式读取
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[ExportAndroidContainer] 设备 %s 调用 %s 失败: %v", deviceIP, path, err)
+		return fail(fmt.Sprintf("调用导出API失败: %v", err))
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fail("认证失败，请输入正确的设备密码")
+	}
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fail(fmt.Sprintf("导出API返回错误: 状态码 %d, 响应: %s", resp.StatusCode, string(respBody)))
+	}
+
+	// 流式读取：逐行解析 SSE 并转发；同时把整段 body 缓存进 plainBuf，
+	// 供旧版设备（直接返回单段 JSON、无 data:/event: 帧）做兜底解析。
+	reader := bufio.NewReader(resp.Body)
+	var event string
+	var completeData string
+	var lastParsed map[string]interface{}
+	var resultName string // 设备回传的最终导出文件名
+	sawSSE := false
+	var plainBuf []byte
+
+	for {
+		line, rerr := reader.ReadString('\n')
+		if line != "" {
+			plainBuf = append(plainBuf, line...)
+			trimmed := strings.TrimRight(line, "\r\n")
+			if strings.HasPrefix(trimmed, "event:") {
+				sawSSE = true
+				event = strings.TrimSpace(strings.TrimPrefix(trimmed, "event:"))
+			} else if strings.HasPrefix(trimmed, "data:") {
+				sawSSE = true
+				data := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
+				if data == "" {
+					if rerr != nil {
+						break
+					}
+					continue
+				}
+				var obj map[string]interface{}
+				parseOK := json.Unmarshal([]byte(data), &obj) == nil
+				if parseOK {
+					lastParsed = obj
+					if en, ok := obj["exportName"].(string); ok && en != "" {
+						resultName = en
+					}
+				}
+				prog := 0
+				stageName := event
+				if parseOK {
+					if p, ok := obj["progress"].(float64); ok {
+						prog = int(p)
+					} else if p, ok := obj["percent"].(float64); ok {
+						prog = int(p)
+					}
+					if s, ok := obj["stage"].(string); ok && s != "" {
+						stageName = s
+					}
+					if m, ok := obj["msg"].(string); ok {
+						emitProgress(stageName, prog, m, obj)
+					} else {
+						emitProgress(stageName, prog, data, obj)
+					}
+				} else {
+					emitProgress(stageName, prog, data, nil)
+				}
+				if stageName == "complete" || event == "complete" {
+					completeData = data
+				}
+			}
+		}
+		if rerr != nil {
+			if rerr != io.EOF {
+				log.Printf("[ExportAndroidContainer] 设备 %s 读取响应流失败: %v", deviceIP, rerr)
+			}
+			break
+		}
+	}
+
+	// 兜底：旧版设备返回整段非 SSE JSON
+	if !sawSSE {
+		if jerr := json.Unmarshal(bytes.TrimSpace(plainBuf), &lastParsed); jerr != nil {
+			log.Printf("[ExportAndroidContainer] 设备 %s 响应既非 SSE 也非 JSON: %v, body前512=%s", deviceIP, jerr, string(plainBuf[:min(len(plainBuf), 512)]))
+		}
+	}
+
+	// 从结果中提取 exportName（SSE complete 或旧版 JSON 的 data 里）
+	if resultName == "" {
+		if d, ok := lastParsed["data"].(map[string]interface{}); ok {
+			if en, ok := d["exportName"].(string); ok && en != "" {
+				resultName = en
+			}
+		}
+	}
+
+	// 判定成败：设备侧若显式带非 0 code 视为失败
+	if lastParsed != nil {
+		if code, ok := lastParsed["code"].(float64); ok && code != 0 {
+			m, _ := lastParsed["message"].(string)
+			if m == "" {
+				m = "导出失败"
+			}
+			return fail(m)
+		}
+	}
+
+	if completeData == "" && lastParsed == nil {
+		return fail("导出请求未返回任何进度数据，请确认设备为支持流式进度的新版固件")
+	}
+
+	if resultName == "" {
+		// 设备未回传文件名：优先用自定义名，否则用容器名，统一补 .tar.gz
+		base := name
+		if exportName != "" {
+			base = exportName
+		}
+		resultName = base + ".tar.gz"
+	}
+	emitProgress("complete", 100, "导出完成", map[string]interface{}{"exportName": resultName})
+	return map[string]interface{}{"success": true, "message": "导出完成", "exportName": resultName, "taskId": taskId}
+}
+
+// ImportAndroidContainer 从设备导入云机备份（容器级）。
+// 云机备份包已在目标设备上（/backup 列表），调用设备 /android/importLocal 原地导入，无需下载/上传。
+// indexNum 为目标坑位号，name 为新云机名，start 为导入完成后是否开机（由设备端执行）。
+// 进度与导出一致走 SSE 分阶段：config → restore/unpack 等子事件 → complete，
+// 本方法逐条读取设备 SSE 并转发为 "androidImport:progress" 事件供前端实时展示；
+// 消费逻辑复用 SDK 升级那套 SSE 模式（250ms 节流 + 旧版"整段非 SSE JSON"响应兼容，避免破坏既有设备行为）。
+func (a *App) ImportAndroidContainer(deviceIP, backupName, name string, indexNum int, start bool) map[string]interface{} {
+	log.Printf("[ImportAndroidContainer] 开始导入云机备份: deviceIP=%s, backupName=%s, name=%s, indexNum=%d, start=%v",
+		deviceIP, backupName, name, indexNum, start)
+	taskId := fmt.Sprintf("import_%d_%s", time.Now().UnixNano(), randText(6))
+	var lastEmitAt int64
+	emitProgress := func(stage string, progress int, msg string, extra map[string]interface{}) {
+		now := time.Now().UnixNano()
+		// complete/failed 为终态，必须发出；其余按 250ms 节流
+		isTerminal := stage == "complete" || stage == "failed"
+		if !isTerminal && now-lastEmitAt < int64(250*time.Millisecond) {
+			return
+		}
+		lastEmitAt = now
+		payload := map[string]interface{}{
+			"taskId":   taskId,
+			"deviceIP": deviceIP,
+			"stage":    stage,
+			"progress": progress,
+			"msg":      msg,
+		}
+		for k, v := range extra {
+			payload[k] = v
+		}
+		a.emitEvent("androidImport:progress", payload)
+	}
+	fail := func(message string) map[string]interface{} {
+		emitProgress("failed", 0, message, nil)
+		return map[string]interface{}{"success": false, "message": message, "taskId": taskId}
+	}
+
+	apiURL := fmt.Sprintf("http://%s/android/importLocal", deviceAddr(deviceIP))
+
+	a.devicePasswordsMutex.RLock()
+	password := a.devicePasswords[deviceIP]
+	a.devicePasswordsMutex.RUnlock()
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"backupName": backupName,
+		"indexNum":   indexNum,
+		"name":       name,
+		"start":      start,
+	})
+	req, err := http.NewRequest("POST", apiURL, strings.NewReader(string(body)))
+	if err != nil {
+		return fail(fmt.Sprintf("创建请求失败: %v", err))
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	if password != "" {
+		req.SetBasicAuth("admin", password)
+	}
+
+	// 导入（解压+恢复）耗时通常比导出更长，不设整体超时，依赖流式读取
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fail(fmt.Sprintf("调用导入API失败: %v", err))
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fail("认证失败，请输入正确的设备密码")
+	}
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fail(fmt.Sprintf("导入API返回错误: 状态码 %d, 响应: %s", resp.StatusCode, string(respBody)))
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	var event string
+	var completeData string
+	var lastParsed map[string]interface{}
+	sawSSE := false
+	var plainBuf []byte
+	for {
+		line, rerr := reader.ReadString('\n')
+		if line != "" {
+			plainBuf = append(plainBuf, line...)
+			trimmed := strings.TrimRight(line, "\r\n")
+			if strings.HasPrefix(trimmed, "event:") {
+				sawSSE = true
+				event = strings.TrimSpace(strings.TrimPrefix(trimmed, "event:"))
+			} else if strings.HasPrefix(trimmed, "data:") {
+				sawSSE = true
+				data := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
+				if data == "" {
+					if rerr != nil {
+						break
+					}
+					continue
+				}
+				var obj map[string]interface{}
+				parseOK := json.Unmarshal([]byte(data), &obj) == nil
+				if parseOK {
+					lastParsed = obj
+				}
+				progress := 0
+				stageName := event
+				if parseOK {
+					if p, ok := obj["progress"].(float64); ok {
+						progress = int(p)
+					} else if p, ok := obj["percent"].(float64); ok {
+						progress = int(p)
+					}
+					if s, ok := obj["stage"].(string); ok && s != "" {
+						stageName = s
+					}
+					if m, ok := obj["msg"].(string); ok {
+						emitProgress(stageName, progress, m, obj)
+					} else {
+						emitProgress(stageName, progress, data, obj)
+					}
+				} else {
+					emitProgress(stageName, progress, data, nil)
+				}
+				if stageName == "complete" || event == "complete" {
+					completeData = data
+				}
+			}
+		}
+		if rerr != nil {
+			if rerr != io.EOF {
+				log.Printf("[ImportAndroidContainer] 设备 %s 读取响应流失败: %v", deviceIP, rerr)
+			}
+			break
+		}
+	}
+
+	if !sawSSE {
+		// 兜底：旧版设备返回整段非 SSE JSON（无 event:/data: 帧）
+		log.Printf("[ImportAndroidContainer] 设备 %s 未返回 SSE 帧，按整段 JSON 兜底解析", deviceIP)
+		if jerr := json.Unmarshal(bytes.TrimSpace(plainBuf), &lastParsed); jerr != nil {
+			log.Printf("[ImportAndroidContainer] 设备 %s 响应既非 SSE 也非 JSON: %v, body前512=%s",
+				deviceIP, jerr, string(plainBuf[:min(len(plainBuf), 512)]))
+		}
+	}
+
+	if lastParsed != nil {
+		if code, ok := lastParsed["code"].(float64); ok && code != 0 {
+			m, _ := lastParsed["message"].(string)
+			if m == "" {
+				m = "导入失败"
+			}
+			return fail(m)
+		}
+	}
+
+	if completeData == "" && lastParsed == nil {
+		return fail("导入请求未返回任何进度数据，请确认设备为支持流式进度的新版固件")
+	}
+
+	emitProgress("complete", 100, "导入完成", map[string]interface{}{"name": name, "indexNum": indexNum})
+	return map[string]interface{}{"success": true, "message": "导入完成", "taskId": taskId}
+}
+
 // CheckBackupModelExists 检查备份机型文件是否存在
 func (a *App) CheckBackupModelExists(modelName string) map[string]interface{} {
 	log.Printf("[CheckBackupModelExists] 检查机型是否存在: %s", modelName)
@@ -6438,7 +6796,16 @@ func (a *App) ImportBackupMachine(deviceIP, deviceName, machineName string, slot
 	if deviceVersion == "v2" {
 		importPath = "/androidV2/import"
 	}
-	apiURL := fmt.Sprintf("http://%s%s", deviceAddr(deviceIP), importPath)
+	// application/octet-stream 上传：body 为备份包文件的原始字节流（裸流，非 multipart），
+	// 全部参数走 URL query string。filename 必填（备份包文件名，不含路径）；
+	// indexNum 必填（坑位号）；name 可选（导入后云机名，留空用包内原始名）。
+	q := url.Values{}
+	q.Set("filename", fileStat.Name())
+	q.Set("indexNum", strconv.Itoa(slot))
+	if machineName != "" {
+		q.Set("name", machineName)
+	}
+	apiURL := fmt.Sprintf("http://%s%s?%s", deviceAddr(deviceIP), importPath, q.Encode())
 	log.Printf("[ImportBackupMachine] 请求URL: %s", apiURL)
 
 	// 自定义 Transport：
@@ -6458,61 +6825,13 @@ func (a *App) ImportBackupMachine(deviceIP, deviceName, machineName string, slot
 		Timeout:   30 * time.Minute,
 	}
 
-	// 预先用 bytes.Buffer 构造完整 multipart body，以便设置准确的 Content-Length。
-	// 若用 io.Pipe 流式上传，Go HTTP client 走 chunked 编码，设备端 GoFrame 可能无法
-	// 准确判断文件边界，导致备份包解压不完整、tar/zip 校验返回 exit status 2。
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
+	totalSize := fileStat.Size()
+	log.Printf("[ImportBackupMachine] 上传文件总大小: %d bytes", totalSize)
 
-	formFile, err := writer.CreateFormFile("file", fileStat.Name())
-	if err != nil {
-		log.Printf("[ImportBackupMachine] 创建表单文件失败: %v", err)
-		return map[string]interface{}{
-			"success": false,
-			"message": fmt.Sprintf("创建表单文件失败: %v", err),
-		}
-	}
-
-	if _, err := io.Copy(formFile, file); err != nil {
-		log.Printf("[ImportBackupMachine] 复制文件内容失败: %v", err)
-		return map[string]interface{}{
-			"success": false,
-			"message": fmt.Sprintf("复制文件内容失败: %v", err),
-		}
-	}
-
-	if err := writer.WriteField("name", machineName); err != nil {
-		log.Printf("[ImportBackupMachine] 写入name字段失败: %v", err)
-		return map[string]interface{}{
-			"success": false,
-			"message": fmt.Sprintf("写入name字段失败: %v", err),
-		}
-	}
-
-	if err := writer.WriteField("indexNum", strconv.Itoa(slot)); err != nil {
-		log.Printf("[ImportBackupMachine] 写入indexNum字段失败: %v", err)
-		return map[string]interface{}{
-			"success": false,
-			"message": fmt.Sprintf("写入indexNum字段失败: %v", err),
-		}
-	}
-
-	if err := writer.Close(); err != nil {
-		log.Printf("[ImportBackupMachine] 关闭multipart writer失败: %v", err)
-		return map[string]interface{}{
-			"success": false,
-			"message": fmt.Sprintf("关闭multipart writer失败: %v", err),
-		}
-	}
-
-	totalSize := int64(body.Len())
-	log.Printf("[ImportBackupMachine] multipart body 总大小: %d bytes", totalSize)
-
-	// 用进度追踪 Reader 包装已构造好的 body，便于上传期间持续 emit 进度事件。
-	// 由于 body 已经在内存中构造完毕，可以同时设置 ContentLength（不会走 chunked），
-	// 也能在上传时获取已发送字节数。
+	// octet-stream：body 为纯备份文件二进制流，进度追踪 Reader 直接包装本地文件
+	//（不再读入内存），上传期间持续 emit 进度事件；Content-Length 显式设为文件大小。
 	progressReader := &progressReader{
-		reader: bytes.NewReader(body.Bytes()),
+		reader: file,
 		total:  totalSize,
 		emit: func(written int64) {
 			percent := int(float64(written) / float64(totalSize) * 100)
@@ -6538,9 +6857,9 @@ func (a *App) ImportBackupMachine(deviceIP, deviceName, machineName string, slot
 			"message": fmt.Sprintf("创建请求失败: %v", err),
 		}
 	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Content-Type", "application/octet-stream")
 	// 显式设置 Content-Length，避免 chunked 编码导致设备端文件边界判断错误
-	req.ContentLength = int64(body.Len())
+	req.ContentLength = totalSize
 	// 禁用 100-continue（设备端 GoFrame 不响应 100 会导致大文件 body 发送阻塞/异常）
 	req.Header.Set("Expect", "")
 
@@ -6563,54 +6882,138 @@ func (a *App) ImportBackupMachine(deviceIP, deviceName, machineName string, slot
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
-	log.Printf("[ImportBackupMachine] 响应状态: %d, 响应体: %s", resp.StatusCode, string(respBody))
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		log.Printf("[ImportBackupMachine] JSON解析失败: %v", err)
+	if resp.StatusCode == http.StatusUnauthorized {
+		log.Printf("[ImportBackupMachine] 认证失败(401)")
+		return map[string]interface{}{"success": false, "message": "认证失败，请输入正确的设备密码"}
+	}
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		log.Printf("[ImportBackupMachine] 导入API返回错误: 状态码 %d, 响应: %s", resp.StatusCode, string(respBody))
 		return map[string]interface{}{
 			"success": false,
-			"message": fmt.Sprintf("解析响应失败: %v, 响应体: %s", err, string(respBody)),
+			"message": fmt.Sprintf("导入API返回错误: 状态码 %d, 响应: %s", resp.StatusCode, string(respBody)),
 		}
 	}
 
-	codeValue := result["code"]
-	code := 0
-	switch v := codeValue.(type) {
-	case float64:
-		code = int(v)
-	case int:
-		code = v
-	case string:
-		if v == "0" {
-			code = 0
+	// 设备以 SSE（text/event-stream）逐行推送 data:{JSON} 事件：
+	//   upload(progress/current/total/speed) → verify → extract → restore → gunzip(current/total) → complete(progress 100, name)
+	//   失败时：{ "stage":"error", "msg":... }
+	// 上传阶段的实时字节进度由 progressReader 通过 batch-import:upload-progress 驱动
+	//（client.Do 阻塞发送文件 body 期间无法实时读取 SSE），此处逐条转发设备各阶段事件。
+	reader := bufio.NewReader(resp.Body)
+	var event string
+	var lastParsed map[string]interface{}
+	sawSSE := false
+	var plainBuf []byte
+	var errorMsg string
+	sawComplete := false
+	for {
+		line, rerr := reader.ReadString('\n')
+		if line != "" {
+			plainBuf = append(plainBuf, line...)
+			trimmed := strings.TrimRight(line, "\r\n")
+			if strings.HasPrefix(trimmed, "event:") {
+				sawSSE = true
+				event = strings.TrimSpace(strings.TrimPrefix(trimmed, "event:"))
+			} else if strings.HasPrefix(trimmed, "data:") {
+				sawSSE = true
+				data := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
+				if data == "" {
+					if rerr != nil {
+						break
+					}
+					continue
+				}
+				var obj map[string]interface{}
+				parseOK := json.Unmarshal([]byte(data), &obj) == nil
+				if !parseOK {
+					// 非 JSON 的 data 行（异常兜底）：原样转发并记录，成败以 complete/error 事件为准
+					log.Printf("[ImportBackupMachine] 设备 %s 收到非JSON data 行: %s", deviceIP, data)
+					a.emitEvent("backupImport:progress", map[string]interface{}{"stage": event, "msg": data})
+					continue
+				}
+				lastParsed = obj
+				stage, _ := obj["stage"].(string)
+				if stage == "" {
+					stage = event
+				}
+				msg, _ := obj["msg"].(string)
+				progress := 0
+				if p, ok := obj["progress"].(float64); ok {
+					progress = int(p)
+				} else if p, ok := obj["percent"].(float64); ok {
+					progress = int(p)
+				}
+				// 逐条转发设备各阶段进度（含 current/total/speed），前端据此显示阶段与子进度
+				payload := map[string]interface{}{"stage": stage, "progress": progress, "msg": msg}
+				if c, ok := obj["current"].(float64); ok {
+					payload["current"] = int64(c)
+				}
+				if t, ok := obj["total"].(float64); ok {
+					payload["total"] = int64(t)
+				}
+				if s, ok := obj["speed"].(float64); ok {
+					payload["speed"] = s
+				}
+				a.emitEvent("backupImport:progress", payload)
+				switch stage {
+				case "error", "failed":
+					errorMsg = msg
+				case "complete":
+					sawComplete = true
+				}
+			}
+		}
+		if rerr != nil {
+			if rerr != io.EOF {
+				log.Printf("[ImportBackupMachine] 设备 %s 读取响应流失败: %v", deviceIP, rerr)
+			}
+			break
 		}
 	}
 
-	log.Printf("[ImportBackupMachine] code=%d, message=%v", code, result["message"])
-
-	if resp.StatusCode == 200 && code == 0 {
-		log.Printf("[ImportBackupMachine] 导入成功")
-		return map[string]interface{}{
-			"success": true,
-			"message": "导入成功",
+	// 兜底：旧版设备返回整段非 SSE JSON（无 event:/data: 帧）
+	if !sawSSE {
+		log.Printf("[ImportBackupMachine] 设备 %s 未返回 SSE 帧，按整段 JSON 兜底解析", deviceIP)
+		if jerr := json.Unmarshal(bytes.TrimSpace(plainBuf), &lastParsed); jerr != nil {
+			log.Printf("[ImportBackupMachine] 设备 %s 响应既非 SSE 也非 JSON: %v, body前512=%s",
+				deviceIP, jerr, string(plainBuf[:min(len(plainBuf), 512)]))
+			return map[string]interface{}{
+				"success": false,
+				"message": fmt.Sprintf("解析响应失败: %v", jerr),
+			}
 		}
 	}
 
-	msg := ""
-	if m, ok := result["message"].(string); ok {
-		msg = m
-	} else if m, ok := result["msg"].(string); ok {
-		msg = m
-	} else if m, ok := result["message"].(float64); ok {
-		msg = fmt.Sprintf("%v", m)
+	// 结果判定
+	if errorMsg != "" {
+		log.Printf("[ImportBackupMachine] 导入失败(SSE error): %s", errorMsg)
+		return map[string]interface{}{"success": false, "message": errorMsg}
 	}
-	log.Printf("[ImportBackupMachine] 导入失败: %s", msg)
-	return map[string]interface{}{
-		"success": false,
-		"message": msg,
+	if sawSSE {
+		// SSE 流：以是否收到 complete 事件为准
+		if !sawComplete {
+			log.Printf("[ImportBackupMachine] SSE 流未收到 complete 事件，判定为未完成")
+			return map[string]interface{}{"success": false, "message": "导入未完成（设备未返回 complete 事件），请重试"}
+		}
+	} else {
+		// 旧版整段 JSON：code != 0 视为失败
+		if code, ok := lastParsed["code"].(float64); ok && code != 0 {
+			m, _ := lastParsed["message"].(string)
+			if m == "" {
+				m, _ = lastParsed["msg"].(string)
+			}
+			if m == "" {
+				m = "导入失败"
+			}
+			log.Printf("[ImportBackupMachine] 导入失败(code!=0): %s", m)
+			return map[string]interface{}{"success": false, "message": m}
+		}
 	}
+
+	log.Printf("[ImportBackupMachine] 导入成功")
+	a.emitEvent("backupImport:progress", map[string]interface{}{"stage": "complete", "progress": 100, "msg": "导入完成"})
+	return map[string]interface{}{"success": true, "message": "导入成功"}
 }
 
 func (a *App) DeleteLocalBackupMachine(machineName string) map[string]interface{} {

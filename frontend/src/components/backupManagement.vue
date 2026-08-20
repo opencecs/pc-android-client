@@ -605,12 +605,26 @@
             <el-form label-width="100px">
                 <el-form-item :label="t('backup.selectMachine')">
                     <el-select v-model="selectedBackupMachineContainer" :placeholder="t('backup.pleaseSelectMachine')" size="medium" style="width: 100%;"
-                        @change="handleBackupMachineContainerChange">
+                        :disabled="backupMachineCreating" @change="handleBackupMachineContainerChange">
                         <el-option v-for="container in backupMachineContainerList" :key="container.id" :label="container.name + (container.androidType === 'V2' ? ' (V2)' : '')"
                             :value="container.id" />
                     </el-select>
                 </el-form-item>
+                <el-form-item label="导出名称">
+                    <el-input v-model="exportCustomName" placeholder="自定义导出名称（仅英文/数字/空格/_/./-，不含 .tar.gz），留空自动生成"
+                        clearable :disabled="backupMachineCreating" @input="onExportNameInput" />
+                </el-form-item>
             </el-form>
+            <div v-if="backupMachineCreating" style="margin-top: 8px;">
+                <el-progress :percentage="exportProgress" :stroke-width="16" striped :striped-flow="exportProgress < 100"
+                    :status="exportProgress >= 100 ? 'success' : undefined" />
+                <div style="margin-top: 8px; min-height: 20px; font-size: 13px; color: #606266;">
+                    <span v-if="exportMsg">{{ exportMsg }}</span>
+                    <span v-if="exportCurrent != null && exportTotal != null" style="margin-left: 8px; color: #909399;">
+                        ({{ exportCurrent }} / {{ exportTotal }})
+                    </span>
+                </div>
+            </div>
             <template #footer>
                 <el-button @click="addBackupMachineVisible = false">{{ t('backup.cancel') }}</el-button>
                 <el-button type="primary" @click="handleConfirmAddBackupMachine" :disabled="!selectedBackupMachineContainer" :loading="backupMachineCreating">
@@ -642,8 +656,9 @@
             <el-form label-width="100px">
                 <el-form-item :label="t('backup.selectDevice')">
                     <el-select v-model="importBackupDeviceIP" :placeholder="t('backup.pleaseSelectDevice')" size="medium" style="width: 100%;"
+                        :disabled="importBackupFromCloud"
                         @change="handleImportBackupDeviceChange">
-                        <el-option v-for="device in onlineDevicesForBackupImport" :key="device.ip" 
+                        <el-option v-for="device in onlineDevicesForBackupImport" :key="device.ip"
                             :label="device.ip + ' (' + $t('common.online') + ')'"
                             :value="device.ip">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -652,6 +667,9 @@
                             </div>
                         </el-option>
                     </el-select>
+                    <div v-if="importBackupFromCloud" style="font-size: 12px; color: #909399; margin-top: 4px;">
+                        云机备份仅存在于当前设备，不可跨设备导入
+                    </div>
                 </el-form-item>
                 <el-form-item :label="t('backup.slotNumber')" v-if="importBackupDeviceIP">
                     <el-input-number v-model="importBackupSlot" :min="1" :max="importBackupSlotList.length" size="medium" style="width: 100%;" />
@@ -667,6 +685,17 @@
                     <span style="font-size: 12px; color: #909399; margin-left: 8px;">{{ t('backup.powerOnAfterImportTip') }}</span>
                 </el-form-item>
             </el-form>
+
+            <!-- 流式导入进度（云机备份 importLocal / 本地备份 import，实时 SSE） -->
+            <div v-if="importBackupLoading" style="margin-top: 4px;">
+                <el-progress :percentage="importProgress" :stroke-width="16" striped :striped-flow="importProgress < 100"
+                    :status="importProgress >= 100 ? 'success' : undefined" />
+                <div style="font-size: 13px; color: #606266; margin-top: 8px;">
+                    {{ importMsg || '导入中…' }}
+                    <span v-if="importDetailText" style="color: #909399;">（{{ importDetailText }}）</span>
+                </div>
+            </div>
+
             <template #footer>
                 <el-button @click="importBackupDialogVisible = false">{{ t('backup.cancel') }}</el-button>
                 <el-button type="primary" @click="handleConfirmImportBackupMachine" :disabled="!importBackupDeviceIP || !importBackupMachineName.trim()" :loading="importBackupLoading">
@@ -691,7 +720,8 @@ const getDeviceAddr = (ip) => {
 import { ref, onMounted, computed, watch, getCurrentInstance, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus, InfoFilled } from '@element-plus/icons-vue';
-import { ExportBackupModel, CheckBackupModelExists, GetAllBackupModels, ImportBackupModel, DeleteBackupModel, DownloadBackupMachine, CheckBackupMachineFileExists, CheckBackupMachineFilesExistBatch, ImportBackupMachine, DeleteLocalBackupMachine, OpenBackupModelDir, OpenBackupMachineDir, ListLocalDirFiles, GetStoragePath, GetMirrorList } from '../../bindings/edgeclient/app';
+import { Events } from '@wailsio/runtime';
+import { ExportBackupModel, ExportAndroidContainer, CheckBackupModelExists, GetAllBackupModels, ImportBackupModel, ImportAndroidContainer, DeleteBackupModel, DownloadBackupMachine, CheckBackupMachineFileExists, CheckBackupMachineFilesExistBatch, ImportBackupMachine, DeleteLocalBackupMachine, OpenBackupModelDir, OpenBackupMachineDir, ListLocalDirFiles, GetStoragePath, GetMirrorList } from '../../bindings/edgeclient/app';
 import BatchImportContent from './BatchImport.vue';
 
 // 国际化支持
@@ -768,6 +798,44 @@ const addBackupMachineVisible = ref(false)
 const backupMachineContainerList = ref([])
 const selectedBackupMachineContainer = ref(null)
 const backupMachineCreating = ref(false)
+// 导出云机进度（由后端 androidExport:progress 事件驱动）
+const exportProgress = ref(0)
+const exportMsg = ref('')
+const exportCurrent = ref(null)
+const exportTotal = ref(null)
+const exportName = ref('')
+const exportCustomName = ref('') // 自定义导出名称（不含 .tar.gz），留空自动生成
+
+// 导入云机备份（设备 /android/importLocal）流式进度
+const importProgress = ref(0)
+const importMsg = ref('')
+const importCurrent = ref(null)
+const importTotal = ref(null)
+
+// 导入进度明细：字节量（本地备份上传/解压）→ MB/GB；小数值（云机备份文件数）→ N/M
+const fmtImportBytes = (n) => {
+    if (n < 1024) return n + 'B'
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + 'KB'
+    if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + 'MB'
+    return (n / 1024 / 1024 / 1024).toFixed(2) + 'GB'
+}
+const importDetailText = computed(() => {
+    const c = importCurrent.value
+    const t = importTotal.value
+    if (c == null && t == null) return ''
+    if (t != null && t >= 1048576) {
+        return `${fmtImportBytes(c || 0)} / ${fmtImportBytes(t)}`
+    }
+    if (c != null) return `${c} / ${t}`
+    return ''
+})
+// 导出名称仅允许英文字母/数字/空格/_/./-，禁止中文等非 ASCII 字符（实时过滤，含粘贴）
+const onExportNameInput = (val) => {
+    const cleaned = (val || '').replace(/[^A-Za-z0-9 _.\-]/g, '')
+    if (cleaned !== val) {
+        exportCustomName.value = cleaned
+    }
+}
 const importBackupDialogVisible = ref(false)
 const importBackupMachineRow = ref(null)
 const importBackupDeviceIP = ref('')
@@ -994,6 +1062,7 @@ const handleAddBackupMachine = async () => {
     }
     addBackupMachineVisible.value = true
     selectedBackupMachineContainer.value = null
+    exportCustomName.value = ''
     await fetchBackupMachineContainers()
 }
 
@@ -1039,41 +1108,52 @@ const handleConfirmAddBackupMachine = async () => {
         return
     }
 
-    backupMachineCreating.value = true
-    try {
-        // V2容器模式使用 /androidV2/export，V3模拟器模式使用 /android/export
-        const isV2 = container.androidType === 'V2'
-        const exportPath = isV2 ? '/androidV2/export' : '/android/export'
-        const response = await fetchWithTimeout(
-            `http://${getDeviceAddr(selectedDeviceIP.value)}${exportPath}`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...getAuthHeaders(selectedDeviceIP.value)
-                },
-                body: JSON.stringify({
-                  name: container.name
-                })
-            },
-            3000000  // 备份操作给 30 秒
-        )
+    // 重置进度
+    exportProgress.value = 0
+    exportMsg.value = '开始导出…'
+    exportCurrent.value = null
+    exportTotal.value = null
+    exportName.value = ''
 
-        if (response.ok) {
-            const data = await response.json()
-            if (data.code == 0) {
-                ElMessage.success('备份成功')
-                addBackupMachineVisible.value = false
-                await fetchBackupMachines()
-            } else {
-                ElMessage.warning(data.message || '备份失败')
-            }
+    backupMachineCreating.value = true
+
+    // 订阅后端转发的 androidExport:progress 事件（finally 中解除），实时驱动进度条
+    const handleExportProgress = (event) => {
+        if (!backupMachineCreating.value) return
+        const d = event && event.data
+        if (!d) return
+        if (typeof d.progress === 'number') {
+            // 未到 complete 前最高显示 99%，避免"100% 却仍在进行"的误导
+            const target = d.stage === 'complete' ? 100 : Math.min(99, d.progress)
+            exportProgress.value = Math.max(exportProgress.value, target)
+        }
+        if (d.msg) exportMsg.value = d.msg
+        // current/total 仅 copy/gzip 等子事件携带，用于显示"(N / M)"
+        exportCurrent.value = d.current != null ? d.current : null
+        exportTotal.value = d.total != null ? d.total : null
+        if (d.exportName) exportName.value = d.exportName
+    }
+    const off = Events.On('androidExport:progress', handleExportProgress)
+
+    try {
+        // V2容器模式 → /androidV2/export；V3模拟器模式 → /android/export。
+        // 由 Go 侧流式读取设备 SSE 并逐 stage 转发进度，前端只 await 最终结果。
+        const isV2 = container.androidType === 'V2'
+        const result = await ExportAndroidContainer(selectedDeviceIP.value, container.name, exportCustomName.value.trim(), isV2)
+        if (result && result.success) {
+            exportProgress.value = 100
+            const en = result.exportName || exportName.value
+            ElMessage.success(en ? `备份成功：${en}` : '备份成功')
+            addBackupMachineVisible.value = false
+            await fetchBackupMachines()
         } else {
-            ElMessage.error('备份失败')
+            ElMessage.warning((result && result.message) || '备份失败')
         }
     } catch (error) {
+        console.error('导出云机失败', error)
         ElMessage.error('备份失败，请检查网络连接')
     } finally {
+        off()
         backupMachineCreating.value = false
     }
 }
@@ -1919,55 +1999,123 @@ const handleConfirmImportBackupMachine = async () => {
         importBackupLoading.value = true
 
         if (importBackupFromCloud.value) {
-            // 云机备份：直接调用设备 /android/importLocal（备份已在设备上，无需上传）
+            // 云机备份：调用设备 /android/importLocal 原地导入（备份已在设备上，无需上传）。
+            // 由 Go 侧流式读取设备 SSE 并逐 stage 转发 androidImport:progress，前端只 await 最终结果。
             const backupName = importBackupMachineRow.value?.name || ''
-            const resp = await fetchWithTimeout(
-                `http://${getDeviceAddr(importBackupDeviceIP.value)}/android/importLocal`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders(importBackupDeviceIP.value) },
-                    body: JSON.stringify({
-                        backupName,
-                        indexNum: importBackupSlot.value,
-                        name: importBackupMachineName.value.trim(),
-                        start: !!importBackupStart.value
-                    })
-                },
-                300000
-            )
-            const data = await resp.json()
-            if (data.code == 0) {
-                ElMessage.success('导入成功')
-                await fetchCloudBackupsForManage()
-            } else {
-                const msg = data.message || '导入失败'
-                if (msg.length > 50) {
-                    ElMessageBox.alert(msg, '导入失败', { type: 'error', confirmButtonText: t('backup.confirm') })
-                } else {
-                    ElMessage.warning(msg)
+            // 重置进度
+            importProgress.value = 0
+            importMsg.value = '开始导入…'
+            importCurrent.value = null
+            importTotal.value = null
+
+            // 订阅后端转发的 androidImport:progress 事件（finally 中解除），实时驱动进度条
+            const handleImportProgress = (event) => {
+                if (!importBackupLoading.value) return
+                const d = event && event.data
+                if (!d) return
+                if (typeof d.progress === 'number') {
+                    // 未到 complete 前最高显示 99%，避免"100% 却仍在进行"的误导
+                    const target = d.stage === 'complete' ? 100 : Math.min(99, d.progress)
+                    importProgress.value = Math.max(importProgress.value, target)
                 }
+                if (d.msg) importMsg.value = d.msg
+                // current/total 仅个别子事件携带（如解压文件数），用于显示"(N / M)"
+                importCurrent.value = d.current != null ? d.current : null
+                importTotal.value = d.total != null ? d.total : null
+            }
+            const off = Events.On('androidImport:progress', handleImportProgress)
+
+            try {
+                const result = await ImportAndroidContainer(
+                    importBackupDeviceIP.value,
+                    backupName,
+                    importBackupMachineName.value.trim(),
+                    importBackupSlot.value,
+                    !!importBackupStart.value
+                )
+                if (result && result.success) {
+                    importProgress.value = 100
+                    ElMessage.success('导入成功')
+                    await fetchCloudBackupsForManage()
+                } else {
+                    const msg = (result && result.message) || '导入失败'
+                    if (msg.length > 50) {
+                        ElMessageBox.alert(msg, '导入失败', { type: 'error', confirmButtonText: t('backup.confirm') })
+                    } else {
+                        ElMessage.warning(msg)
+                    }
+                }
+            } finally {
+                off()
             }
         } else {
-            // 本地备份：走后端上传到设备 /android/import
+            // 本地备份：走后端上传到设备 /android/import（application/octet-stream + SSE 流式进度）。
+            // 上传阶段字节进度由 PC 侧 batch-import:upload-progress 实时驱动；
+            // 设备各阶段（verify/extract/restore/gunzip/complete）由 Go 转发的 backupImport:progress 驱动。
             const targetDevice = props.devices.find(d => d.ip === importBackupDeviceIP.value)
             const targetVersion = targetDevice?.version || 'v3'
 
-            const result = await ImportBackupMachine(
-                importBackupDeviceIP.value,
-                importBackupDeviceName.value,
-                importBackupMachineName.value.trim(),
-                importBackupSlot.value,
-                targetVersion
-            )
+            // 重置进度
+            importProgress.value = 0
+            importMsg.value = '上传备份包…'
+            importCurrent.value = null
+            importTotal.value = null
 
-            if (result.success) {
-                ElMessage.success('导入成功')
-                // 勾选「是否开机」：导入成功后开机新云机（坑位已有运行中云机先关机）
-                if (importBackupStart.value) {
-                    await bootImportedMachine()
+            const handleUploadProgress = (event) => {
+                if (!importBackupLoading.value) return
+                const d = event && event.data
+                if (!d) return
+                importMsg.value = '上传备份包…'
+                if (d.total) {
+                    importCurrent.value = d.uploaded
+                    importTotal.value = d.total
                 }
-            } else {
-                ElMessage.warning(result.message || '导入失败')
+                const pct = typeof d.percent === 'number' ? d.percent : (d.total ? Math.round((d.uploaded / d.total) * 100) : 0)
+                // 未到 complete 前封顶 99%，避免"100% 却仍在处理"的误导
+                importProgress.value = Math.max(importProgress.value, Math.min(99, pct))
+            }
+            const handleDeviceProgress = (event) => {
+                if (!importBackupLoading.value) return
+                const d = event && event.data
+                if (!d) return
+                if (d.stage === 'upload') return // 上传阶段由 PC 侧 batch-import:upload-progress 实时驱动，忽略设备缓冲事件
+                if (d.stage === 'complete') {
+                    importProgress.value = 100
+                    importMsg.value = d.msg || '导入完成'
+                    return
+                }
+                if (d.msg) importMsg.value = d.msg
+                if (d.total > 0 && d.current != null) {
+                    importCurrent.value = d.current
+                    importTotal.value = d.total
+                }
+                // 处理阶段（校验/解压/还原）：进度条保持接近满格、条纹流动
+                importProgress.value = Math.max(importProgress.value, 99)
+            }
+            const offUpload = Events.On('batch-import:upload-progress', handleUploadProgress)
+            const offDevice = Events.On('backupImport:progress', handleDeviceProgress)
+
+            try {
+                const result = await ImportBackupMachine(
+                    importBackupDeviceIP.value,
+                    importBackupDeviceName.value,
+                    importBackupMachineName.value.trim(),
+                    importBackupSlot.value,
+                    targetVersion
+                )
+                if (result.success) {
+                    importProgress.value = 100
+                    ElMessage.success('导入成功')
+                    // 勾选「是否开机」：导入成功后开机新云机（坑位已有运行中云机先关机）
+                    if (importBackupStart.value) {
+                        await bootImportedMachine()
+                    }
+                } else {
+                    ElMessage.warning(result.message || '导入失败')
+                }
+            } finally {
+                offUpload()
+                offDevice()
             }
         }
     } catch (error) {
