@@ -244,6 +244,15 @@ const storagePathInfo = ref({ path: '', isDefault: true, defaultPath: '' })
 const settingsLoading = ref(false)
 const isDarkTheme = ref(localStorage.getItem('theme-mode') === 'dark')
 
+// 安装APK自动授权开关
+const autoGrantApkPermission = ref(false)
+try {
+  const saved = localStorage.getItem('autoGrantApkPermission')
+  if (saved !== null) autoGrantApkPermission.value = saved === 'true'
+} catch (e) {
+  console.warn('读取autoGrantApkPermission失败:', e)
+}
+
 // 跟随 Element Plus 官方做法：切换 html.dark class
 const applyThemeMode = () => {
   const html = document.documentElement
@@ -359,6 +368,9 @@ const handleSelectDirectory = async () => {
 }
 
 const handleSaveSettings = async () => {
+  // 保存APK自动授权设置到 localStorage
+  localStorage.setItem('autoGrantApkPermission', autoGrantApkPermission.value ? 'true' : 'false')
+
   settingsLoading.value = true
   try {
     const result = await SetStoragePath(storagePathInfo.value.path)
@@ -14523,7 +14535,8 @@ const handleUploadToCloudMachine = async () => {
           activeDevice.value.version || 'v3',
           contextMenuContainerId.value,
           filePath,
-          savedPassword || ''
+          savedPassword || '',
+          { replace: true, test: true, grant: autoGrantApkPermission.value, deleteAfterInstall: false }
         )
         
         if (result.success) {
@@ -23842,6 +23855,19 @@ const handleBindsTest = async () => {
           :closable="false"
           style="margin-top: 12px;"
         />
+      </div>
+
+      <!-- APK自动授权设置 -->
+      <div style="margin-bottom: 20px;">
+        <div style="font-weight: bold; margin-bottom: 12px; color: #303133; font-size: 14px;">
+          {{ t('common.autoGrantApkPermission') }}
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="font-size: 12px; color: #909399; line-height: 1.6; flex: 1; padding-right: 16px;">
+            {{ t('common.autoGrantApkPermissionDesc') }}
+          </div>
+          <el-switch v-model="autoGrantApkPermission" />
+        </div>
       </div>
     </div>
 

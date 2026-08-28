@@ -272,6 +272,16 @@ const uploadSuccess = ref(false);
 const sortType = ref('time');
 const apkInstallOptions = ref(['replace', 'test', 'grant', 'deleteAfterInstall']); // 默认选中替换、测试、授权、安装后删除
 
+// 从全局设置同步 grant 默认值
+try {
+  const globalGrant = localStorage.getItem('autoGrantApkPermission')
+  if (globalGrant === 'false') {
+    apkInstallOptions.value = apkInstallOptions.value.filter(opt => opt !== 'grant')
+  }
+} catch (e) {
+  // 忽略读取失败，保持默认选中
+}
+
 // 共享目录路径
 const sharedDirPathInfo = ref({ path: '', isDefault: true, defaultPath: '' });
 const sharedDirLoading = ref(false);

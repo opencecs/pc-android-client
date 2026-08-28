@@ -651,7 +651,7 @@ const switchTab = (tab) => {
 // 二维码相关状态
 const qrcodeDialogVisible = ref(false)
 const qrcodeCanvas = ref(null)
-const collectionToolUrl = 'https://d.moyunteng.com/download/devinfo/devinfo_v2beta_20260206.apk'
+const collectionToolUrl = 'https://doc.opencecs.com/api/firmwares/download/74'
 
 // 分页相关状态
 const currentPage = ref(1)

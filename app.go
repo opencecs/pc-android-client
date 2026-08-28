@@ -3062,9 +3062,9 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 		if opts.Test {
 			installFlags = append(installFlags, "-t") // 允许测试应用
 		}
-		// if opts.Grant {
-		// 	installFlags = append(installFlags, "-g") // 自动授权
-		// }
+		if opts.Grant {
+			installFlags = append(installFlags, "-g") // 自动授权
+		}
 
 		installCmd := fmt.Sprintf("pm install %s %s", strings.Join(installFlags, " "), installPath)
 		log.Printf("[InstallAPK] 执行安装命令: %s", installCmd)

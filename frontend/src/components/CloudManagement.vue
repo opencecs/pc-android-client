@@ -49,32 +49,46 @@
         <!-- 坑位模式：设备IP列表 -->
         <div v-if="props.cloudManageMode === 'slot'" class="device-list-container">
           <div class="grouped-device-list">
-            <template v-for="(groupDevices, groupName) in filteredGroupedDevicesByGroup" :key="groupName">
+            <template v-for="group in orderedSlotGroups" :key="group.name">
               <!-- 分组标题行 -->
               <div 
                 class="group-separator"
-                :class="{ 'drag-over': dragOverGroup === groupName }"
-                @click="toggleDeviceGroup(groupName)"
-                @dragover.prevent="handleDragOver($event, groupName)"
-                @dragenter.prevent="handleDragEnter(groupName)"
-                @drop="handleDropOnGroup($event, groupName)"
+                :class="{ 
+                  'drag-over': dragOverGroup === group.name,
+                  'group-drag-before': groupDragOverTarget === group.name && groupDragPosition === 'before',
+                  'group-drag-after': groupDragOverTarget === group.name && groupDragPosition === 'after'
+                }"
+                @click="toggleDeviceGroup(group.name)"
+                @dragover.prevent="handleDragOver($event, group.name)"
+                @dragenter.prevent="handleDragEnter(group.name)"
+                @drop="handleDropOnGroup($event, group.name)"
               >
-                <el-icon v-if="isGroupCollapsed(groupName)" style="margin-right: 4px;"><ArrowRight /></el-icon>
+                <span 
+                  class="group-drag-handle"
+                  draggable="true"
+                  @dragstart="handleGroupDragStart($event, group.name)"
+                  @dragend="handleGroupDragEnd"
+                  @click.stop
+                  :title="t('common.dragToSort')"
+                >
+                  <el-icon><Sort /></el-icon>
+                </span>
+                <el-icon v-if="isGroupCollapsed(group.name)" style="margin-right: 4px;"><ArrowRight /></el-icon>
                 <el-icon v-else style="margin-right: 4px;"><ArrowDown /></el-icon>
-                <span class="group-separator-span">{{ groupName }} ({{ groupDevices.length }})</span>
-                <span v-if="dragOverGroup === groupName" class="drop-hint">{{ t('common.dropToGroup') }}</span>
+                <span class="group-separator-span">{{ group.name }} ({{ group.devices.length }})</span>
+                <span v-if="dragOverGroup === group.name" class="drop-hint">{{ t('common.dropToGroup') }}</span>
                 <el-button 
                   type="text"
                   size="small" 
                   :icon="Rank"
                   class="group-add-btn group-add-btn-icon"
-                  @click.stop="showAddDeviceToGroupDialog(groupName)"
+                  @click.stop="showAddDeviceToGroupDialog(group.name)"
                 >{{ t('cloudMachine.batchAddToGroup') }}</el-button>
               </div>
               <!-- 设备列表（可折叠） -->
-              <div v-show="!isGroupCollapsed(groupName)" class="group-devices">
+              <div v-show="!isGroupCollapsed(group.name)" class="group-devices">
                 <div 
-                  v-for="device in groupDevices" 
+                  v-for="device in group.devices" 
                   :key="device.id"
                   class="device-menu-item"
                   :class="{ 'is-active': props.selectedCloudDevice?.id === device.id }"
@@ -932,7 +946,7 @@ const getDeviceAddr = (ip) => {
 
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue'
 import { ElMessage, ElMessageBox, ElLoading, ElTree, ElSelect, ElOption, ElTable, ElTableColumn, ElCheckbox, ElCheckboxGroup, ElDialog, ElEmpty, ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
-import { Plus, Refresh, VideoCamera, Warning, Loading, ArrowDown, ArrowRight, Rank, Search, InfoFilled, Setting } from '@element-plus/icons-vue'
+import { Plus, Refresh, VideoCamera, Warning, Loading, ArrowDown, ArrowRight, Rank, Search, InfoFilled, Setting, Sort } from '@element-plus/icons-vue'
 import axios from 'axios'
 import * as api from '../services/api.js'
 import * as cloudMachineFunctions from '../services/cloudMachineFunctions.js'
@@ -1075,6 +1089,28 @@ const filteredGroupedDevicesByGroup = computed(() => {
   return groups
 })
 
+// 按用户自定义顺序排列的分组列表（用于坑位模式分组拖拽排序）
+const orderedSlotGroups = computed(() => {
+  const groups = filteredGroupedDevicesByGroup.value
+  const groupNames = Object.keys(groups)
+
+  const ordered = []
+  const remaining = new Set(groupNames)
+
+  for (const name of groupOrder.value) {
+    if (remaining.has(name)) {
+      ordered.push({ name, devices: groups[name] })
+      remaining.delete(name)
+    }
+  }
+
+  for (const name of remaining) {
+    ordered.push({ name, devices: groups[name] })
+  }
+
+  return ordered
+})
+
 // 清空搜索
 const handleSearchClear = () => {
   deviceSearchText.value = ''
@@ -1203,7 +1239,30 @@ const isGroupCollapsed = (groupName) => {
 const draggedDevice = ref(null)
 const dragOverGroup = ref(null)
 
-// 开始拖拽
+// 分组拖拽排序相关状态
+const draggedGroupName = ref(null)
+const groupDragOverTarget = ref(null)
+const groupDragPosition = ref(null)
+const groupOrder = ref([])
+
+const loadGroupOrder = () => {
+  try {
+    const saved = localStorage.getItem('cloudManagement_groupOrder')
+    if (saved) groupOrder.value = JSON.parse(saved)
+  } catch (e) {
+    console.warn('[CloudManagement] 读取分组排序失败:', e)
+  }
+}
+
+const saveGroupOrder = () => {
+  try {
+    localStorage.setItem('cloudManagement_groupOrder', JSON.stringify(groupOrder.value))
+  } catch (e) {
+    console.warn('[CloudManagement] 保存分组排序失败:', e)
+  }
+}
+
+// 开始拖拽设备
 const handleDragStart = (event, device) => {
   console.log('[拖拽] 开始拖拽设备:', device.ip, 'ID:', device.id)
   draggedDevice.value = device
@@ -1213,17 +1272,37 @@ const handleDragStart = (event, device) => {
 
 // 拖拽进入分组
 const handleDragEnter = (groupName) => {
-  dragOverGroup.value = groupName
+  if (!draggedGroupName.value) {
+    dragOverGroup.value = groupName
+  }
 }
 
 // 拖拽经过分组
 const handleDragOver = (event, groupName) => {
   event.dataTransfer.dropEffect = 'move'
+  if (draggedGroupName.value) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const midY = rect.top + rect.height / 2
+    groupDragOverTarget.value = groupName
+    groupDragPosition.value = event.clientY < midY ? 'before' : 'after'
+  }
 }
 
 // 放置到分组
 const handleDropOnGroup = (event, targetGroup) => {
   event.preventDefault()
+
+  if (draggedGroupName.value) {
+    const draggedName = draggedGroupName.value
+    if (draggedName !== targetGroup) {
+      reorderGroups(draggedName, targetGroup, groupDragPosition.value)
+    }
+    draggedGroupName.value = null
+    groupDragOverTarget.value = null
+    groupDragPosition.value = null
+    return
+  }
+
   dragOverGroup.value = null
   
   console.log('[拖拽] 放置到分组:', targetGroup, '拖拽设备:', draggedDevice.value?.ip)
@@ -1251,6 +1330,34 @@ const handleDropOnGroup = (event, targetGroup) => {
 const handleDragEnd = () => {
   dragOverGroup.value = null
   draggedDevice.value = null
+}
+
+// === 分组拖拽排序 ===
+const handleGroupDragStart = (event, groupName) => {
+  draggedGroupName.value = groupName
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', '__group__:' + groupName)
+}
+
+const handleGroupDragEnd = () => {
+  draggedGroupName.value = null
+  groupDragOverTarget.value = null
+  groupDragPosition.value = null
+}
+
+const reorderGroups = (draggedName, targetName, position) => {
+  const currentNames = orderedSlotGroups.value.map(g => g.name)
+  const draggedIdx = currentNames.indexOf(draggedName)
+  if (draggedIdx === -1) return
+
+  currentNames.splice(draggedIdx, 1)
+  let insertIdx = currentNames.indexOf(targetName)
+  if (position === 'after') insertIdx++
+  if (insertIdx < 0) insertIdx = 0
+  currentNames.splice(insertIdx, 0, draggedName)
+
+  groupOrder.value = currentNames
+  saveGroupOrder()
 }
 
 // 添加设备到分组对话框相关
@@ -2669,6 +2776,7 @@ const loadScreenshotScale = () => {
 onMounted(() => {
   // 组件挂载时的初始化
   loadScreenshotScale() // 加载保存的截图缩放比例
+  loadGroupOrder() // 加载保存的分组排序
 })
 
 onBeforeUnmount(() => {
@@ -3157,6 +3265,39 @@ onBeforeUnmount(() => {
 .group-separator.drag-over .group-add-btn {
   opacity: 0.3;
   color: #fff;
+}
+
+/* 分组拖拽排序手柄 */
+.group-drag-handle {
+  display: flex;
+  align-items: center;
+  cursor: grab;
+  margin-right: 4px;
+  color: #909399;
+  opacity: 0.5;
+  transition: opacity 0.2s, color 0.2s;
+}
+
+.group-drag-handle:hover {
+  opacity: 1;
+  color: #409EFF;
+}
+
+.group-drag-handle:active {
+  cursor: grabbing;
+}
+
+.group-drag-handle .el-icon {
+  font-size: 14px;
+}
+
+/* 分组拖拽排序放置指示线 */
+.group-separator.group-drag-before {
+  box-shadow: 0 -2px 0 0 #409EFF;
+}
+
+.group-separator.group-drag-after {
+  box-shadow: 0 2px 0 0 #409EFF;
 }
 
 .tree-node-label {
