@@ -7304,17 +7304,17 @@ const handleClosePassword = async () => {
 const handleCleanDisk = async () => {
    try {
         const { value } = await ElMessageBox.prompt(
-            `确定要清理设备"${activeDevice.value.ip}"磁盘数据吗？\n清理磁盘数据会重启设备，重启时间为5~10分钟，请耐心等待。\n\n请输入“确认执行”以继续：`,
+            `确定要清理设备"${activeDevice.value.ip}"磁盘数据吗？\n清理磁盘数据会重启设备，重启时间为5~10分钟，请耐心等待。\n\n请输入“yes”以继续：`,
             '清理磁盘数据',
             {
                 confirmButtonText: '确定',
                 cancelButtonText: '取消',
-                inputPlaceholder: '请输入“确认执行”',
-                inputValidator: (val) => val === '确认执行' || '请输入“确认执行”以确认操作',
+                inputPlaceholder: '请输入“yes”',
+                inputValidator: (val) => (val || '').trim().toLowerCase() === 'yes' || '请输入“yes”以确认操作',
                 type: 'warning'
             }
         )
-        if (value !== '确认执行') {
+        if ((value || '').trim().toLowerCase() !== 'yes') {
             ElMessage.warning('输入不匹配，已取消清理')
             return
         }
@@ -19115,17 +19115,17 @@ const handleBatchDeleteHosts = async () => {
 
   try {
     const { value } = await ElMessageBox.prompt(
-        `确定要清理选中的 ${selectedHostDevices.value.length} 个设备的磁盘数据吗？\n清理磁盘数据会重启设备，重启时间为5~10分钟，请耐心等待。\n\n请输入“确认执行”以继续：`,
+        `确定要清理选中的 ${selectedHostDevices.value.length} 个设备的磁盘数据吗？\n清理磁盘数据会重启设备，重启时间为5~10分钟，请耐心等待。\n\n请输入“yes”以继续：`,
         '批量清理磁盘数据',
         {
             confirmButtonText: '确定',
             cancelButtonText: '取消',
-            inputPlaceholder: '请输入“确认执行”',
-            inputValidator: (val) => val === '确认执行' || '请输入“确认执行”以确认操作',
+            inputPlaceholder: '请输入“yes”',
+            inputValidator: (val) => (val || '').trim().toLowerCase() === 'yes' || '请输入“yes”以确认操作',
             type: 'warning'
         }
     )
-    if (value !== '确认执行') {
+    if ((value || '').trim().toLowerCase() !== 'yes') {
         ElMessage.warning('输入不匹配，已取消清理')
         return
     }
