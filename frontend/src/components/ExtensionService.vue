@@ -193,6 +193,9 @@
               <el-button type="primary" size="small" :disabled="!canInstallService" :loading="installingTunnel" @click="installTunnel">
                 {{ t('extension.install') }}
               </el-button>
+              <el-button type="warning" size="small" plain :disabled="!selectedDevice" :loading="checkingTunnel" @click="checkTunnelStatus(selectedDevice.ip)">
+                检测状态
+              </el-button>
               <el-button type="danger" size="small" :disabled="!canInstallService" :loading="uninstallingTunnel" @click="uninstallTunnelAll">
                 卸载
               </el-button>
@@ -206,8 +209,24 @@
             <el-alert :type="tunnelStatus.type" :closable="false" show-icon>
               <template #title>{{ tunnelStatus.message }}</template>
             </el-alert>
+            <!-- 检测发现服务未运行时，附上设备 frpc 日志尾部，便于直接看出原因（如网络未就绪、凭据错误） -->
+            <pre v-if="tunnelStatus.detail" class="tunnel-detail">{{ tunnelStatus.detail }}</pre>
             <div v-if="tunnelStatus.serverAddr" style="margin-top: 6px; font-size: 13px; color: #606266;">
               服务端地址: <span style="font-weight: 600;">{{ tunnelStatus.serverAddr }}:7500</span>
+            </div>
+            <!-- frpc 管理界面凭据：不再内嵌到 URL（会导致面板自身的 /api 请求失败），改为展示+可复制 -->
+            <div v-if="tunnelStatus.frpcWebUser" style="margin-top: 6px; font-size: 13px; color: #606266;">
+              管理界面账号:
+              <span style="font-weight: 600;">{{ tunnelStatus.frpcWebUser }}</span> /
+              <span style="font-weight: 600;">{{ tunnelStatus.frpcWebPassword }}</span>
+              <el-button
+                link
+                type="primary"
+                size="small"
+                @click="copyText(`${tunnelStatus.frpcWebUser} / ${tunnelStatus.frpcWebPassword}`)"
+              >
+                复制
+              </el-button>
             </div>
             <div v-if="tunnelStatus.webAddress || tunnelStatus.remoteAddress" style="margin-top: 8px; display: flex; gap: 8px;">
               <el-button v-if="tunnelStatus.webAddress" type="primary" size="small" @click="openTunnelWeb(tunnelStatus)">
@@ -398,7 +417,7 @@
 <script setup>
 import { ref, computed, getCurrentInstance } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { InstallMytPanel, UninstallMytPanel, InstallTunnel, UninstallTunnel, InstallTunnelServer, UninstallTunnelServer, OpenInBrowser } from '../../bindings/edgeclient/app'
+import { InstallMytPanel, UninstallMytPanel, InstallTunnel, UninstallTunnel, InstallTunnelServer, UninstallTunnelServer, OpenInBrowser, CheckTunnelStatus } from '../../bindings/edgeclient/app'
 import { getDevicePassword, saveDevicePassword } from '../services/api.js'
 
 const { proxy } = getCurrentInstance()
@@ -596,6 +615,67 @@ const handleDeviceSelect = (row) => {
   // 恢复公网穿透服务器配置
   if (cached.tunnelServerAddr) tunnelServerAddr.value = cached.tunnelServerAddr
   if (cached.tunnelServerPort) tunnelServerPort.value = cached.tunnelServerPort
+  // 缓存只代表"曾经装过"，设备重启/服务崩溃后它不会自己变，
+  // 所以只要缓存说装过，就以设备上的真实状态为准刷新一次
+  if (cached.tunnel) checkTunnelStatus(row.ip)
+}
+
+// ===== 实时检测公网穿透状态 =====
+const checkingTunnel = ref(false)
+const checkTunnelStatus = async (deviceIP) => {
+  if (!deviceIP) return
+  const ip = extractPureIP(deviceIP)
+  checkingTunnel.value = true
+  try {
+    const prev = getDeviceServiceStatus(ip).tunnelStatus || {}
+    const result = await CheckTunnelStatus(ip, prev.frpcWebUser || '', prev.frpcWebPassword || '')
+    // 检测期间用户可能已切换设备，结果只应用于当前设备
+    if (!selectedDevice.value || extractPureIP(selectedDevice.value.ip) !== ip) return
+
+    if (!result.success) {
+      tunnelStatus.value = { ...prev, type: 'warning', message: result.message || '状态检测失败' }
+      return
+    }
+
+    if (!result.installed) {
+      // 设备上没有 frpc（未安装/被清理），清掉"已安装"的假象
+      tunnelStatus.value = { type: 'warning', message: result.message || '设备上没有公网穿透，需要重新安装' }
+    } else if (result.running) {
+      tunnelStatus.value = {
+        type: 'success',
+        message: result.message || '公网穿透运行中',
+        url: result.webAddress || result.remoteAddress || prev.url || '',
+        webAddress: result.webAddress || prev.webAddress || '',
+        remoteAddress: result.remoteAddress || prev.remoteAddress || '',
+        serverAddr: result.serverAddr || prev.serverAddr || tunnelServerAddr.value,
+        serverPort: prev.serverPort || tunnelServerPort.value || 7000,
+        frpcWebUser: prev.frpcWebUser || '',
+        frpcWebPassword: prev.frpcWebPassword || '',
+      }
+    } else {
+      // 装了但没跑起来：保留地址和凭据方便排查，把日志尾部一起展示
+      tunnelStatus.value = {
+        type: 'error',
+        message: result.message || 'frpc 已安装但未运行',
+        detail: result.detail || '',
+        webAddress: prev.webAddress || '',
+        remoteAddress: prev.remoteAddress || '',
+        serverAddr: result.serverAddr || prev.serverAddr || tunnelServerAddr.value,
+        serverPort: prev.serverPort || tunnelServerPort.value || 7000,
+        frpcWebUser: prev.frpcWebUser || '',
+        frpcWebPassword: prev.frpcWebPassword || '',
+      }
+    }
+    // 安装记录（tunnel 标记）保留：文件在就是装过，运行与否由 tunnelStatus 表达
+    updateDeviceServiceStatus(ip, { tunnelStatus: { ...tunnelStatus.value } })
+  } catch (e) {
+    console.error('[扩展服务] 检测公网穿透状态失败:', e)
+    if (selectedDevice.value && extractPureIP(selectedDevice.value.ip) === ip) {
+      tunnelStatus.value = { ...(getDeviceServiceStatus(ip).tunnelStatus || {}), type: 'warning', message: `状态检测失败: ${e.message || e}` }
+    }
+  } finally {
+    checkingTunnel.value = false
+  }
 }
 
 // 行样式
@@ -624,18 +704,25 @@ const openUrl = (url) => {
   OpenInBrowser(url)
 }
 
-// 打开公网穿透 Web 管理界面，自动携带设备 frpc 的真实管理凭据（免去手动输入）
-// 使用 URL 内嵌 Basic Auth 格式：http://user:pass@host:port/
+// 打开公网穿透 Web 管理界面（设备上的 frpc dashboard）
+// ⚠️ 不要把账号密码内嵌进 URL（http://user:pass@host:7400/）：那样页面虽然能打开，
+// 但面板自己的相对请求（如 /api/status）会以带凭据的 URL 为基准解析，
+// Chromium 的 Request 构造函数遇到带 credentials 的 URL 会直接抛
+// "Request cannot be constructed from a URL that includes credentials"，
+// 面板于是显示"获取状态失败"。
+// 正确做法：打开干净地址，让浏览器弹 Basic 认证框（frpc 返回 401 + WWW-Authenticate），
+// 登录一次后同源请求自动带 Authorization 头，面板接口正常。这里顺手把凭据复制到剪贴板方便粘贴。
 const openTunnelWeb = (status) => {
   if (!status || !status.webAddress) return
-  let url = status.webAddress
-  if (status.frpcWebUser && status.frpcWebPassword) {
-    const [scheme, rest] = url.split('://')
-    if (rest && !rest.includes('@')) {
-      url = `${scheme}://${encodeURIComponent(status.frpcWebUser)}:${encodeURIComponent(status.frpcWebPassword)}@${rest}`
-    }
-  }
-  openUrl(url)
+  openUrl(status.webAddress)
+  const user = status.frpcWebUser || 'admin'
+  const password = status.frpcWebPassword || 'admin'
+  const tip = `已打开 frpc 管理界面，请输入账号密码：${user} / ${password}`
+  navigator.clipboard?.writeText(`${user} / ${password}`).then(() => {
+    ElMessage.info('已打开 frpc 管理界面，账号密码已复制到剪贴板，在登录框里直接粘贴即可')
+  }).catch(() => {
+    ElMessage.info(tip)
+  })
 }
 
 // 显示使用说明
@@ -1012,6 +1099,21 @@ const uninstallTunnelAll = async () => {
   padding: 10px 12px;
   background: #f5f7fa;
   border-radius: 6px;
+}
+
+/* frpc 未运行时展示的设备日志尾部 */
+.tunnel-detail {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  max-height: 140px;
+  overflow: auto;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .usage-guide p {

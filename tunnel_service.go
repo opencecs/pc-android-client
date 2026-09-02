@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -241,6 +242,183 @@ func parseTomlUserPassword(toml string) (string, string) {
 	return user, password
 }
 
+// parseFrpcServerConfig 从 frpc.toml 文本中解析 serverAddr / serverPort
+func parseFrpcServerConfig(tomlText string) (string, int) {
+	addr := ""
+	port := 0
+	scanner := bufio.NewScanner(strings.NewReader(tomlText))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.Contains(line, "=") {
+			continue
+		}
+		key := strings.TrimSpace(strings.SplitN(line, "=", 2)[0])
+		val := strings.Trim(strings.TrimSpace(strings.SplitN(line, "=", 2)[1]), `"`)
+		switch key {
+		case "serverAddr":
+			if addr == "" {
+				addr = val
+			}
+		case "serverPort":
+			if port == 0 {
+				if p, err := strconv.Atoi(val); err == nil {
+					port = p
+				}
+			}
+		}
+	}
+	return addr, port
+}
+
+// queryFrpsProxyAddresses 查询 frps 面板，取回本设备实际分配的远程地址
+// 独立实现，不复用安装流程里的内联逻辑，避免影响已验证的安装路径
+func queryFrpsProxyAddresses(serverAddr string, webUser string, webPassword string, deviceIP string) (string, string) {
+	ipSuffix := strings.ReplaceAll(deviceIP, ".", "-")
+	sshProxyName := fmt.Sprintf("ssh-%s", ipSuffix)
+	webProxyName := fmt.Sprintf("frpc-web-%s", ipSuffix)
+
+	dashboardURL := fmt.Sprintf("http://%s:7500/api/proxy/tcp", serverAddr)
+	req, err := http.NewRequest("GET", dashboardURL, nil)
+	if err != nil {
+		return "", ""
+	}
+	req.SetBasicAuth(webUser, webPassword)
+	client := &http.Client{Timeout: 6 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[公网穿透] 查询 frps 面板返回 %d，无法获取远程地址", resp.StatusCode)
+		return "", ""
+	}
+	body, _ := io.ReadAll(resp.Body)
+	var result struct {
+		Proxies []struct {
+			Name string `json:"name"`
+			Conf struct {
+				RemotePort int `json:"remotePort"`
+			} `json:"conf"`
+		} `json:"proxies"`
+	}
+	if json.Unmarshal(body, &result) != nil {
+		return "", ""
+	}
+	remoteAddress := ""
+	webAddress := ""
+	for _, p := range result.Proxies {
+		if p.Name == sshProxyName {
+			remoteAddress = fmt.Sprintf("%s:%d", serverAddr, p.Conf.RemotePort)
+		}
+		if p.Name == webProxyName {
+			webAddress = fmt.Sprintf("http://%s:%d", serverAddr, p.Conf.RemotePort)
+		}
+	}
+	return remoteAddress, webAddress
+}
+
+// CheckTunnelStatus 实时检测设备上公网穿透(frpc)的真实状态。
+// 前端的"已安装"提示来自 localStorage 缓存，设备重启、服务崩溃后它不会自己变，
+// 这里以设备上的真实文件 / 进程 / 开机自启注册为准，并尽力取回当前远程地址。
+func (a *App) CheckTunnelStatus(deviceIP string, webUser string, webPassword string) map[string]interface{} {
+	ip := extractPureIP(deviceIP)
+	result := map[string]interface{}{
+		"success":       true,
+		"installed":     false,
+		"running":       false,
+		"enabledAtBoot": false,
+		"webAddress":    "",
+		"remoteAddress": "",
+		"serverAddr":    "",
+		"message":       "",
+		"detail":        "",
+	}
+	log.Printf("[公网穿透] 检测状态: %s", ip)
+
+	sshClient, err := dialSSH(ip)
+	if err != nil {
+		result["success"] = false
+		result["message"] = fmt.Sprintf("SSH连接失败，设备可能离线: %v", err)
+		return result
+	}
+	defer sshClient.Close()
+
+	// 1. 文件是否还在
+	filesOut, _ := sshExecCommandWithOutput(sshClient, "ls /home/user/frpc /home/user/frpc.toml 2>&1")
+	if strings.Contains(filesOut, "No such file") {
+		result["message"] = "设备上不存在 frpc，尚未安装或已被清理，需要重新安装"
+		return result
+	}
+	result["installed"] = true
+
+	// 2. 读取设备上的配置（服务端地址可能是旧的）
+	tomlOut, _ := sshExecCommandWithOutput(sshClient, "cat /home/user/frpc.toml 2>/dev/null")
+	serverAddr, _ := parseFrpcServerConfig(tomlOut)
+	if serverAddr != "" {
+		result["serverAddr"] = serverAddr
+	}
+
+	// 3. 开机自启是否注册
+	osType, _ := detectDeviceOS(sshClient)
+	enabledOut := ""
+	if osType == "alpine" {
+		enabledOut, _ = sshExecCommandWithOutput(sshClient, fmt.Sprintf("echo '%s' | sudo -S rc-update show default 2>/dev/null | grep -w frpc", extensionSSHPassword))
+	} else {
+		enabledOut, _ = sshExecCommandWithOutput(sshClient, fmt.Sprintf("echo '%s' | sudo -S systemctl is-enabled frpc 2>/dev/null", extensionSSHPassword))
+	}
+	enabledAtBoot := strings.Contains(enabledOut, "frpc") && !strings.Contains(enabledOut, "disabled")
+	result["enabledAtBoot"] = enabledAtBoot
+
+	// 4. 进程是否真的在跑
+	psOut, _ := sshExecCommandWithOutput(sshClient, "ps aux | grep /home/user/frpc | grep -v grep")
+	running := strings.TrimSpace(psOut) != ""
+	result["running"] = running
+
+	if !running {
+		// 取最近日志，给出不运行的原因（例如开机时网络未就绪后 frpc 自行退出）
+		logOut, _ := sshExecCommandWithOutput(sshClient, fmt.Sprintf("echo '%s' | sudo -S tail -5 /home/user/logs/frpc.log 2>/dev/null", extensionSSHPassword))
+		result["detail"] = strings.TrimSpace(logOut)
+		if enabledAtBoot {
+			result["message"] = "已安装且已注册开机自启，但当前未运行（服务已退出）。建议重新安装以更新配置，或在设备上重启 frpc 服务"
+		} else {
+			result["message"] = "已安装但未注册开机自启（旧版本安装），设备重启后不会自动拉起，请重新安装"
+		}
+		return result
+	}
+
+	// 5. 运行中：优先用前端传入的面板凭据，其次用设备 frpc 管理界面的凭据去 frps 查实际端口
+	if webUser == "" || webPassword == "" {
+		webUser, webPassword = parseTomlUserPassword(tomlOut)
+	}
+	if webUser == "" {
+		webUser = "admin"
+	}
+	if webPassword == "" {
+		webPassword = "admin"
+	}
+	remoteAddress, webAddress := "", ""
+	if serverAddr != "" {
+		remoteAddress, webAddress = queryFrpsProxyAddresses(serverAddr, webUser, webPassword, ip)
+		if remoteAddress == "" && webAddress == "" {
+			// 面板密码可能与设备侧记录的不一致，再试一次设备自身的凭据
+			devUser, devPass := parseTomlUserPassword(tomlOut)
+			if devUser != "" && (devUser != webUser || devPass != webPassword) {
+				remoteAddress, webAddress = queryFrpsProxyAddresses(serverAddr, devUser, devPass, ip)
+			}
+		}
+	}
+	result["remoteAddress"] = remoteAddress
+	result["webAddress"] = webAddress
+	if remoteAddress != "" || webAddress != "" {
+		result["message"] = "运行正常，隧道已建立"
+	} else {
+		result["message"] = "frpc 正在运行，但未在 frps 面板查到本设备的代理（可能刚启动，或面板凭据不匹配）"
+	}
+	log.Printf("[公网穿透] 检测 %s: 运行=%v 自启=%v SSH=%s Web=%s", ip, running, enabledAtBoot, remoteAddress, webAddress)
+	return result
+}
+
 // UninstallTunnel 卸载公网穿透(frpc)
 func (a *App) UninstallTunnel(deviceIP string) map[string]interface{} {
 	log.Printf("[公网穿透] 开始卸载: %s", deviceIP)
@@ -326,11 +504,26 @@ func generateFrpcConfig(serverAddr string, serverPort int, token string, deviceI
 	sb.WriteString(fmt.Sprintf("serverAddr = \"%s\"\n", serverAddr))
 	sb.WriteString(fmt.Sprintf("serverPort = %d\n", serverPort))
 
+	// 关键：首次连不上 frps 时不要退出，持续重试。
+	// frpc 默认 loginFailExit = true，设备开机时 OpenRC 只等到 net（网卡配好），
+	// 公网路由/DNS 常常还没就绪，此时 frpc 会打印
+	// "login to the server failed: ... network is unreachable. With loginFailExit
+	// enabled, no additional retries will be attempted" 然后退出，
+	// 结果 reboot 之后隧道永久失联。
+	// 注意：这是顶层键，必须写在所有 [table] 之前，否则会被解析成该 table 内的字段。
+	sb.WriteString("\n# 连不上 frps 时保持重试，不退出（保证设备重启后网络就绪即自动恢复）\n")
+	sb.WriteString("loginFailExit = false\n")
+
 	if token != "" {
 		sb.WriteString("\n[auth]\n")
 		sb.WriteString("method = \"token\"\n")
 		sb.WriteString(fmt.Sprintf("token = \"%s\"\n", token))
 	}
+
+	// 心跳：连接建立后若断开，由客户端自动重连
+	sb.WriteString("\n[transport]\n")
+	sb.WriteString("heartbeatInterval = 30\n")
+	sb.WriteString("heartbeatTimeout = 90\n")
 
 	// Web管理界面
 	sb.WriteString("\n[webServer]\n")
@@ -361,6 +554,9 @@ func generateFrpcConfig(serverAddr string, serverPort int, token string, deviceI
 }
 
 // generateTunnelAlpineOpenRC 生成Alpine OpenRC服务文件
+// 注意：respawn_* 只有在使用 supervise-daemon 托管时才会被 OpenRC 执行。
+// 之前用 command_background=true 手动后台，导致 respawn 形同虚设——
+// 进程一旦退出（例如开机时网络未就绪）服务就停在 crashed，重启后不会再拉起。
 func generateTunnelAlpineOpenRC(dir string) {
 	content := `#!/sbin/openrc-run
 name="frpc"
@@ -369,19 +565,20 @@ description="FRP Client - Public Network Tunnel"
 command="/home/user/frpc"
 command_args="-c /home/user/frpc.toml"
 command_user="root"
-command_background=true
 pidfile="/run/${RC_SVCNAME}.pid"
 directory="/home/user"
+
+# 交给 supervise-daemon 托管，进程异常退出后自动重启
+supervisor=supervise-daemon
+respawn_delay=3
+respawn_max=0
 
 output_log="/home/user/logs/frpc.log"
 error_log="/home/user/logs/frpc.log"
 
-respawn_delay=3
-respawn_max=0
-
 depend() {
     need net
-    after firewall
+    after netmount firewall
 }
 
 start_pre() {
@@ -395,7 +592,8 @@ start_pre() {
 func generateTunnelDebianSystemd(dir string) {
 	content := `[Unit]
 Description=FRP Client - Public Network Tunnel
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple

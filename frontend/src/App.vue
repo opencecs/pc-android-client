@@ -2877,6 +2877,36 @@ const upgradeCreateDeviceApiVersion = async () => {
 const slotStates = ref({})
 const runningSlots = ref(new Set())
 
+// ⚠️ slotStates / runningSlots 都是全局单例，只保存"最后一次加载的那台设备"的数据。
+// 坑位模式下可以选中 A 设备、却点击 B 设备的创建按钮，直接读它们会串到别的设备，
+// 导致新建云机被误判为"坑位已有运行中云机 / 坑位已过期"而默认不开机。
+// 因此写入时记录归属设备，读取前先校验归属，不属于目标设备的数据一律不采信。
+const slotStatesDevice = ref('')   // slotStates 当前归属的设备 device.id
+const runningSlotsDevice = ref('') // runningSlots 当前归属的设备 device.ip
+
+const setSlotStates = (map, deviceId) => {
+  slotStates.value = map || {}
+  slotStatesDevice.value = deviceId || ''
+}
+
+// 仅当 slotStates 确实属于目标设备时返回，否则返回空对象（视为"未知"，不阻塞开机）
+const slotStatesOf = (device) => {
+  if (!device || !device.id) return {}
+  return slotStatesDevice.value === device.id ? slotStates.value : {}
+}
+
+// 仅当 runningSlots 确实属于目标设备时返回，否则返回 null（表示"无实时状态可用"）
+const runningSlotsOf = (device) => {
+  if (!device || !device.ip) return null
+  return runningSlotsDevice.value === device.ip ? runningSlots.value : null
+}
+
+// instances 只承载"当前选中设备"的容器列表，跨设备时必须忽略
+const instancesOf = (device) => {
+  if (!device || !activeDevice.value || activeDevice.value.ip !== device.ip) return []
+  return instances.value || []
+}
+
 // ---- 坑位到期时间缓存工具 ----
 const SLOT_CACHE_TTL = 24 * 3600 * 1000 // 缓存有效期 1 天（毫秒）
 const SLOT_CACHE_TTL_WARN = 60 * 60 * 1000 // 即将过期的坑位缓存 1 小时
@@ -2981,15 +3011,15 @@ const fetchAndCacheSlotStates = (deviceId) => {
       // 先读取上一次缓存（saveSlotCache 之前的快照），用于判断"本次新进入到期"
       const previousSlotStates = loadSlotCache(deviceId) || {}
       saveSlotCache(deviceId, converted)
-      slotStates.value = converted
+      setSlotStates(converted, deviceId)
       // 已过期坑位里的运行中云机强制关机
       await stopExpiredRunningContainers(deviceId, converted, previousSlotStates)
     } else {
-      slotStates.value = {}
+      setSlotStates({}, '')
     }
   }).catch(err => {
     console.error('GetUserRabbetList error:', err)
-    slotStates.value = {}
+    setSlotStates({}, '')
   })
 }
 
@@ -3042,7 +3072,7 @@ const loadSlotStates = (deviceId, slot) => {
   const cached = loadSlotCache(deviceId)
   if (cached && !hasCacheExpiredSlot(cached, String(slot))) {
     // 命中缓存且目标坑位未到期，直接使用
-    slotStates.value = cached
+    setSlotStates(cached, deviceId)
   } else {
     // 缓存过期、不存在，或目标坑位已到期 → 重新请求
     fetchAndCacheSlotStates(deviceId)
@@ -3052,6 +3082,7 @@ const loadSlotStates = (deviceId, slot) => {
 // Helper to parse running slots
 const updateRunningSlots = (device, containers) => {
   runningSlots.value.clear()
+  runningSlotsDevice.value = device?.ip || ''
   const list = device.version === 'v3' ? (containers.data?.list || []) : (containers || [])
   list.forEach(c => {
     if (c.status === 'running') {
@@ -3092,10 +3123,12 @@ const showCreateDialog = async (device, mode, slot = 0, localImage = null) => {
     }).catch(err => {
       console.error('getContainers error:', err)
       runningSlots.value.clear()
+      runningSlotsDevice.value = '' // 拉取失败，标记为"未知"，避免误判坑位占用
     })
   } else {
-    slotStates.value = {}
+    setSlotStates({}, '')
     runningSlots.value.clear()
+    runningSlotsDevice.value = ''
   }
 
   createDevice.value = device
@@ -5646,7 +5679,7 @@ const handleSelectedCloudDeviceChange = (device) => {
   screenshotLocalVersions = {}
 
   // 切换设备时立即清空坑位状态，避免显示上一个设备的已过期/即将过期标签
-  slotStates.value = {}
+  setSlotStates({}, '')
   // 异步加载新设备的坑位状态
   if (device && device.id) {
     fetchAndCacheSlotStates(device.id)
@@ -8465,14 +8498,17 @@ const isSlotOccupied = (device, slot) => {
   if (!device) return true
   
   // 优先从 runningSlots 检查（showCreateDialog 时实时获取的运行状态）
-  if (runningSlots.value.has(slot)) return true
+  // runningSlots 为全局单例，仅当归属本设备时才可用，否则视为未知
+  const liveSlots = runningSlotsOf(device)
+  if (liveSlots && liveSlots.has(slot)) return true
   
   // 从 deviceCloudMachinesCache 检查
   const deviceContainers = deviceCloudMachinesCache.value.get(device.ip) || []
   if (deviceContainers.some(machine => machine.status === 'running' && machine.indexNum === slot)) return true
   
   // 从 instances 检查（当前选中设备的容器列表）
-  if (instances.value.some(machine => machine.status === 'running' && machine.indexNum === slot)) return true
+  // 从 instances 检查（instances 只承载当前选中设备的列表，跨设备不采信）
+  if (instancesOf(device).some(machine => machine.status === 'running' && machine.indexNum === slot)) return true
   
   return false
 }
@@ -9439,7 +9475,9 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
   } else {
     // 未传或传 true 时，重新检查该坑位是否有运行中的云机
     // 优先检查 runningSlots（打开创建对话框时实时获取的运行状态）
-    if (runningSlots.value.has(slot)) {
+    // runningSlots 为全局单例，仅当归属本次创建的目标设备时才可用
+    const liveSlots = runningSlotsOf(device)
+    if (liveSlots && liveSlots.has(slot)) {
       shouldStart = false
       console.log(`坑位 ${slot} 已有运行中的云机（runningSlots），设置 Start=false`)
     } else {
@@ -9449,7 +9487,7 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
       if (existingMachine && existingMachine.status === 'running') {
         shouldStart = false
         console.log(`坑位 ${slot} 已有运行中的云机（缓存），设置 Start=false`)
-      } else if (instances.value.some(m => m.indexNum === slot && m.status === 'running')) {
+      } else if (instancesOf(device).some(m => m.indexNum === slot && m.status === 'running')) {
         shouldStart = false
         console.log(`坑位 ${slot} 已有运行中的云机（instances），设置 Start=false`)
       } else {
@@ -9459,7 +9497,8 @@ const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null,
     }
 
     // 坑位已过期：无论已有容器状态如何，强制不开机
-    const slotInfo = slotStates.value[slot]
+    // slotStates 为全局单例，仅当归属本次创建的目标设备时才可用
+    const slotInfo = slotStatesOf(device)[slot]
     if (slotInfo && slotInfo.state === 2) {
       shouldStart = false
       console.log(`坑位 ${slot} 已过期，强制 Start=false`)
@@ -9874,7 +9913,7 @@ const handleCreateSubmit = async () => {
                     // 仅第一个云机需要考虑开机；后续云机一律关机避免抢占同一坑位
                     if (k === 0) {
                        // 默认开机；坑位已过期（state === 2）时强制不开机
-                        const slotInfo = slotStates.value[slot]
+                        const slotInfo = slotStatesOf(device)[slot]
                         const isExpired = slotInfo && slotInfo.state === 2
                         // 坑位已有运行中的云机或已过期时，start 传 false
                         shouldStart = !isExpired && !hasRunning
@@ -10038,7 +10077,7 @@ const handleCreateSubmit = async () => {
                      // 仅第一个云机需要考虑开机；后续云机一律关机避免抢占同一坑位
                      if (k === 0) {
                          // 默认开机；坑位已过期（state === 2）时强制不开机
-                         const slotInfo = slotStates.value[slot]
+                         const slotInfo = slotStatesOf(device)[slot]
                          const isExpired = slotInfo && slotInfo.state === 2
                          // 坑位已有运行中的云机或已过期时，start 传 false
                          shouldStart = !isExpired && !hasRunning
@@ -11642,7 +11681,7 @@ const handleDeviceSelect = async (device) => {
     stopScreenshotRefresh()
 
     // 切换设备时立即清空坑位状态，避免显示上一个设备的已过期/即将过期标签
-    slotStates.value = {}
+    setSlotStates({}, '')
     if (device.id) {
       fetchAndCacheSlotStates(device.id)
     }
@@ -11905,7 +11944,7 @@ const handleCloudDeviceSelect = async (device) => {
     screenshotLocalVersions = {}
 
     // 切换设备时立即清空坑位状态，避免显示上一个设备的已过期/即将过期标签
-    slotStates.value = {}
+    setSlotStates({}, '')
     fetchAndCacheSlotStates(device.id)
 
     // 清空选中的云机列表，避免不同设备的云机混淆
