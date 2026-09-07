@@ -86,6 +86,21 @@ func (a *App) dispatchAndroidPoll() {
 	}
 	a.deviceStatusMutex.RUnlock()
 
+	// 事件流正在供数的设备跳过 REST 轮询：snapshot + container/boot 事件已经把
+	// androidCache 喂满（方案 §8「androidlist 轮询全灭」的等价实现）。
+	// 公网设备、以及事件流静默超过 60s 的设备继续走这条兜底路径。
+	// 老 SDK（拨 /ws/events 得 404）在这道闸门之前就被上面的"只轮询在线设备"筛掉了：
+	// 它现在归事件通道判离线，容器列表不再刷新 —— 与界面上它就是显示离线这件事一致。
+	if len(onlineIPs) > 0 {
+		pollIPs := make([]string, 0, len(onlineIPs))
+		for _, ip := range onlineIPs {
+			if a.needsRESTPoll(ip) {
+				pollIPs = append(pollIPs, ip)
+			}
+		}
+		onlineIPs = pollIPs
+	}
+
 	if len(onlineIPs) == 0 {
 		return
 	}
@@ -643,6 +658,31 @@ func (a *App) ClearScreenshotCache(ips []string) {
 		}
 		delete(a.screenshotVersions, ip)
 	}
+}
+
+// DropAndroidCache 丢掉已移除设备的容器缓存（设备从监控列表删除时调用）。
+//
+// 以前只有 deviceStatusMap 会被清，androidCache 里的条目带着 Status="ok"
+// 和整份容器清单永久留下。而截图任务表是**遍历 androidCache**、只按 Status
+// 过滤的（dispatchScreenshotPoll），于是删掉一台设备等于给它开了
+// "每秒 ~39 次 :9082 HTTP 抓图" 的活儿，一直干到进程重启。
+// 顺带也修掉前端：被删设备的容器列表原本会一直挂在 GetAndroidContainersList 上。
+func (a *App) DropAndroidCache(ips []string) {
+	if len(ips) == 0 {
+		return
+	}
+	drop := make(map[string]struct{}, len(ips))
+	for _, ip := range ips {
+		drop[ip] = struct{}{}
+	}
+
+	a.androidCacheMutex.Lock()
+	for ip := range a.androidCache {
+		if _, ok := drop[ip]; ok {
+			delete(a.androidCache, ip)
+		}
+	}
+	a.androidCacheMutex.Unlock()
 }
 
 // b64Encode 将字节切片编码为 base64 字符串

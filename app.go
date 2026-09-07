@@ -39,6 +39,8 @@ import (
 	"gitee.com/zoums/dget"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+
+	"edgeclient/internal/eventws"
 )
 
 // DeviceStatus 设备状态信息（扩展版，包含设备详细信息）
@@ -79,6 +81,12 @@ type DeviceStatus struct {
 	IP1         string `json:"ip_1"`        // 第二IP
 	DeviceID    string `json:"deviceId"`    // 设备ID
 
+	// WsHealthy：这台设备的容器/指标/在线性当前是否由事件通道（WS）供数。
+	// true = /android、/info/device、TCP 探活都已让位给事件流；false = 仍走旧的 REST 路径。
+	// 纯诊断字段：加进来就是为了在调试工具里一眼看出"到底接管了没有"，
+	// 不用靠 lastCheckAt 的跳动节奏反推。
+	WsHealthy bool `json:"wsHealthy"`
+
 	// ========== TCP Ping 状态跟踪字段（新增） ==========
 	ConsecutiveFailures  int       `json:"-"`                  // 连续失败次数（不暴露给前端）
 	ConsecutiveSuccesses int       `json:"-"`                  // 连续成功次数（不暴露给前端）
@@ -86,6 +94,7 @@ type DeviceStatus struct {
 	LastAPICheckTime     time.Time `json:"-"`                  // 上次API版本检查时间（用于60秒间隔控制）
 	LastStorageCheckTime time.Time `json:"-"`                  // 上次存储查询时间（用于60秒间隔控制）
 	LastHTTPVerifyTime   time.Time `json:"-"`                  // 上次HTTP验证时间（在线设备降频验证）
+	LastProbeLogAt       time.Time `json:"-"`                  // 上次打印探活失败日志的时间（限流，防日志墙）
 }
 
 // App struct - V3 Service
@@ -136,6 +145,12 @@ type App struct {
 	// OpenCecs 端口映射：deviceIp → map[privatePort]publicPort
 	cecsPortMap      map[string]map[int]int
 	cecsPortMapMutex sync.RWMutex
+	// 设备事件通道（SDK v206+ ws://ip:8000/ws/events）
+	eventwsSvc       *eventws.Service     // 按设备管理事件连接
+	eventwsRefetchMu sync.Mutex           // 保护补查限频表
+	eventwsRefetchAt map[string]time.Time // {deviceIP -> 上次全量补查时间}
+	eventwsAuthMu    sync.Mutex           // 保护认证待办表
+	eventwsAuthFail  map[string]bool      // {deviceIP -> 当前卡在 401}
 }
 
 // WindowHandle 表示跨平台窗口句柄
@@ -486,7 +501,8 @@ func (a *App) GetUserRabbetList(rabbet string) map[string]interface{} {
 	h.Write([]byte(signStr))
 	sign := hex.EncodeToString(h.Sum(nil))
 
-	log.Printf("[GetUserRabbetList] signStr=%s sign=%s", signStr, sign)
+	// 只打摘要前 8 位：signStr 尾部拼的是硬编码密钥，而 logs/app.log 会随反馈包发出去
+	log.Printf("[GetUserRabbetList] sign=%s…", sign[:8])
 
 	// data 为 JSON：host 是字符串（数组序列化后），_ts 是数字，_sign 是字符串
 	dataMap := map[string]interface{}{
@@ -1778,6 +1794,9 @@ func NewApp() *App {
 		// 截图缓存初始化
 		screenshotCache:    make(map[string]*ScreenshotEntry),
 		screenshotVersions: make(map[string]int64),
+		// 事件通道初始化（连接由 UpdateMonitoredDevices 对账时建立，见 initEventws）
+		eventwsRefetchAt: make(map[string]time.Time),
+		eventwsAuthFail:  make(map[string]bool),
 	}
 	app.RtmpService.SetApp(app)
 
@@ -1790,6 +1809,9 @@ func (a *App) startup() {
 	if a.RtmpService != nil {
 		a.RtmpService.StartRtmpServer()
 	}
+
+	// 设备事件通道（SDK v206+）：只装配依赖，建连等设备列表下发后由 Sync 对账
+	a.initEventws()
 
 	// 注意：心跳检测服务由前端通过 initDeviceHeartbeat() 启动
 	// 不在这里启动，避免重复启动
@@ -2005,6 +2027,11 @@ func (a *App) getContainerByID(deviceIP string, containerID string, password str
 			}
 		}
 		if dataList != nil {
+			// 坑位（indexNum）命中先记下不返回：扫完全列表没有更精确的 id/name 命中
+			// 才兜底 —— 同一坑位可能短暂并存停止的旧容器和运行的新容器，
+			// 坑位号先到先得会拿错那个；批量任务传容器名（同名重建后 ID 会换），
+			// 也依赖这里"精确名称优先于坑位"的次序
+			var slotMatch *Container
 			for _, item := range dataList {
 				if containerMap, ok := item.(map[string]interface{}); ok {
 					id := ""
@@ -2020,10 +2047,10 @@ func (a *App) getContainerByID(deviceIP string, containerID string, password str
 						id = idVal
 					}
 
-					// 优先使用indexNum匹配（最可靠）
+					// indexNum（坑位）匹配：构建后记为候选，不立即返回（见 slotMatch 注释）
 					if indexNumVal, ok := containerMap["indexNum"].(float64); ok {
 						if int(indexNumVal) == containerIndexNum && containerIndexNum > 0 {
-							log.Printf("通过indexNum找到容器: indexNum=%d, id=%s", int(indexNumVal), id)
+							log.Printf("indexNum候选容器: indexNum=%d, id=%s", int(indexNumVal), id)
 							var container Container
 							container.ID = id
 							if ipVal, ok := containerMap["ip"].(string); ok {
@@ -2072,7 +2099,9 @@ func (a *App) getContainerByID(deviceIP string, containerID string, password str
 								}
 							}
 
-							return container, nil
+							if slotMatch == nil {
+								slotMatch = &container
+							}
 						}
 					}
 
@@ -2185,6 +2214,12 @@ func (a *App) getContainerByID(deviceIP string, containerID string, password str
 						}
 					}
 				}
+			}
+
+			// 全列表没有精确 id/name 命中，才用坑位（indexNum）兜底
+			if slotMatch != nil {
+				log.Printf("通过indexNum找到容器: indexNum=%d, id=%s", containerIndexNum, slotMatch.ID)
+				return *slotMatch, nil
 			}
 		} else {
 			// 尝试识别认证失败
@@ -2993,21 +3028,85 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 		dockerPort = 8000
 	}
 
-	// 上传文件到云机
-	if _, err := uploadFileToContainer(uploadHost, uploadPort, filePath); err != nil {
+	// 准备容器内路径。上传文件名带纳秒前缀：每次上传（含重试）都写全新文件，
+	// 避免设备上传服务覆盖同名旧文件时留下损坏内容；失败清理时会一并删除
+	fileName := filepath.Base(filePath)
+	uploadName := fmt.Sprintf("%d_%s", time.Now().UnixNano(), fileName)
+	uploadPath := "/sdcard/upload/" + uploadName
+	// 安装路径使用安全的纯ASCII文件名，避免 sd -c 的 ax shell 无法处理括号/中文等特殊字符
+	safeInstallName := fmt.Sprintf("_install_%d.apk", time.Now().UnixNano())
+	installPath := "/data/local/tmp/" + safeInstallName
+
+	// 上传前先在本地做两项检查：APK 的 ZIP 结构完整性、文件 MD5（供容器内逐跳核对）。
+	// 本地就损坏的文件直接报错，不再白传几百MB后到 pm install 才失败
+	if strings.HasSuffix(strings.ToLower(fileName), ".apk") {
+		if zipErr := looksLikeValidZip(filePath); zipErr != nil {
+			log.Printf("[InstallAPK] 本地APK结构检查未通过: %v", zipErr)
+			return map[string]interface{}{
+				"success": false,
+				"message": fmt.Sprintf("本地APK文件已损坏（%v），请重新下载后再安装", zipErr),
+			}
+		}
+	}
+	localMD5, md5Err := md5OfFile(filePath)
+	if md5Err != nil {
+		// 算不出本地MD5就跳过容器内MD5校验，不影响安装
+		log.Printf("[InstallAPK] 计算本地MD5失败（跳过容器内MD5校验）: %v", md5Err)
+	}
+
+	// 上传文件到云机。上传服务只回 HTTP 200，不保证落盘内容正确——
+	// 并发批量装大 APK 时出现过文件被写坏、直到 pm install 校验签名才
+	// 以"NO_CERTIFICATES"爆出来的事故，所以传完必须核对落盘大小
+	uploadStart := time.Now()
+	if _, err := uploadFileToContainer(uploadHost, uploadPort, filePath, uploadName); err != nil {
 		log.Printf("上传文件失败: %v", err)
 		return map[string]interface{}{
 			"success": false,
 			"message": fmt.Sprintf("上传文件失败: %v", err),
 		}
 	}
+	log.Printf("[InstallAPK] 文件上传完成: %s -> http://%s:%d/upload, 耗时%.1fs, 大小: %d",
+		fileName, uploadHost, uploadPort, time.Since(uploadStart).Seconds(), fileInfo.Size())
 
-	// 准备容器内路径
-	fileName := filepath.Base(filePath)
-	uploadPath := "/sdcard/upload/" + fileName
-	// 安装路径使用安全的纯ASCII文件名，避免 sd -c 的 ax shell 无法处理括号/中文等特殊字符
-	safeInstallName := fmt.Sprintf("_install_%d.apk", time.Now().UnixNano())
-	installPath := "/data/local/tmp/" + safeInstallName
+	// 核对容器内落盘大小：不符就重传一次，再不符直接报错；
+	// 容器没有 stat 命令时跳过校验（不拦正常安装，cp 那一步仍会兜底暴露问题）
+	sizeOK := false
+	for sizeTry := 1; sizeTry <= 2; sizeTry++ {
+		statResult, statErr := dockerExec(deviceIP, dockerPort, container.ID,
+			[]string{"sh", "-c", fmt.Sprintf("stat -c %%s '%s'", uploadPath)},
+			password, version)
+		remoteSize, parseErr := strconv.ParseInt(strings.TrimSpace(statResult.Stdout), 10, 64)
+		if statErr != nil || statResult.ExitCode != 0 || parseErr != nil {
+			log.Printf("[InstallAPK] 容器内无法校验大小(stat err=%v, exit=%d)，跳过校验", statErr, statResult.ExitCode)
+			sizeOK = true
+			break
+		}
+		if remoteSize == fileInfo.Size() {
+			sizeOK = true
+			log.Printf("[InstallAPK] 上传校验通过: 容器内大小 %d 与本地一致", remoteSize)
+			break
+		}
+		log.Printf("[InstallAPK] 第%d次上传落盘大小不符: 远端 %d, 本地 %d", sizeTry, remoteSize, fileInfo.Size())
+		if sizeTry < 2 {
+			if _, err := uploadFileToContainer(uploadHost, uploadPort, filePath, uploadName); err != nil {
+				log.Printf("重传失败: %v", err)
+				return map[string]interface{}{
+					"success": false,
+					"message": fmt.Sprintf("上传文件失败: %v", err),
+				}
+			}
+		}
+	}
+	if !sizeOK {
+		// 清理本次落盘的上传副本（本次独占命名，直接删）
+		dockerExec(deviceIP, dockerPort, container.ID,
+			[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", uploadPath)},
+			password, version)
+		return map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("文件上传校验失败: 容器内大小与本地(%d字节)不符，文件可能传输损坏", fileInfo.Size()),
+		}
+	}
 
 	// 只复制文件到临时目录，不删除源文件
 	commands := []struct {
@@ -3045,6 +3144,204 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 		}
 		if result.Stderr != "" {
 			log.Printf("命令错误输出: %s", result.Stderr)
+		}
+	}
+
+	// cp 之后核对 MD5：大小校验只能证明"没截断"，现场事故里出现过大小一致但
+	// 内容损坏（pm 报摘要不符/无法解析 ZIP）。一次 md5sum 同时取上传副本和
+	// 安装副本，可定位损坏发生在哪一跳：安装副本坏→cp 一步损坏→重 cp；
+	// 上传副本也坏→上传落盘就坏→重传再 cp。容器没有 md5sum 时跳过校验
+	if localMD5 != "" {
+		md5OK := false
+		badInstallMD5 := ""
+		goodSource := "" // 探测到的完好底层副本路径（/sdcard FUSE 视图损坏但底层文件完好的场景）
+		for verifyTry := 1; verifyTry <= 2; verifyTry++ {
+			md5Result, md5Err := dockerExec(deviceIP, dockerPort, container.ID,
+				[]string{"sh", "-c", fmt.Sprintf("md5sum '%s' '%s'", uploadPath, installPath)},
+				password, version)
+			if md5Err != nil || md5Result.ExitCode != 0 {
+				log.Printf("[InstallAPK] 容器内无法校验MD5(err=%v, exit=%d)，跳过校验", md5Err, md5Result.ExitCode)
+				md5OK = true
+				break
+			}
+			hashOf := func(line string) string {
+				if fields := strings.Fields(line); len(fields) > 0 {
+					return strings.ToLower(fields[0])
+				}
+				return ""
+			}
+			lines := strings.Split(strings.TrimSpace(md5Result.Stdout), "\n")
+			if len(lines) != 2 {
+				log.Printf("[InstallAPK] 容器内MD5输出异常(%d行)，跳过校验", len(lines))
+				md5OK = true
+				break
+			}
+			uploadMD5 := hashOf(lines[0])
+			installMD5 := hashOf(lines[1])
+			if installMD5 == localMD5 {
+				md5OK = true
+				log.Printf("[InstallAPK] MD5校验通过: 安装副本与本地一致(%s)", localMD5)
+				break
+			}
+			badInstallMD5 = installMD5
+			log.Printf("[InstallAPK] 第%d次MD5校验不符: 安装副本=%s, 上传副本=%s, 本地=%s",
+				verifyTry, installMD5, uploadMD5, localMD5)
+			if verifyTry == 1 {
+				// 诊断一：容器内存储余量。落盘"大小准确但内容错、每次都不同"最常见的
+				// 设备侧原因是存储写满——预分配出了准确大小，实际数据写不进去
+				if dfRes, dfErr := dockerExec(deviceIP, dockerPort, container.ID,
+					[]string{"sh", "-c", "df /sdcard /data 2>/dev/null || df"},
+					password, version); dfErr == nil {
+					log.Printf("[InstallAPK] 存储诊断(df): %s", strings.ReplaceAll(strings.TrimSpace(dfRes.Stdout), "\n", " | "))
+				}
+				// 诊断二：隔3秒重读上传副本，确认落盘内容是否稳定（排除"仍在写入/缓存未同步"）
+				time.Sleep(3 * time.Second)
+				if reRead, ok := containerFileMD5(deviceIP, dockerPort, container.ID, uploadPath, password, version); ok {
+					stability := "稳定不变"
+					if reRead != uploadMD5 {
+						stability = "仍在变化（落盘未完成或缓存不一致）"
+					}
+					log.Printf("[InstallAPK] 延迟重读上传副本MD5: %s（%s）", reRead, stability)
+				}
+				// 诊断三：多点位采样对比（首/尾1KB + 25%/50%/75% 处各1KB，均1024对齐），
+				// 定位损坏发生的区间（此前已知头尾完好、仅中间损坏）；顺带 dump 前16字节。
+				// 注意 dd bs=1024 的读取粒度与全文件 md5sum 不同，本身就是读取方式对照
+				alignDown := func(v int64) int64 { return v &^ 1023 }
+				sampleOffsets := []int64{
+					0,
+					alignDown(fileInfo.Size() / 4),
+					alignDown(fileInfo.Size() / 2),
+					alignDown(3 * fileInfo.Size() / 4),
+					alignDown(fileInfo.Size() - 1024),
+				}
+				sampleNames := []string{"首1KB", "25%处", "50%处", "75%处", "尾1KB"}
+				var probeCmds []string
+				localSamples := make([]string, len(sampleOffsets))
+				for i, off := range sampleOffsets {
+					if off < 0 {
+						off = 0
+					}
+					localSamples[i], _ = md5OfFileRange(filePath, off, 1024)
+					probeCmds = append(probeCmds, fmt.Sprintf("dd if='%s' bs=1024 skip=%d count=1 2>/dev/null | md5sum", uploadPath, off/1024))
+				}
+				probeCmds = append(probeCmds, fmt.Sprintf("od -An -tx1 -N 16 '%s' 2>/dev/null", uploadPath))
+				if probe, perr := dockerExec(deviceIP, dockerPort, container.ID,
+					[]string{"sh", "-c", strings.Join(probeCmds, "; ")},
+					password, version); perr == nil {
+					probeLines := strings.Split(strings.TrimSpace(probe.Stdout), "\n")
+					var report []string
+					for i := range sampleOffsets {
+						remote := "?"
+						if i < len(probeLines) {
+							if f := strings.Fields(probeLines[i]); len(f) > 0 {
+								remote = strings.ToLower(f[0])
+							}
+						}
+						mark := "BAD"
+						if localSamples[i] != "" && remote == localSamples[i] {
+							mark = "OK"
+						}
+						report = append(report, fmt.Sprintf("%s=%s(%s)", sampleNames[i], remote, mark))
+					}
+					first16 := ""
+					if len(probeLines) > len(sampleOffsets) {
+						first16 = strings.Join(strings.Fields(probeLines[len(sampleOffsets)]), " ")
+					}
+					log.Printf("[InstallAPK] 采样诊断: %s | 前16字节=%s | 本地采样=%s",
+						strings.Join(report, ", "), first16, strings.Join(localSamples, ","))
+				}
+				// 诊断四：探测底层存储路径。/sdcard 是 FUSE 视图，存在"视图损坏而
+				// 底层文件完好"的可能——若任一备用路径 MD5 与本地一致，改从它复制
+				for _, alt := range []string{
+					"/storage/emulated/0/upload/" + uploadName,
+					"/data/media/0/upload/" + uploadName,
+					"/mnt/media_rw/0/upload/" + uploadName,
+					"/mnt/installer/0/upload/" + uploadName,
+					"/mnt/installer/0/emulated/0/upload/" + uploadName,
+				} {
+					if altHash, ok := containerFileMD5(deviceIP, dockerPort, container.ID, alt, password, version); ok && altHash == localMD5 {
+						goodSource = alt
+						log.Printf("[InstallAPK] 找到完好的底层副本: %s", alt)
+						break
+					}
+				}
+				// 诊断五：换读取粒度复制（dd 64KB / 2MB 块）。头尾完好仅中间损坏的
+				// 模式下，若 FUSE 对大文件的读取按粒度返回不同数据（读侧缓存映射
+				// bug），某种粒度读出的副本会是完好的——直接挪到安装路径使用，
+				// 本次安装即自愈；两种粒度都不行，则维持重传路径
+				for _, bs := range []string{"65536", "2097152"} {
+					ddCopy := fmt.Sprintf("/data/local/tmp/_ddcopy_%d.apk", time.Now().UnixNano())
+					if _, ddErr := dockerExec(deviceIP, dockerPort, container.ID,
+						[]string{"sh", "-c", fmt.Sprintf("dd if='%s' of='%s' bs=%s 2>/dev/null", uploadPath, ddCopy, bs)},
+						password, version); ddErr != nil {
+						continue
+					}
+					ddHash, ddOK := containerFileMD5(deviceIP, dockerPort, container.ID, ddCopy, password, version)
+					if ddOK && ddHash == localMD5 {
+						if mvRes, mvErr := dockerExec(deviceIP, dockerPort, container.ID,
+							[]string{"sh", "-c", fmt.Sprintf("mv -f '%s' '%s'", ddCopy, installPath)},
+							password, version); mvErr == nil && mvRes.ExitCode == 0 {
+							md5OK = true
+							log.Printf("[InstallAPK] dd(bs=%s)副本完好，已作为安装副本: %s", bs, installPath)
+							break
+						}
+						log.Printf("[InstallAPK] dd(bs=%s)副本完好但mv失败: %s", bs, ddCopy)
+						dockerExec(deviceIP, dockerPort, container.ID,
+							[]string{"sh", "-c", fmt.Sprintf("rm -f '%s'", ddCopy)}, password, version)
+						continue
+					}
+					log.Printf("[InstallAPK] dd(bs=%s)复制副本MD5: %s（不符，丢弃）", bs, ddHash)
+					dockerExec(deviceIP, dockerPort, container.ID,
+						[]string{"sh", "-c", fmt.Sprintf("rm -f '%s'", ddCopy)}, password, version)
+				}
+				if md5OK {
+					break
+				}
+			}
+			if verifyTry < 2 {
+				cpSource := uploadPath
+				if goodSource != "" {
+					// 底层副本完好：从它重新复制即可，无需重传
+					log.Printf("[InstallAPK] 从完好的底层副本重新复制: %s", goodSource)
+					cpSource = goodSource
+				} else if uploadMD5 != localMD5 {
+					// 上传副本就坏了：先重传
+					log.Printf("[InstallAPK] 上传副本损坏，重新上传: %s", uploadName)
+					if _, err := uploadFileToContainer(uploadHost, uploadPort, filePath, uploadName); err != nil {
+						log.Printf("重传失败: %v", err)
+						return map[string]interface{}{
+							"success": false,
+							"message": fmt.Sprintf("上传文件失败: %v", err),
+						}
+					}
+				}
+				// 重新复制（cp 损坏、重传后、或换底层副本源后都需要）
+				cpResult, cpErr := dockerExec(deviceIP, dockerPort, container.ID,
+					[]string{"sh", "-c", fmt.Sprintf("cp '%s' '%s'", cpSource, installPath)},
+					password, version)
+				if cpErr != nil || cpResult.ExitCode != 0 {
+					log.Printf("[InstallAPK] 重新复制失败: err=%v, exit=%d", cpErr, cpResult.ExitCode)
+					break
+				}
+			}
+		}
+		// 分片兜底：大文件经 :9082 整体上传必坏（头尾完好、中间随机区域损坏、重传
+		// 无效），但小文件（keybox 证书等）走同一服务一直正常——损坏与文件大小相关。
+		// 此处把文件切成小块分别上传（逐片校验、坏片重传），容器内 cat 拼装成安装
+		// 副本后再整体校验；分片尺寸先从大到小探测出能完整落盘的最大尺寸
+		if !md5OK && badInstallMD5 != "" && fileInfo.Size() > 16*1024*1024 {
+			md5OK = chunkedUploadAssemble(deviceIP, dockerPort, container.ID, uploadHost, uploadPort,
+				filePath, installPath, localMD5, fileInfo.Size(), password, version)
+		}
+		if !md5OK {
+			// 清理本次落盘的两个副本，再报错
+			dockerExec(deviceIP, dockerPort, container.ID,
+				[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s %s'", installPath, uploadPath)},
+				password, version)
+			return map[string]interface{}{
+				"success": false,
+				"message": fmt.Sprintf("文件完整性校验失败: 容器内安装副本MD5(%s)与本地(%s)不符。设备上传服务(:9082)落盘内容损坏且重传无效，请重启该设备或联系设备方处理", badInstallMD5, localMD5),
+			}
 		}
 	}
 
@@ -3088,24 +3385,34 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 			[]string{"sh", "-c", fmt.Sprintf("rm -f %s", resultFile)}, password, version)
 
 		// 2) 通过 sd -c 执行脚本
+		sdStart := time.Now()
 		installResult, err := dockerExec(
 			deviceIP, dockerPort, container.ID,
 			[]string{"sh", "-c", fmt.Sprintf("sd -c 'sh %s'", scriptFile)},
 			password, version,
 		)
+		sdElapsed := time.Since(sdStart)
 
-		log.Printf("[InstallAPK] 安装命令已发送, dockerExec返回: err=%v, exitCode=%d, stdout=%s", err, installResult.ExitCode, installResult.Stdout)
+		log.Printf("[InstallAPK] 安装命令已发送, 耗时%.1fs, dockerExec返回: err=%v, exitCode=%d, stdout=%s", sdElapsed.Seconds(), err, installResult.ExitCode, installResult.Stdout)
 
-		// sd -c 返回空输出且无错误，可能是 sd 服务未就绪，等待一下再执行
+		// sd -c 返回空输出且无错误，可能是 sd 服务未就绪，等待一下再执行。
+		// 但只对"秒回"的空输出重试：sd -c 本来就不回传 stdout，空输出是常态；
+		// 阻塞几十秒才返回说明脚本真的在跑（pm install 大包要一两分钟），再跑
+		// 一遍等于每台装两次，耗时和设备压力都翻倍，直接去轮询结果文件即可
+		// （第一遍跑完结果文件里就有 installID + pm 输出，轮询会立即读到）。
 		if err == nil && installResult.ExitCode == 0 && strings.TrimSpace(installResult.Stdout) == "" {
-			log.Printf("[InstallAPK] sd -c 返回空输出，等待2秒后重试...")
-			time.Sleep(2 * time.Second)
-			installResult, err = dockerExec(
-				deviceIP, dockerPort, container.ID,
-				[]string{"sh", "-c", fmt.Sprintf("sd -c 'sh %s'", scriptFile)},
-				password, version,
-			)
-			log.Printf("[InstallAPK] 重试sd -c返回: err=%v, exitCode=%d, stdout=%s", err, installResult.ExitCode, installResult.Stdout)
+			if sdElapsed < 3*time.Second {
+				log.Printf("[InstallAPK] sd -c %.1fs 秒回且无输出（服务未就绪），等待2秒后重试...", sdElapsed.Seconds())
+				time.Sleep(2 * time.Second)
+				installResult, err = dockerExec(
+					deviceIP, dockerPort, container.ID,
+					[]string{"sh", "-c", fmt.Sprintf("sd -c 'sh %s'", scriptFile)},
+					password, version,
+				)
+				log.Printf("[InstallAPK] 重试sd -c返回: err=%v, exitCode=%d, stdout=%s", err, installResult.ExitCode, installResult.Stdout)
+			} else {
+				log.Printf("[InstallAPK] sd -c 阻塞 %.1fs 后返回空输出，脚本已在执行，直接轮询结果文件", sdElapsed.Seconds())
+			}
 		}
 
 		// sd -c 异步执行，轮询等待结果文件
@@ -3166,12 +3473,25 @@ func (a *App) InstallAPK(deviceIP string, version string, containerID string, fi
 			}
 			log.Printf("[InstallAPK] 安装失败: exitCode=%d, output=%s, stderr=%s", installResult.ExitCode, installOutput, installResult.Stderr)
 
-			// 清理临时文件和结果文件
+			// 清理临时文件和结果文件（上传副本本次独占命名，一并删掉避免占设备存储）
 			dockerExec(deviceIP, dockerPort, container.ID,
 				[]string{"sh", "-c", fmt.Sprintf("rm -f %s", resultFile)}, password, version)
 			dockerExec(deviceIP, dockerPort, container.ID,
 				[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", installPath)},
 				password, version)
+			dockerExec(deviceIP, dockerPort, container.ID,
+				[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", uploadPath)},
+				password, version)
+
+			// 文件在传输链路上被写坏的典型特征：APK 内容与内嵌签名对不上
+			// （NO_CERTIFICATES / 摘要不符）。并发批量安装时设备侧偶发写坏，
+			// 本地文件本身是好的——重新上传并完整重装一次通常即成功；
+			// retried 标记防止无限重试
+			if isCorruptApkDelivery(installOutput) && !opts.retried {
+				log.Printf("[InstallAPK] 安装失败疑似文件传输损坏，重新上传并重试一次: %s", installOutput)
+				opts.retried = true
+				return a.InstallAPK(deviceIP, version, containerID, filePath, password, opts)
+			}
 
 			return map[string]interface{}{
 				"success":     false,
@@ -3237,6 +3557,380 @@ type APKInstallOptions struct {
 	Test               bool `json:"test"`               // -t 允许测试包
 	Grant              bool `json:"grant"`              // -g 授予所有运行时权限
 	DeleteAfterInstall bool `json:"deleteAfterInstall"` // 安装后删除上传的文件
+
+	retried bool // 内部标记：文件传输损坏时已整体重装过一次，防无限重试（不参与JSON序列化）
+}
+
+// isCorruptApkDelivery 判断安装失败输出是否为"文件在传输链路上被写坏"的特征：
+// 一是 APK 内容与内嵌签名对不上（pm 校验签名时报 NO_CERTIFICATES / 摘要不符），
+// 二是文件坏到连 ZIP 都打不开（pm 报 Failed to parse APK file / Failed to load asset path）。
+// 二者都不是 APK 本身签名有问题——重传文件重装通常即可成功
+func isCorruptApkDelivery(output string) bool {
+	return strings.Contains(output, "INSTALL_PARSE_FAILED_NO_CERTIFICATES") ||
+		strings.Contains(output, "did not verify") ||
+		strings.Contains(output, "Failed to parse APK file") ||
+		strings.Contains(output, "Failed to load asset path")
+}
+
+// md5OfFile 流式计算本地文件 MD5，用于上传前后的完整性核对
+func md5OfFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := md5.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
+// md5OfFileRange 计算本地文件 [offset, offset+size) 范围的 MD5（首尾对比诊断用）
+func md5OfFileRange(path string, offset int64, size int64) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return "", err
+	}
+	h := md5.New()
+	if _, err := io.CopyN(h, f, size); err != nil && err != io.EOF {
+		return "", err
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
+// containerFileMD5 读取容器内单个文件的 MD5（md5sum），ok=false 表示无法获取
+func containerFileMD5(deviceIP string, dockerPort int, containerID string, path string, password string, version string) (string, bool) {
+	res, err := dockerExec(deviceIP, dockerPort, containerID,
+		[]string{"sh", "-c", fmt.Sprintf("md5sum '%s'", path)}, password, version)
+	if err != nil || res.ExitCode != 0 {
+		return "", false
+	}
+	fields := strings.Fields(strings.TrimSpace(res.Stdout))
+	if len(fields) == 0 {
+		return "", false
+	}
+	return strings.ToLower(fields[0]), true
+}
+
+// chunkedUploadAssemble 分片上传兜底：设备 :9082 上传服务对大文件落盘内容损坏
+// 且重传无效（损坏区域随机、头尾完好），但小文件一直正常。把文件切成小片分别
+// 上传（分片尺寸从大到小探测确定），逐片 MD5 校验、坏片换名重传，容器内 cat
+// 拼装为安装副本后整体校验。成功返回 true 且 installPath 已就位。
+func chunkedUploadAssemble(deviceIP string, dockerPort int, containerID string, uploadHost string, uploadPort int,
+	filePath, installPath, localMD5 string, fileSize int64, password, version string) bool {
+
+	log.Printf("[InstallAPK] 进入分片上传兜底: 文件大小=%d", fileSize)
+
+	// 本地取片：把 filePath 的 [offset, offset+length) 写入临时文件，返回其 MD5
+	tempPiece := filepath.Join(os.TempDir(), fmt.Sprintf("edgeclient_piece_%d.bin", time.Now().UnixNano()))
+	defer os.Remove(tempPiece)
+	writeLocalPiece := func(offset, length int64) (string, error) {
+		in, err := os.Open(filePath)
+		if err != nil {
+			return "", err
+		}
+		defer in.Close()
+		if _, err := in.Seek(offset, 0); err != nil {
+			return "", err
+		}
+		out, err := os.Create(tempPiece)
+		if err != nil {
+			return "", err
+		}
+		h := md5.New()
+		_, err = io.Copy(io.MultiWriter(out, h), io.LimitReader(in, length))
+		out.Close()
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%x", h.Sum(nil)), nil
+	}
+
+	// 分批删除容器内的分片（沿用已有清理动作的 sd -c 形式）
+	allNames := []string{}
+	cleanupPieces := func() {
+		for start := 0; start < len(allNames); start += 100 {
+			end := start + 100
+			if end > len(allNames) {
+				end = len(allNames)
+			}
+			var sb strings.Builder
+			sb.WriteString("rm -f")
+			for _, n := range allNames[start:end] {
+				sb.WriteString(fmt.Sprintf(" /sdcard/upload/%s", n))
+			}
+			dockerExec(deviceIP, dockerPort, containerID,
+				[]string{"sh", "-c", sb.String()}, password, version)
+		}
+	}
+
+	// 第一步：从大到小探测能完整落盘的分片尺寸。探测取文件中段（损坏区域
+	// 集中在中间，从头部探测会因头部总是完好而误判大尺寸可用）
+	probeSizes := []int64{32 << 20, 8 << 20, 2 << 20, 512 << 10, 128 << 10}
+	var pieceSize int64
+	for _, size := range probeSizes {
+		if size > fileSize {
+			continue
+		}
+		probeOffset := fileSize/2 - size/2
+		if probeOffset < 0 {
+			probeOffset = 0
+		}
+		if probeOffset+size > fileSize {
+			probeOffset = fileSize - size
+		}
+		localHash, err := writeLocalPiece(probeOffset, size)
+		if err != nil {
+			log.Printf("[InstallAPK] 分片探测: 本地读取失败: %v", err)
+			return false
+		}
+		probeName := fmt.Sprintf("%d_probe", time.Now().UnixNano())
+		if _, err := uploadFileToContainer(uploadHost, uploadPort, tempPiece, probeName); err != nil {
+			log.Printf("[InstallAPK] 分片探测(%d字节): 上传失败: %v", size, err)
+			return false
+		}
+		allNames = append(allNames, probeName)
+		probeHash, ok := containerFileMD5(deviceIP, dockerPort, containerID, "/sdcard/upload/"+probeName, password, version)
+		if ok && probeHash == localHash {
+			pieceSize = size
+			log.Printf("[InstallAPK] 分片探测: %d 字节可完整落盘，采用该尺寸", size)
+			break
+		}
+		log.Printf("[InstallAPK] 分片探测: %d 字节仍损坏(容器内md5=%s)", size, probeHash)
+	}
+	if pieceSize == 0 {
+		log.Printf("[InstallAPK] 分片兜底失败: 探测尺寸(32MB~128KB)全部损坏，设备上传服务已无法自愈")
+		return false
+	}
+
+	// 第二步~第三步：按选定尺寸逐片上传并校验。损坏按上传次数独立随机出现：
+	// 若单轮损坏率过高（首轮>1/4 或重传后仍>3片），4 轮内全部收敛的概率太低，
+	// 缩小分片尺寸（越小损坏率越低）整体重来更划算，最小缩到 128KB
+	base := time.Now().UnixNano()
+	var pieceNames []string
+	var pieceCount int
+	assembled := false
+	for sizeAttempt := 0; sizeAttempt < 4; sizeAttempt++ {
+		pieceCount = int((fileSize + pieceSize - 1) / pieceSize)
+		pieceNames = make([]string, pieceCount)
+		pieceMD5 := make([]string, pieceCount)
+		uploadFailed := false
+		for i := 0; i < pieceCount; i++ {
+			offset := int64(i) * pieceSize
+			length := pieceSize
+			if offset+length > fileSize {
+				length = fileSize - offset
+			}
+			name := fmt.Sprintf("%d_a%d_p%04d", base, sizeAttempt, i)
+			localHash, err := writeLocalPiece(offset, length)
+			if err != nil {
+				log.Printf("[InstallAPK] 分片上传: 本地读取第%d片失败: %v", i+1, err)
+				uploadFailed = true
+				break
+			}
+			if _, err := uploadFileToContainer(uploadHost, uploadPort, tempPiece, name); err != nil {
+				log.Printf("[InstallAPK] 分片上传: 第%d片上传失败: %v", i+1, err)
+				uploadFailed = true
+				break
+			}
+			pieceNames[i] = name
+			pieceMD5[i] = localHash
+			allNames = append(allNames, name)
+		}
+		if uploadFailed {
+			cleanupPieces()
+			return false
+		}
+		log.Printf("[InstallAPK] 分片上传完成: 每片=%d字节, 共%d片, 开始校验", pieceSize, pieceCount)
+
+		// 批量校验（分批 md5sum，缺失或哈希不符都算坏片），坏片换名重传
+		converged := false
+		shrink := false
+		for round := 1; round <= 4; round++ {
+			badIdx := make([]int, 0)
+			for start := 0; start < pieceCount; start += 50 {
+				end := start + 50
+				if end > pieceCount {
+					end = pieceCount
+				}
+				var sb strings.Builder
+				sb.WriteString("md5sum")
+				for _, n := range pieceNames[start:end] {
+					sb.WriteString(fmt.Sprintf(" /sdcard/upload/%s", n))
+				}
+				res, err := dockerExec(deviceIP, dockerPort, containerID,
+					[]string{"sh", "-c", sb.String()}, password, version)
+				if err != nil {
+					log.Printf("[InstallAPK] 分片校验命令失败: %v", err)
+					cleanupPieces()
+					return false
+				}
+				// md5sum 对缺失文件会打印错误并返回非零，但其余文件的哈希仍输出，照常解析
+				remoteHashes := map[string]string{}
+				for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
+					if f := strings.Fields(line); len(f) == 2 {
+						remoteHashes[filepath.Base(f[1])] = strings.ToLower(f[0])
+					}
+				}
+				for i := start; i < end; i++ {
+					if remoteHashes[pieceNames[i]] != pieceMD5[i] {
+						badIdx = append(badIdx, i)
+					}
+				}
+			}
+			if len(badIdx) == 0 {
+				log.Printf("[InstallAPK] 分片校验: 第%d轮全部通过", round)
+				converged = true
+				break
+			}
+			// 损坏率过高或轮次耗尽时缩小尺寸重来；已到最小尺寸则只能继续重传
+			if (round == 1 && len(badIdx)*4 > pieceCount) || (round >= 2 && len(badIdx) > 3) || round == 4 {
+				if pieceSize > 128<<10 {
+					log.Printf("[InstallAPK] 分片校验: 第%d轮损坏%d/%d片，损坏率过高，缩小分片尺寸重来", round, len(badIdx), pieceCount)
+					shrink = true
+					break
+				}
+				if round == 4 {
+					log.Printf("[InstallAPK] 分片校验: 第%d轮仍有%d片损坏，放弃", round, len(badIdx))
+					break
+				}
+				log.Printf("[InstallAPK] 分片校验: 第%d轮损坏%d/%d片（已达最小分片，继续重传）", round, len(badIdx), pieceCount)
+			}
+			log.Printf("[InstallAPK] 分片校验: 第%d轮发现%d片损坏，重传", round, len(badIdx))
+			for _, i := range badIdx {
+				offset := int64(i) * pieceSize
+				length := pieceSize
+				if offset+length > fileSize {
+					length = fileSize - offset
+				}
+				name := fmt.Sprintf("%d_a%d_r%d_%04d", base, sizeAttempt, round, i)
+				if _, err := writeLocalPiece(offset, length); err != nil {
+					continue
+				}
+				if _, err := uploadFileToContainer(uploadHost, uploadPort, tempPiece, name); err != nil {
+					continue
+				}
+				pieceNames[i] = name // 内容相同，校验基准 pieceMD5[i] 仍有效
+				allNames = append(allNames, name)
+			}
+		}
+		if converged {
+			assembled = true
+			break
+		}
+		if !shrink {
+			cleanupPieces()
+			return false
+		}
+		pieceSize /= 4
+		if pieceSize < 128<<10 {
+			pieceSize = 128 << 10
+		}
+		log.Printf("[InstallAPK] 分片尺寸缩小为 %d 字节重试", pieceSize)
+	}
+	if !assembled {
+		cleanupPieces()
+		return false
+	}
+
+	// 第四步：分批 cat 拼装为安装副本（单条命令过长会超 exec 参数限制）
+	for start := 0; start < pieceCount; start += 100 {
+		end := start + 100
+		if end > pieceCount {
+			end = pieceCount
+		}
+		var sb strings.Builder
+		sb.WriteString("cat")
+		for _, n := range pieceNames[start:end] {
+			sb.WriteString(fmt.Sprintf(" /sdcard/upload/%s", n))
+		}
+		if start == 0 {
+			sb.WriteString(fmt.Sprintf(" > '%s'", installPath))
+		} else {
+			sb.WriteString(fmt.Sprintf(" >> '%s'", installPath))
+		}
+		res, err := dockerExec(deviceIP, dockerPort, containerID,
+			[]string{"sh", "-c", sb.String()}, password, version)
+		if err != nil {
+			log.Printf("[InstallAPK] 分片拼装失败: %v", err)
+			cleanupPieces()
+			return false
+		}
+		if res.ExitCode != 0 {
+			log.Printf("[InstallAPK] 分片拼装失败: exit=%d, 输出=%s", res.ExitCode, res.Stdout)
+			cleanupPieces()
+			return false
+		}
+	}
+
+	// 第五步：整体校验拼装结果
+	assembledMD5, ok := containerFileMD5(deviceIP, dockerPort, containerID, installPath, password, version)
+	cleanupPieces()
+	if !ok || assembledMD5 != localMD5 {
+		log.Printf("[InstallAPK] 分片兜底: 拼装副本MD5(%s)与本地(%s)不符", assembledMD5, localMD5)
+		dockerExec(deviceIP, dockerPort, containerID,
+			[]string{"sh", "-c", fmt.Sprintf("sd -c 'rm -f %s'", installPath)}, password, version)
+		return false
+	}
+	log.Printf("[InstallAPK] 分片兜底成功: 已拼装完好安装副本 %s", installPath)
+	return true
+}
+
+// looksLikeValidZip 做最基础的 ZIP 结构检查（APK 即 ZIP）：
+// 尾部须能找到 EOCD 记录（PK\x05\x06），且其声明的中央目录偏移+大小不超出文件范围。
+// 用于把"本地下载即损坏"的 APK 在上传前拦下，而不是白传几百MB后 pm 才报错
+func looksLikeValidZip(path string) error {
+	const eocdSize = 22      // EOCD 固定段长度（不含尾部注释）
+	const maxComment = 65535 // ZIP 注释最大长度
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	size := st.Size()
+	if size < eocdSize {
+		return fmt.Errorf("文件仅%d字节，不是有效的APK", size)
+	}
+	readSize := eocdSize + maxComment
+	if int64(readSize) > size {
+		readSize = int(size)
+	}
+	tail := make([]byte, readSize)
+	if _, err := f.ReadAt(tail, size-int64(readSize)); err != nil && err != io.EOF {
+		return err
+	}
+	eocd := -1
+	for i := len(tail) - eocdSize; i >= 0; i-- {
+		if tail[i] == 0x50 && tail[i+1] == 0x4B && tail[i+2] == 0x05 && tail[i+3] == 0x06 {
+			eocd = i
+			break
+		}
+	}
+	if eocd < 0 {
+		return fmt.Errorf("未找到ZIP结束记录(EOCD)，文件可能不完整")
+	}
+	le32 := func(b []byte) uint32 {
+		return uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24
+	}
+	cdSize := le32(tail[eocd+12 : eocd+16])
+	cdOffset := le32(tail[eocd+16 : eocd+20])
+	if cdOffset == 0xFFFFFFFF || cdSize == 0xFFFFFFFF {
+		return nil // ZIP64 格式，跳过深度校验
+	}
+	eocdAt := size - int64(readSize) + int64(eocd) // EOCD 在文件中的绝对偏移
+	if uint64(cdOffset)+uint64(cdSize) > uint64(eocdAt) {
+		return fmt.Errorf("ZIP中央目录范围(偏移%d+大小%d)超出文件大小%d", cdOffset, cdSize, size)
+	}
+	return nil
 }
 
 // APKInstallResult 单个设备的安装结果
@@ -3483,8 +4177,10 @@ func (a *App) BatchInstallAPK(targets []APKInstallTarget, filePath string, optio
 	}
 }
 
-// uploadFileToContainer 上传文件到容器
-func uploadFileToContainer(ip string, port int, filePath string) (map[string]interface{}, error) {
+// uploadFileToContainer 上传文件到容器。可选参数指定落盘文件名（缺省用本地文件名）。
+// InstallAPK 传"纳秒前缀_原名"的唯一文件名，让每次上传（含重试）都写全新文件，
+// 避免设备上传服务覆盖同名旧文件时留下损坏内容
+func uploadFileToContainer(ip string, port int, filePath string, uploadName ...string) (map[string]interface{}, error) {
 	// 打开文件
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -3492,10 +4188,15 @@ func uploadFileToContainer(ip string, port int, filePath string) (map[string]int
 	}
 	defer file.Close()
 
+	formName := filepath.Base(filePath)
+	if len(uploadName) > 0 && uploadName[0] != "" {
+		formName = uploadName[0]
+	}
+
 	// 创建multipart请求
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	part, err := writer.CreateFormFile("file", formName)
 	if err != nil {
 		return nil, err
 	}
@@ -3525,6 +4226,14 @@ func uploadFileToContainer(ip string, port int, filePath string) (map[string]int
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
+
+	// 记录上传服务返回内容（截断到300字节）：此前只看HTTP 200就当成功，
+	// 现场出现过 200 但落盘内容损坏的情况，服务返回里可能带线索（路径/大小/校验值）
+	respSnippet := string(respBody)
+	if len(respSnippet) > 300 {
+		respSnippet = respSnippet[:300] + "..."
+	}
+	log.Printf("[uploadFileToContainer] 上传响应: http://%s:%d/upload 状态=%d 内容=%s", ip, port, resp.StatusCode, respSnippet)
 
 	// 检查响应
 	if resp.StatusCode != http.StatusOK {
@@ -12190,8 +12899,8 @@ func (a *App) CancelImageUpload() map[string]interface{} {
 
 // IsImageDownloaded 检查在线镜像是否已下载
 func (a *App) IsImageDownloaded(onlineURL string) map[string]interface{} {
-	log.Printf("[IPC] 收到 IsImageDownloaded 调用")
-	log.Printf("[IPC] 参数: onlineURL=%s", onlineURL)
+	// 注意：镜像管理页加载时会对目录中每个镜像并发调用本方法（一次可达数百个），
+	// 正常路径不打印日志，避免 app.log 被刷屏；仅保留错误与命中记录
 
 	// 方法1: 检查images目录下的文件（GetLocalImagesForManagement使用的目录）
 	cacheDir := getCacheDir()
@@ -12281,7 +12990,6 @@ func (a *App) IsImageDownloaded(onlineURL string) map[string]interface{} {
 
 	// 检查目录是否存在
 	if _, err := os.Stat(edgeclientDir); os.IsNotExist(err) {
-		log.Printf("[IPC] 存储目录不存在")
 		return map[string]interface{}{"downloaded": false}
 	}
 
@@ -12321,7 +13029,6 @@ func (a *App) IsImageDownloaded(onlineURL string) map[string]interface{} {
 		}
 	}
 
-	log.Printf("[IPC] 镜像未下载: %s", onlineURL)
 	return map[string]interface{}{"downloaded": false}
 }
 

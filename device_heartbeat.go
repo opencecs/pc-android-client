@@ -202,8 +202,17 @@ func (a *App) UpdateMonitoredDevices(ips []string, names map[string]string) {
 	
 	if len(removedIPs) > 0 {
 		log.Printf("[心跳] 清理缓存: 移除 %d 个不在监控列表的设备状态: %v", len(removedIPs), removedIPs)
+		// 只清状态还不够：截图轮询遍历的是 androidCache（不查监控列表），
+		// 条目不删就会替一台已不存在的设备每秒抓一轮容器截图，永远不停。
+		a.DropAndroidCache(removedIPs)
+		a.ClearScreenshotCache(removedIPs)
 	}
 	
+	// 事件通道对账：新增的建连、移除的断开。
+	// 注意要喂**全部**设备（含当前离线/未认证的）：拨号本身就是探测，
+	// 事件通道接手的设备在线性由 WS 心跳判定，不能再依赖"已经在线才连"。
+	a.syncEventws()
+
 	log.Printf("[心跳] 更新监控设备列表，共 %d 个设备", len(ips))
 }
 
@@ -225,6 +234,9 @@ func (a *App) UpdateDevicePasswords(passwords map[string]string) {
 	
 	// 为密码已更新的设备触发认证检查
 	for _, ip := range updatedIPs {
+		// 事件通道的密码只在拨号时读取，已建立的连接不会自动换密码 → 必须重拨
+		a.eventwsReconnect(ip)
+		a.setEventwsAuthPending(ip, false)
 		go a.OnDevicePasswordUpdated(ip)
 	}
 }
@@ -272,44 +284,19 @@ func (a *App) StartDeviceHeartbeat() {
 		}
 	}()
 	
-	// ========== 定时器2: API版本检查和存储查询 (60秒间隔，按需触发) ==========
-	// 注意: API版本检查和存储查询在tcpPingSingleDevice中根据状态变化触发
-	// 这里启动一个定时器，为所有在线设备定期检查API版本和存储信息
-	go func() {
-		ticker := time.NewTicker(60 * time.Second)
-		defer ticker.Stop()
-		
-		// log.Printf("[定时检查] 定时器已启动，间隔: 60秒 (API版本+存储信息)")
-		
-		// 延迟10秒后首次执行，确保设备已上线
-		time.Sleep(10 * time.Second)
-		
-		for {
-			select {
-			case <-ticker.C:
-				// 为所有在线设备触发API检查和存储查询
-				a.deviceStatusMutex.RLock()
-				var onlineIPs []string
-				for ip, status := range a.deviceStatusMap {
-					if status.Status == "online" {
-						onlineIPs = append(onlineIPs, ip)
-					}
-				}
-				a.deviceStatusMutex.RUnlock()
-				
-				// 异步检查所有在线设备的API版本和存储信息
-				for _, ip := range onlineIPs {
-					go func(deviceIP string) {
-						a.checkDeviceAPIVersion(deviceIP)
-						a.checkDeviceStorage(deviceIP)
-					}(ip)
-				}
-			case <-a.heartbeatStop:
-				log.Printf("[定时检查] 收到停止信号，退出定时检查")
-				return
-			}
-		}
-	}()
+
+	// 设备指标**不再有周期 REST 兜底**（原先这里是个 60s 定时器，为在线设备轮
+	// /info + /info/device）。覆盖面实测（直连 /ws/events 逐帧枚举）：
+	//   - 版本号/机型/固件/deviceId ← hello（每轮建连一帧，OnHello 直接写进 deviceStatusMap）
+	//   - CPU/温度/内存用量/磁盘容量读写/运行时长 ← system/stats（20s 一帧，applySystemStats）
+	//   - 容器清单与各容器资源 ← snapshot + container 事件 + container/stats
+	// 事件流给不了的静态字段（memtotal / speed / mmcmodel / hwaddr / latestVersion）由
+	// 前端选中设备时自己打一次 /info/device（App.vue fetchV3DeviceInfo），另有这些 REST
+	// 触发点仍然保留：离线转在线（tcpPingSingleDevice）、手动刷新（ForceRefreshDeviceInfo）、
+	// 改密（OnDevicePasswordUpdated）、升级后（retryRefreshDeviceVersion）。
+	// 代价是明说清楚的：拨 /ws/events 得 404 的老 SDK 设备与走 SkipWS 的公网设备没有事件流，
+	// 它们的存储/版本从此只在被选中或手动刷新时查得到，不再常驻刷新。
+	// 真要保留某台的常驻 REST，再回来加定时器，并且只加给它，别顺手接回有流的设备。
 
 	// ========== 安卓容器列表轮询服务 ==========
 	a.StartAndroidPoll()
@@ -483,6 +470,34 @@ func (a *App) checkSingleDeviceStatus(deviceIP string) {
 
 // ========== TCP Ping 状态机实现 ==========
 
+// probeLogInterval 是**同一台设备**探活失败日志的最小间隔。
+//
+// 断线的设备会被 3s 一轮的探活一直打：一台被拔掉/断电的网络设备，每轮固定刷
+// 2-3 行（TCP 失败 ×2 次重试 + 离线判定），能一直刷到有人管它为止。
+// 真出事时这堵日志墙会把线索埋掉（现场复盘：满屏 connectex refused，
+// 找不到唯一那条真正的新故障）。所以判据留全（前 maxFailCount 次一定记），
+// 之后降成每分钟一行心跳式的提醒。
+const probeLogInterval = 60 * time.Second
+
+// shouldLogProbeFailure 判断这次探活失败该不该落日志，顺带记账。
+// 调用方必须已持有 deviceStatusMutex（要写 LastProbeLogAt）。
+func shouldLogProbeFailure(st *DeviceStatus, maxFail int) bool {
+	if st.ConsecutiveFailures <= maxFail || time.Since(st.LastProbeLogAt) >= probeLogInterval {
+		st.LastProbeLogAt = time.Now()
+		return true
+	}
+	return false
+}
+
+// deviceSaysOnline 读一次宿主当前的在线标记（只用来决定"这次失败值不值得重试"）。
+// 只拿 RLock、不回调事件通道，因此不会和 eventws 的锁构成环。
+func (a *App) deviceSaysOnline(ip string) bool {
+	a.deviceStatusMutex.RLock()
+	defer a.deviceStatusMutex.RUnlock()
+	st := a.deviceStatusMap[ip]
+	return st != nil && st.Status == "online"
+}
+
 // tcpPingSingleDevice 对单个设备执行TCP Ping+HTTP验证并更新状态
 // 实现状态机逻辑:
 //   - 先进行TCP Ping检测端口连通性和延迟(超时5s,失败后立即重试1次)
@@ -509,8 +524,12 @@ func (a *App) tcpPingSingleDevice(deviceIP string) {
 	}
 
 	conn, latency, tcpErr := dialTCP()
-	if tcpErr != nil {
+	if tcpErr != nil && a.deviceSaysOnline(deviceIP) {
 		// 跨网段瞬时丢包: 首次失败后立即重试1次
+		//
+		// 只给**当前在线**的设备兜这一次：重试是为了防"一次丢包打掉一台正在用的设备"，
+		// 而对一台已经灰着的设备，多拨一次只是把这一轮从 2s 拖成 4s
+		// （134 台里几十台断电时，这些秒数全摊在共享的 worker 池上）。
 		conn, latency, tcpErr = dialTCP()
 	}
 	probeCost := time.Since(probeStart).Milliseconds()
@@ -523,6 +542,15 @@ func (a *App) tcpPingSingleDevice(deviceIP string) {
 	}
 	
 	// ========== 2. 并发安全 - 获取并更新设备状态 ==========
+	// 事件流是否正在供数（数据口径）。在线性口径不在这儿 —— 那归 eventwsOwnsLiveness，
+	// 也就是"这台设备的死活该不该由事件通道判"。
+	// 正常情况下这里恒为 false：事件流健康的设备在 tcpPingAllDevices 就已经被筛掉，
+	// 根本不会派到这次探测。留着这层判断是为了覆盖"拨号期间流才断"的竞态 ——
+	// 真正写 offline 的那一刻必须以写入时的状态为准，否则还是会和 WS 心跳抢状态。
+	// 必须在取 deviceStatusMutex **之前**问：eventws 内部会取自己的锁，
+	// 而它的状态回调也要 deviceStatusMutex，锁序反过来会构成死锁环。
+	wsStreaming := a.eventwsHealthy(deviceIP)
+
 	a.deviceStatusMutex.Lock()
 	defer a.deviceStatusMutex.Unlock()
 	
@@ -551,14 +579,22 @@ func (a *App) tcpPingSingleDevice(deviceIP string) {
 		status.LastHTTPVerifyTime = now      // 记录HTTP验证时间
 
 		if err != nil {
-			log.Printf("[TCP Ping] ❌ 设备 %s (%s) TCP连接失败 (耗时%dms, 连续失败%d次): %v", deviceIP, a.getDeviceName(deviceIP), probeCost, status.ConsecutiveFailures, err)
+			if shouldLogProbeFailure(status, maxFailCount) {
+				log.Printf("[TCP Ping] ❌ 设备 %s (%s) TCP连接失败 (耗时%dms, 连续失败%d次): %v", deviceIP, a.getDeviceName(deviceIP), probeCost, status.ConsecutiveFailures, err)
+			}
 		} else {
-			log.Printf("[TCP Ping] ⚠️ 设备 %s (%s) 延迟过高: %dms > 5000ms (连续失败%d次)", deviceIP, a.getDeviceName(deviceIP), latency, status.ConsecutiveFailures)
+			// 能连上但慢过 5s：延迟列照常更新，只有日志限流
 			status.ResponseTime = latency
+			if shouldLogProbeFailure(status, maxFailCount) {
+				log.Printf("[TCP Ping] ⚠️ 设备 %s (%s) 延迟过高: %dms > 5000ms (连续失败%d次)", deviceIP, a.getDeviceName(deviceIP), latency, status.ConsecutiveFailures)
+			}
 		}
 		
 		// 连续maxFailCount次失败 → 标记离线
-		if status.ConsecutiveFailures >= maxFailCount {
+		// 例外：事件通道还在供数的设备。8000 端口连不上但 WS 帧照收，只可能是
+		// 探活抖动（跨地域丢包、连接数打满），翻 offline 会和 WS 心跳抢状态；
+		// 真断了则由 conn 读错误路径经 reportState 来标离线（方案 §5.1）。
+		if status.ConsecutiveFailures >= maxFailCount && !wsStreaming {
 			if status.Status != "offline" {
 				status.Status = "offline"
 				log.Printf("[TCP Ping] ❌ 设备 %s (%s) 离线 (连续%d次失败, 原因: %v)", deviceIP, a.getDeviceName(deviceIP), status.ConsecutiveFailures, err)
@@ -612,10 +648,12 @@ func (a *App) tcpPingSingleDevice(deviceIP string) {
 			status.LastCheckAt = now
 		status.LastHTTPVerifyTime = now      // 记录HTTP验证时间
 
-			log.Printf("[TCP Ping] ❌ 设备 %s (%s) HTTP验证失败 (端口可能被占用, 连续失败%d次)", deviceIP, a.getDeviceName(deviceIP), status.ConsecutiveFailures)
+			if shouldLogProbeFailure(status, maxFailCount) {
+				log.Printf("[TCP Ping] ❌ 设备 %s (%s) HTTP验证失败 (端口可能被占用, 连续失败%d次)", deviceIP, a.getDeviceName(deviceIP), status.ConsecutiveFailures)
+			}
 
-			// 连续maxFailCount次失败 → 标记离线
-			if status.ConsecutiveFailures >= maxFailCount {
+			// 连续maxFailCount次失败 → 标记离线（同样让位于事件通道的在线性判定）
+			if status.ConsecutiveFailures >= maxFailCount && !wsStreaming {
 				if status.Status != "offline" {
 					status.Status = "offline"
 					log.Printf("[TCP Ping] ❌ 设备 %s (%s) 离线 (HTTP验证失败, 连续%d次)", deviceIP, a.getDeviceName(deviceIP), status.ConsecutiveFailures)
@@ -632,6 +670,14 @@ func (a *App) tcpPingSingleDevice(deviceIP string) {
 		status.LastHTTPVerifyTime = now      // 记录HTTP验证时间
 			// 保持或设置为 offline,直到认证成功后的 /info 返回 2xx
 			if status.Status != "offline" && status.Status != "" {
+				if wsStreaming {
+					// WS 会话是密码改前建立的，还能继续收帧：这里翻 offline 会和
+					// 下一个心跳帧的 online 判定来回打脸。认证弹窗照发，
+					// 在线性等 WS 重连真的 401 时由 reportState 落（方案 §5.1）。
+					log.Printf("[TCP Ping] 🔒 设备 %s (%s) 认证失败（在线性由事件通道持有，仅通知认证）", deviceIP, a.getDeviceName(deviceIP))
+					go a.addToAuthQueue(deviceIP)
+					return
+				}
 				// 已经在线的设备突然变成401(密码变了),标为离线
 				status.Status = "offline"
 				log.Printf("[TCP Ping] 🔒 设备 %s (%s) 认证失败，标记离线等待重新认证", deviceIP, a.getDeviceName(deviceIP))
@@ -882,6 +928,7 @@ func (a *App) checkDeviceStorage(deviceIP string) {
 //   - 使用信号量控制并发数,避免goroutine爆炸
 //   - TCP Ping轻量级,可承受比HTTP更高的并发
 //   - 记录批量执行的总耗时和成功率
+//   - 在线性归事件通道判的设备直接跳过(拨号本身就是探活,见 1.5 段)
 func (a *App) tcpPingAllDevices() {
 	// ========== 1. 复制设备列表(减少锁持有时间) ==========
 	a.deviceIPsMutex.RLock()
@@ -892,9 +939,33 @@ func (a *App) tcpPingAllDevices() {
 	if len(deviceIPs) == 0 {
 		return
 	}
-	
+
+	// ========== 1.5 事件通道正在拨的设备不再探活（拨号即探活）==========
+	// 一次 WS 拨号 = TCP 连 ip:8000 + HTTP GET 握手 + 协议升级，是"connect 8000 成
+	// 不成功"的严格超集：同一台机器、同一个端口、多走两层协议、还顺带把认证验了。
+	// 拨通后收到任意帧 → 在线；拨不通 / 读错误 / 90s 静默 → claimOffline 判离线。
+	// 再每 3s 对同一台设备补一次裸 connect 纯属重复劳动（现场 56 台里 31 台是残留
+	// IP，每轮 31 行 5s 超时失败日志，攒成一堵把关键线索埋掉的墙）。
+	//
+	// 只剩一类设备还得探，因为事件通道压根不替它判死活：
+	//   - 公网 / OpenCecs 映射设备（SkipWS，不建 WS 连）。
+	// 老 SDK 拨到 404 的设备从前也算这一类，现在归事件通道判离线（现场决策：没有
+	// 事件流就显示离线，别在线却那一格永远空着），固件升级后由降级到期重拨自动上线。
+	// 判据用 ServesWS（归不归拨号管）而不是 Owns（此刻有没有连接）：用后者的话，
+	// 404 降级那一台会被探活接回在线、一直绿到进程重启。
+	pingIPs := make([]string, 0, len(deviceIPs))
+	for _, ip := range deviceIPs {
+		if a.eventwsOwnsLiveness(ip) {
+			continue
+		}
+		pingIPs = append(pingIPs, ip)
+	}
+	if len(pingIPs) == 0 {
+		return
+	}
+
 	// ========== 2. 根据设备数量动态调整并发数 ==========
-	deviceCount := len(deviceIPs)
+	deviceCount := len(pingIPs)
 	var maxWorkers int
 	
 	switch {
@@ -917,7 +988,7 @@ func (a *App) tcpPingAllDevices() {
 	var wg sync.WaitGroup
 	
 	// ========== 4. 并发执行TCP Ping ==========
-	for _, ip := range deviceIPs {
+	for _, ip := range pingIPs {
 		wg.Add(1)
 		
 		// 获取信号量
@@ -1009,6 +1080,7 @@ func (a *App) updateDeviceStatus(ip, status string, responseTime int64, infoResp
 		statusData.LastSuccessLatency = oldStatus.LastSuccessLatency
 		statusData.LastAPICheckTime = oldStatus.LastAPICheckTime
 			statusData.LastHTTPVerifyTime = oldStatus.LastHTTPVerifyTime
+			statusData.LastProbeLogAt = oldStatus.LastProbeLogAt // 日志限流不能被这次重建抹掉
 	}
 	
 	a.deviceStatusMap[ip] = statusData
@@ -1022,29 +1094,44 @@ func (a *App) updateDeviceStatus(ip, status string, responseTime int64, infoResp
 // GetDevicesStatus 获取所有设备状态（供前端调用）
 func (a *App) GetDevicesStatus() map[string]*DeviceStatus {
 	a.deviceStatusMutex.RLock()
-	defer a.deviceStatusMutex.RUnlock()
-	
+
 	// 复制一份返回，避免并发问题
 	result := make(map[string]*DeviceStatus, len(a.deviceStatusMap))
 	for ip, status := range a.deviceStatusMap {
 		statusCopy := *status
 		result[ip] = &statusCopy
 	}
-	
+
+	a.deviceStatusMutex.RUnlock()
+
+	// wsHealthy 必须在放掉 deviceStatusMutex **之后**再问：事件通道的状态回调
+	// （applyEventwsState）是反过来拿 deviceStatusMutex 的，锁序写反就是一条死锁环
+	//（tcpPingSingleDevice 开头那行注释防的是同一件事）。
+	// 这里遍历的是私有副本，改它们不需要锁。
+	for ip, st := range result {
+		st.WsHealthy = a.eventwsHealthy(ip)
+	}
+
 	return result
 }
 
 // GetDeviceStatus 获取单个设备状态（供前端调用）
 func (a *App) GetDeviceStatus(ip string) *DeviceStatus {
 	a.deviceStatusMutex.RLock()
-	defer a.deviceStatusMutex.RUnlock()
-	
+
+	var copied *DeviceStatus
 	if status, exists := a.deviceStatusMap[ip]; exists {
 		statusCopy := *status
-		return &statusCopy
+		copied = &statusCopy
 	}
-	
-	return nil
+
+	a.deviceStatusMutex.RUnlock()
+
+	// 锁外补 wsHealthy（原因同 GetDevicesStatus）
+	if copied != nil {
+		copied.WsHealthy = a.eventwsHealthy(ip)
+	}
+	return copied
 }
 
 // ForceRefreshDeviceInfo 强制刷新设备信息(API版本和存储)

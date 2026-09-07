@@ -1283,6 +1283,14 @@ watch(currentRightTab, async (newTab, oldTab) => {
     // 加载在线镜像数据，这会自动选中第一个型号的在线镜像
     await switchImageCategory('online')
   }
+
+  // 切到主机标签页时现场调一次 /info/device：主机页展示的 memtotal/speed/
+  // mmcmodel/hwaddr 等静态字段事件流给不了，心跳缓存只是先上屏，
+  // 弹窗里看到的主机信息必须以这次接口返回为准（fetchV3DeviceInfo 成功后
+  // 内部还会调 fetchV3LatestInfo 拉 /info 的当前/最新 API 版本）
+  if (newTab === 'host') {
+    fetchV3DeviceInfo(activeDevice.value)
+  }
 })
 
 // 从本地存储加载设备列表
@@ -1583,6 +1591,23 @@ const compareIPs = (ip1, ip2) => {
     if (parts1[i] > parts2[i]) return 1
   }
   return 0
+}
+
+// 提取云机坑位号（用于排序）：优先直接用数据里的 indexNum（与坑位模式同口径）；
+// 兜底从容器完整ID（${deviceIp}_${hash}_${坑位}_${名}）的第3段解析；
+// 再兜底从简单容器名（如 T0002）的尾部数字解析
+const getCloudMachineSlotNum = (machine) => {
+  if (machine.indexNum !== undefined && machine.indexNum !== null && machine.indexNum !== '') {
+    const n = Number(machine.indexNum)
+    if (!Number.isNaN(n)) return n
+  }
+  const parts = (machine.id || '').split('_')
+  if (parts.length >= 4) {
+    const slot = parseInt(parts[2], 10)
+    if (!Number.isNaN(slot)) return slot
+  }
+  const tail = parseInt(((machine.name || '').match(/(\d+)$/) || [])[1], 10)
+  return Number.isNaN(tail) ? 0 : tail
 }
 
 // 计算属性：按分组过滤后的设备列表
@@ -11483,14 +11508,12 @@ const computeCloudMachineGroups = (mode = cloudManageMode.value) => {
           
           console.log('Device:', device.ip, 'has', filteredCloudMachines.length, 'cloud machines (mode:', mode, ')')
           
-          // 对云机按照从ID中提取的坑位号进行排序
-          const sortedCloudMachines = [...filteredCloudMachines].sort((a, b) => {
-            const aParts = a.id.split('_')
-            const bParts = b.id.split('_')
-            const aSlot = aParts.length >= 2 ? parseInt(aParts[1]) : 0
-            const bSlot = bParts.length >= 2 ? parseInt(bParts[1]) : 0
-            return aSlot - bSlot
-          })
+          // 对云机按坑位号排序（与坑位模式的 indexNum 口径一致）。
+          // 旧实现取 id.split('_')[1] 解析的是容器名：简单名（T0002）得 NaN、
+          // 带哈希名（hash_2_T0002）得哈希串前导数字，排序从未真正生效
+          const sortedCloudMachines = [...filteredCloudMachines].sort((a, b) =>
+            getCloudMachineSlotNum(a) - getCloudMachineSlotNum(b)
+          )
           
           return {
             id: device.id,
@@ -11739,8 +11762,8 @@ const handleDeviceSelect = async (device) => {
     // 如果是V3设备，获取详细信息
     if (device.version === 'v3') {
       console.log('Fetching V3 device info for:', device.ip)
-      
-      // 🔧 优先从心跳数据中读取
+
+      // 🔧 先用心跳缓存立即上屏（点开设备到内容渲染不等接口往返）
       const cachedInfo = deviceFirmwareInfo.value.get(device.id)
       if (cachedInfo && cachedInfo.originalData) {
         console.log('[快速加载] 从心跳数据加载 V3 设备信息')
@@ -11750,14 +11773,13 @@ const handleDeviceSelect = async (device) => {
           originalData: cachedInfo.originalData
         }
         v3DeviceInfoLoaded.value = true
-        
-        // 仍然调用 fetchV3LatestInfo 获取最新版本信息
-        fetchV3LatestInfo(device)
-      } else {
-        // 如果心跳数据还没准备好，使用传统方式获取
-        console.log('[传统加载] 直接请求设备接口')
-        fetchV3DeviceInfo(device)
       }
+      // 无论有没有缓存，都现场调一次 /info/device（成功后内部还会调
+      // fetchV3LatestInfo 拉 /info 的当前/最新 API 版本）。心跳的事件流给不了
+      // memtotal/speed/mmcmodel/hwaddr/latestVersion 这些字段，设备详情弹窗
+      // 点开主机看到的数据必须以这次接口返回为准；启动时没查到（比如设备
+      // 当时离线）的话，只靠缓存就永远是旧值了
+      fetchV3DeviceInfo(device)
     } else {
       // 非V3设备，清空之前的V3设备信息
       v3DeviceInfo.value = {}
@@ -12022,7 +12044,22 @@ const fetchV3LatestInfo = async (device) => {
           originalData: data
         }
         console.log('V3最新版本信息:', v3LatestInfo.value)
-        
+
+        // 同步设备列表"API版本"列的当前/最新值。latestVersion 只有 /info 这个
+        // 接口才返回（事件流 hello 只带当前版本），不写回的话列表里的"最新"
+        // 会一直停在启动时版本检查队列查到的那一次
+        const newCurrent = data.currentVersion.toString()
+        const newLatest = data.latestVersion.toString()
+        const cachedVersionInfo = deviceVersionInfo.value.get(device.id)
+        if (!cachedVersionInfo || cachedVersionInfo.currentVersion !== newCurrent || cachedVersionInfo.latestVersion !== newLatest) {
+          deviceVersionInfo.value.set(device.id, {
+            ...cachedVersionInfo,
+            currentVersion: newCurrent,
+            latestVersion: newLatest,
+            lastUpdateTime: Date.now()
+          })
+        }
+
         // 检查是否需要显示升级按钮
         // 比较currentVersion和latestVersion数字版本
         // 只有当确实需要升级时才显示升级按钮，否则保持当前状态
@@ -16483,7 +16520,10 @@ const executeTask = async (taskId) => {
               
               // 为每个文件创建所有容器的上传任务（限制并发）
               const machineUploadPromises = machines.map((machine) => {
-                const containerID = machine.containerID
+                // 容器名优先于 docker ID：排队期间云机可能被设备销毁重建（同名、新 ID），
+                // 按旧 ID 找会扑空（"容器不存在"）；名字/坑位才是稳定身份，
+                // 后端 getContainerByID 会按 indexNum/名称命中重建后的新容器
+                const containerID = machine.name || machine.containerID
                 const displayName = machine.name || machine.id || machine.indexNum || '云机'
 
                 return runWithLimit(async () => {
@@ -16510,7 +16550,7 @@ const executeTask = async (taskId) => {
                         console.log(`APK安装成功,文件保留在: ${fileResult.uploadPath}`)
                       }
 
-                      return { success: true, machine: displayName }
+                      return { success: true, machine: displayName, machineObj: machine }
                     } else {
                       // 更新全局任务进度
                       task.failed++
@@ -16524,7 +16564,7 @@ const executeTask = async (taskId) => {
                         task.deviceProgress[uploadDeviceIP].failed++
                       }
 
-                      return { success: false, machine: displayName, error: fileResult?.message }
+                      return { success: false, machine: displayName, machineObj: machine, error: fileResult?.message }
                     }
                   } catch (error) {
                     // 更新全局任务进度
@@ -16539,14 +16579,44 @@ const executeTask = async (taskId) => {
                       task.deviceProgress[uploadDeviceIP].failed++
                     }
 
-                    return { success: false, machine: displayName, error: error.message }
+                    return { success: false, machine: displayName, machineObj: machine, error: error.message }
                   }
                 })
               })
               
-              // 等待该文件的所有容器上传完成
-              await Promise.allSettled(machineUploadPromises)
-              
+              // 等待该文件的所有容器上传完成，并收集每台云机的结果
+              // 任务卡片的"失败原因"渲染的是 failedTargets，之前这里把结果丢掉了，
+              // 导致批量上传失败时只显示个数、看不到原因，"重试失败"按钮也一直无效
+              const uploadResults = await Promise.allSettled(machineUploadPromises)
+              uploadResults.forEach(r => {
+                const res = r.status === 'fulfilled' ? r.value : null
+                if (!res) return
+
+                // 按云机去重统计（完成弹窗用）：一台云机任一文件失败就算失败
+                if (!task.uploadResultMachines) task.uploadResultMachines = new Map()
+                const mkey = `${uploadDeviceIP}_${res.machine}`
+                const prev = task.uploadResultMachines.get(mkey) || { success: 0, failed: 0 }
+                if (res.success) prev.success++
+                else prev.failed++
+                task.uploadResultMachines.set(mkey, prev)
+
+                if (!res.success) {
+                  // 失败记录同时按可重试的 target 形状保存（machine.name 优先解析，
+                  // 重试时即使云机重建过也能命中）
+                  task.failedTargets.push({
+                    filePath,
+                    isAPK,
+                    deviceIP: uploadDeviceIP,
+                    deviceIp: uploadDeviceIP, // retryFailedTask 按 deviceIp 提取设备列表
+                    deviceVersion: target.deviceVersion || 'v3',
+                    apkOptions: target.apkOptions || {},
+                    machines: [res.machineObj],
+                    machineName: res.machine,
+                    error: res.error || '未知错误'
+                  })
+                }
+              })
+
             } catch (error) {
               console.error(`处理上传任务失败:`, error)
             }
@@ -17048,10 +17118,14 @@ const executeTask = async (taskId) => {
     let actualSuccessMachines = task.completed
     let actualFailMachines = task.failed
     if (task.type === 'uploadFile') {
-      actualSuccessMachines = task.targets.filter(t => t.machines).reduce((count, target) => {
-        return count + (target.machines?.length || 0)
-      }, 0)
-      actualFailMachines = 0
+      // 按云机去重统计（executeTask 里收集的 uploadResultMachines）。
+      // 之前这里把成功数硬算成全部云机数、失败数硬编码 0，
+      // 弹窗"成功 6 失败 0"和任务状态"部分失败"自相矛盾
+      if (task.uploadResultMachines && task.uploadResultMachines.size > 0) {
+        const machineResults = Array.from(task.uploadResultMachines.values())
+        actualSuccessMachines = machineResults.filter(m => m.failed === 0).length
+        actualFailMachines = machineResults.filter(m => m.failed > 0).length
+      }
     }
     
     // 显示任务完成通知
@@ -17195,6 +17269,8 @@ const retryFailedTask = async (taskId) => {
       completed: 0,
       failed: 0,
       progress: 0,
+      // 重试要重新统计云机结果，别继承上一轮的 Map（...task 会带过来）
+      uploadResultMachines: new Map(),
       targets: task.failedTargets.map(target => {
         // 对于 uploadImage 类型，确保 target 包含重试所需的信息
         if (task.type === 'uploadImage') {
@@ -18487,6 +18563,10 @@ const fetchAndroidCacheIfUpdated = async () => {
   }
 }
 
+// 状态表里出现、但设备列表里找不到的 IP：只提醒一次用的去重表
+// （心跳每秒一轮，不去重就会把控制台刷满）
+const heartbeatUnknownIpWarned = new Set();
+
 // 从后端获取设备状态并更新前端缓存
 const fetchDevicesStatusFromBackend = async () => {
   try {
@@ -18496,20 +18576,32 @@ const fetchDevicesStatusFromBackend = async () => {
       console.warn('[心跳] ⚠️ 后端返回的状态为空');
       return;
     }
-    console.log('[心跳] 后端返回状态，设备数:', Object.keys(statusMap).length, statusMap);
+    // 只报数量，不要把整个 statusMap 交给 console.log：这一行每秒执行一次，
+    // DevTools 打开时每秒都要留一份 N 台设备的完整对象图（控制台 DOM 与内存
+    // 一路涨，界面正是这样开始卡的），而它要表达的信息只有"多少台"。
+    console.log('[心跳] 后端返回状态，设备数:', Object.keys(statusMap).length);
     
     // console.log('[心跳] ✓ 收到设备状态更新:');
     // console.log('[心跳] 状态数据样例:', Object.entries(statusMap)[0]); // 打印第一个设备的完整数据
     
+    // N 台设备 × 每台一次 find = 每秒 O(N²)，设备一多这本身就是卡的来源。
+    // 先按 IP 建一次索引，循环里 O(1) 查表。
+    const deviceByIp = new Map();
+    for (const d of devices.value) deviceByIp.set(d.ip, d);
+
     // 更新前端状态缓存
     let updatedCount = 0;
     let changedCount = 0;
     
     for (const [ip, statusInfo] of Object.entries(statusMap)) {
-      const device = devices.value.find(d => d.ip === ip);
+      const device = deviceByIp.get(ip);
 
       if (!device) {
-        console.warn(`[心跳] ⚠️ 找不到IP为 ${ip} 的设备`);
+        // 状态表每秒回来一次，不拦着就是每秒一条警告刷屏（控制台越堆越大）
+        if (!heartbeatUnknownIpWarned.has(ip)) {
+          heartbeatUnknownIpWarned.add(ip);
+          console.warn(`[心跳] ⚠️ 找不到IP为 ${ip} 的设备`);
+        }
         continue;
       }
 
@@ -18585,16 +18677,22 @@ const fetchDevicesStatusFromBackend = async () => {
               cputemp: statusInfo.cpuTemp || 0,
               cpuload: statusInfo.cpuLoad || '0%',
               // 更新内存信息（MB）
-              memtotal: statusInfo.memoryTotal || 0,
+              // ⚠️ memtotal 不在事件流里：实测 system/stats 一帧只有 cputemp cpuload memuse
+              // mmctotal mmcuse mmcread mmcwrite mmctemp sysuptime 九个键，Go 侧那条
+              // 周期 REST 兜底也已经删了（见 device_heartbeat.go 定时器2 的位置）。
+              // 所以这几个流给不了的字段取不到时要**沿用上一次的真值**（选中设备时
+              // 前端自己打的那次 /info/device，fetchV3DeviceInfo），写 0/'' 会把它们冲掉：
+              // 内存列的分母、网速、硬盘型号、MAC 都是这么没的。
+              memtotal: statusInfo.memoryTotal || (currentFirmwareInfo.originalData?.memtotal || 0),
               memuse: statusInfo.memoryUsed || 0,
               // 更新网络信息
-              speed: statusInfo.speed || '0',
-              network4g: statusInfo.network4g || 'n',
-              netWork_eth0: statusInfo.networkEth0 || 'n',
+              speed: statusInfo.speed || (currentFirmwareInfo.originalData?.speed || '0'),
+              network4g: statusInfo.network4g || (currentFirmwareInfo.originalData?.network4g || 'n'),
+              netWork_eth0: statusInfo.networkEth0 || (currentFirmwareInfo.originalData?.netWork_eth0 || 'n'),
               // 更新硬盘信息
               mmcread: statusInfo.mmcRead || '0',
               mmcwrite: statusInfo.mmcWrite || '0',
-              mmcmodel: statusInfo.mmcModel || '',
+              mmcmodel: statusInfo.mmcModel || (currentFirmwareInfo.originalData?.mmcmodel || ''),
               mmctemp: statusInfo.mmcTemp || '0',
               // 更新系统运行时间
               sysuptime: statusInfo.sysUptime || '0',
@@ -18602,10 +18700,10 @@ const fetchDevicesStatusFromBackend = async () => {
               model: statusInfo.deviceModel || (currentFirmwareInfo.originalData?.model || ''),
               version: statusInfo.sdkVersion || (currentFirmwareInfo.originalData?.version || ''),
               ip: statusInfo.ip || ip,
-              ip_1: statusInfo.ip_1 || '',
-              hwaddr: statusInfo.hwaddr || '',
-              hwaddr_1: statusInfo.hwaddr_1 || '',
-              deviceId: statusInfo.deviceId || ''
+              ip_1: statusInfo.ip_1 || (currentFirmwareInfo.originalData?.ip_1 || ''),
+              hwaddr: statusInfo.hwaddr || (currentFirmwareInfo.originalData?.hwaddr || ''),
+              hwaddr_1: statusInfo.hwaddr_1 || (currentFirmwareInfo.originalData?.hwaddr_1 || ''),
+              deviceId: statusInfo.deviceId || (currentFirmwareInfo.originalData?.deviceId || '')
             };
           updatedFirmwareInfo.lastUpdateTime = Date.now();
           

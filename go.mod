@@ -5,6 +5,7 @@ go 1.25
 require (
 	gitee.com/zoums/dget v1.0.61
 	github.com/Masterminds/semver/v3 v3.3.1
+	github.com/coder/websocket v1.8.14
 	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
 	github.com/pkg/sftp v1.13.10
 	github.com/q191201771/lal v0.37.4
