@@ -812,7 +812,22 @@ func (a *App) checkDeviceAPIVersion(deviceIP string) {
 	if !shouldCheck {
 		return
 	}
-	
+
+	// 实际的 /info 请求拆到了 fetchDeviceAPIVersion（不带上面这道闸门）
+	a.fetchDeviceAPIVersion(deviceIP)
+}
+
+// fetchDeviceAPIVersion 直接打一次 HTTP /info 刷新设备 API 版本，不带
+// "在线才查"的闸门与 60s 节流，返回这次是否真的拿到了响应。
+//
+// 升级后的版本轮询（retryRefreshDeviceVersion / 批量升级收尾 / 单设备升级
+// waitForUpgradeComplete）必须走这里而不是 checkDeviceAPIVersion：被升级的
+// 设备在事件通道口径下多半正被判"离线"——老 SDK 拨 /ws/events 得 404 进了
+// 降级，或升级重启把既有连接断了。带闸门的查询对这种设备一个 /info 都发不
+// 出去，升级是否真的完成就永远观察不到，事件通道只能干等最长 degradeDuration
+// (10 分钟) 的降级到期重拨。返回值让调用方区分"这次真拿到了"与"map 里留着
+// 升级前的旧版本号"，避免拿旧值误判升级已完成。
+func (a *App) fetchDeviceAPIVersion(deviceIP string) bool {
 	log.Printf("[API检查] 🔍 开始检查设备 %s 的API版本", deviceIP)
 	
 	// ========== 2. 调用HTTP /info接口 ==========
@@ -824,7 +839,7 @@ func (a *App) checkDeviceAPIVersion(deviceIP string) {
 	req, err := http.NewRequestWithContext(ctx, "GET", infoURL, nil)
 	if err != nil {
 		log.Printf("[API检查] ❌ 设备 %s 创建请求失败: %v", deviceIP, err)
-		return
+		return false
 	}
 	
 	// 添加认证(如果有)
@@ -840,7 +855,7 @@ func (a *App) checkDeviceAPIVersion(deviceIP string) {
 	resp, err := a.httpClient.Do(req)
 	if err != nil {
 		log.Printf("[API检查] ❌ 设备 %s 请求失败: %v", deviceIP, err)
-		return
+		return false
 	}
 	defer resp.Body.Close()
 	
@@ -849,13 +864,13 @@ func (a *App) checkDeviceAPIVersion(deviceIP string) {
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			log.Printf("[API检查] ⚠️ 设备 %s 读取响应失败: %v", deviceIP, err)
-			return
+			return false
 		}
 		
 		var infoResp DeviceInfoResponse
 		if err := json.Unmarshal(body, &infoResp); err != nil {
 			log.Printf("[API检查] ⚠️ 设备 %s 解析JSON失败: %v", deviceIP, err)
-			return
+			return false
 		}
 		
 		// ========== 4. 更新API版本信息 ==========
@@ -869,9 +884,11 @@ func (a *App) checkDeviceAPIVersion(deviceIP string) {
 				deviceIP, status.APIVersion, status.LatestVersion)
 		}
 		a.deviceStatusMutex.Unlock()
+		return true
 	} else {
 		log.Printf("[API检查] ⚠️ 设备 %s 状态码异常: %d", deviceIP, resp.StatusCode)
 	}
+	return false
 }
 
 // ========== 存储查询函数 ==========

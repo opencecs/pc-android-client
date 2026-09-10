@@ -569,7 +569,9 @@ const systemTemplates = computed(() => [
   { name: $t('batchTask.cmdBrand'), command: 'getprop ro.product.brand' },
   { name: $t('batchTask.cmdAndroidId'), command: 'settings get secure android_id' },
   { name: $t('batchTask.cmdIp'), command: 'ifconfig | grep inet' },
-  { name: $t('batchTask.cmdCpu'), command: 'cat /proc/cpuinfo | grep "Hardware"' },
+  // 高通 arm64 内核的 /proc/cpuinfo 没有 Hardware 行，grep 无匹配退出码 1 会被判为失败；
+  // ro.soc.model 跨平台都返回芯片型号（MTK: MT6877V/TTZA，高通: SM8750）
+  { name: $t('batchTask.cmdCpu'), command: 'getprop ro.soc.model' },
   { name: $t('batchTask.cmdMem'), command: 'cat /proc/meminfo | grep "MemTotal"' },
   { name: $t('batchTask.cmdStorage'), command: 'df -h /sdcard' },
   { name: $t('batchTask.cmdBattery'), command: 'dumpsys battery' },

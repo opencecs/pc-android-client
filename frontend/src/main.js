@@ -10,6 +10,10 @@ import axios from 'axios'
 const messages = {
   'zh-CN': {
     common: {
+      understood: '我知道了',
+      prompt: '提示',
+      unknownError: '未知错误',
+      pending: '等待中',
       addCamera: '添加PC摄像头',
       deviceStr: '设备',
       cloudMachineStr: '云机',
@@ -1819,6 +1823,10 @@ const messages = {
   },
   'en-US': {
     common: {
+      understood: 'Understood',
+      prompt: 'Notice',
+      unknownError: 'Unknown error',
+      pending: 'Pending',
       addCamera: 'Add PC Camera',
       deviceStr: 'Device',
       cloudMachineStr: 'Cloud Machine',

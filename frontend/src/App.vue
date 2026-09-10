@@ -125,6 +125,7 @@ import {
   DeviceShake,
   GetUserRabbetList,
   Register,
+  ReconnectDeviceEventWS,
   UploadGoogleCert,
   GetStoragePath,
   SetStoragePath,
@@ -12010,14 +12011,10 @@ const handleCloudDeviceSelect = async (device) => {
 // 获取V3最新版本信息
 const fetchV3LatestInfo = async (device) => {
   if (!device || device.version !== 'v3') return
-  
-  // 检查设备状态，如果已标记为离线，直接返回，不调用接口
-  const deviceStatus = devicesStatusCache.value.get(device.id)
-  if (deviceStatus === 'offline') {
-    console.log('设备已标记为离线，跳过获取V3最新版本信息:', device.ip)
-    return
-  }
-  
+
+  // 不做离线拦截：老 SDK(<208) 设备没有事件流会被判"离线"，但 HTTP 仍可达，
+  // 必须查 /info 才能拿到当前/最新 SDK 版本并显示"升级SDK"入口；
+  // 真不可达的设备这里只是多付一次 1 秒超时
   try {
     // 使用authRetry处理认证
     await authRetry(device, async (password) => {
@@ -12196,7 +12193,22 @@ const handleEditNetworkCancel = () => {
 // 处理删除网络
 
 
-// 标签页切换事件处理
+// 主机管理列表切到"离线"筛选时，把离线 V3 设备的 API 版本现场重探一遍：
+// 被手动降级/老 SDK(<208) 的设备只是事件通道口径下"离线"（/ws/events 404），
+// HTTP /info 还活着，能探到降级后的真实版本，避免离线列表一直显示降级前的
+// 旧值；真死机的设备 1s 超时探不通，队列失败不清旧值，保留最后一次拿到的版本
+const handleDeviceFilterChange = (filter) => {
+  deviceFilter.value = filter
+  if (filter === 'offline') {
+    for (const device of devices.value) {
+      if (device.version === 'v3' && devicesStatusCache.value.get(device.id) === 'offline') {
+        addToVersionCheckQueue(device)
+      }
+    }
+    batchProcessVersionCheckQueue()
+  }
+}
+
 // 标签页切换事件处理
 const handleTabChange = (tabName) => {
   console.log('Tab changed to:', tabName)
@@ -12228,6 +12240,22 @@ const handleTabChange = (tabName) => {
     stopScreenshotRefresh()
   }
   
+  // 切换到主机管理页面时，把列表的 API版本（当前/最新）重新查一遍：
+  // 不能等点击"查看"打开设备详情弹窗才现场调接口。离线设备也一并入队——
+  // 老 SDK/被手动降级的设备拨 /ws/events 得 404 被判"离线"，但 HTTP /info
+  // 还活着，现场能探到降级后的真实版本；真死机的设备 1s 超时探不通，队列
+  // 失败不会清旧值，列表保留最后一次拿到的版本。不批量调
+  // fetchV3DeviceInfo——它会改写右侧主机面板正在展示的 v3DeviceInfo
+  // （选中设备的现场数据），循环调用会把面板数据串到别的设备上
+  if (tabName === 'host-management') {
+    for (const device of devices.value) {
+      if (device.version === 'v3') {
+        addToVersionCheckQueue(device)
+      }
+    }
+    batchProcessVersionCheckQueue()
+  }
+
   // 切换到机型管理页面时，触发机型列表数据获取
   if (tabName === 'model-management' && modelManagementRef.value) {
     console.log('切换到机型管理页面，触发机型列表数据获取')
@@ -17938,6 +17966,9 @@ const priorityQueue = ref([]) // 优先级队列，用于手动查询
 const isProcessingQueue = ref(false)
 const versionCheckInterval = ref(null)
 const lastCheckTime = ref(new Map()) // 记录每个设备的最后检查时间，避免频繁查询
+// 版本检查队列上次探到的版本（仅 processVersionCheckQueue 写入）：与设备详情弹窗、
+// 选中即查等别的写入方无关，专用于判断"队列两次探测之间版本变没变"
+const lastQueueProbeVersion = ref(new Map())
 const MAX_CONCURRENT_CHECKS = 3 // 最大并发检查数
 const CHECK_INTERVAL = 500 // 检查间隔缩短到500ms
 const MIN_CHECK_INTERVAL = 3000 // 同一设备最小检查间隔3秒
@@ -18012,6 +18043,25 @@ const processVersionCheckQueue = async () => {
     
     // 更新设备版本信息缓存
     if (versionInfo.code === 0 && versionInfo.data) {
+      // 探到响应 = 这台"离线"设备的 HTTP 活着（可能已被别人升级到带 /ws/events
+      // 的新 SDK）。只有队列两次探测之间版本变了才让 Go 立刻重拨事件通道，
+      // 不等 10 分钟降级到期；版本没变就不重拨——2026-09-09 现场（v210 设备
+      // 对 /ws/events 的所有新握手回 503，重启设备才恢复）证明设备端会积累
+      // 连接，白拆一次重连就离全拒更近一步，而 app 启动/切页会把每台离线
+      // 设备都探一遍 /info，无条件重拨等于反复拆好端端的连接。首探（无基线）
+      // 不重拨：app 启动时本来就会全新拨号，降级状态不跨进程。自己升级的
+      // 设备由升级轮询触发重拨，不走这里
+      const prevProbe = lastQueueProbeVersion.value.get(currentDevice.id)
+      if (devicesStatusCache.value.get(currentDevice.id) === 'offline' && prevProbe &&
+          (prevProbe.currentVersion !== versionInfo.data.currentVersion ||
+           prevProbe.latestVersion !== versionInfo.data.latestVersion)) {
+        ReconnectDeviceEventWS(currentDevice.ip).catch(() => {})
+      }
+      lastQueueProbeVersion.value.set(currentDevice.id, {
+        currentVersion: versionInfo.data.currentVersion,
+        latestVersion: versionInfo.data.latestVersion
+      })
+
       // 优化Map更新：只在数据变化时更新
       const currentVersion = deviceVersionInfo.value.get(currentDevice.id)
       const needUpdate = !currentVersion || 
@@ -18287,9 +18337,27 @@ const refchDevices = async () => {
     const onlineDevices = devices.value.filter(device => {
       return devicesStatusCache.value.get(device.id) === 'online'
     })
-    
+
+    // 离线的 V3 设备走前端版本队列现场探一次 /info：老 SDK/被手动降级的设备
+    // 只是事件通道口径下"离线"（/ws/events 404），HTTP 还活着，能探到降级后
+    // 的真实版本——Go 侧 ForceRefreshDeviceInfo 带"在线才查"闸门，对这类设备
+    // 不生效。真死机的设备 1s 超时探不通，失败不清旧值
+    const offlineV3Devices = devices.value.filter(device => {
+      return device.version === 'v3' && devicesStatusCache.value.get(device.id) === 'offline'
+    })
+    for (const device of offlineV3Devices) {
+      addToVersionCheckQueue(device)
+    }
+    if (offlineV3Devices.length > 0) {
+      batchProcessVersionCheckQueue()
+    }
+
     if (onlineDevices.length === 0) {
-      ElMessage.warning('没有在线设备可以刷新')
+      if (offlineV3Devices.length > 0) {
+        ElMessage.success(`没有在线设备，已刷新 ${offlineV3Devices.length} 个离线设备的API版本`)
+      } else {
+        ElMessage.warning('没有在线设备可以刷新')
+      }
       loading.value = false
       return
     }
@@ -18301,8 +18369,14 @@ const refchDevices = async () => {
     
     // 调用后端接口强制刷新
     await ForceRefreshDeviceInfo(deviceIPs)
-    
-    ElMessage.success(`已触发 ${onlineDevices.length} 个在线设备的API版本和存储信息刷新`)
+
+    // 提示里带上离线设备的重探数，不然离线列值没变化时（比如设备报的版本
+    // 和列表显示的一样）没法分辨"没探"还是"探了但值没变"
+    if (offlineV3Devices.length > 0) {
+      ElMessage.success(`已触发 ${onlineDevices.length} 个在线设备的API版本和存储信息刷新，正在重探 ${offlineV3Devices.length} 个离线设备的API版本`)
+    } else {
+      ElMessage.success(`已触发 ${onlineDevices.length} 个在线设备的API版本和存储信息刷新`)
+    }
     
     // console.log('[手动刷新] ✅ 刷新请求已发送到后端,预计1-2秒内完成')
     
@@ -18613,10 +18687,10 @@ const fetchDevicesStatusFromBackend = async () => {
       devicesLastUpdateTime.value.set(device.id, Date.now());
       updatedCount++;
 
-      // 如果设备离线，清除版本和存储信息，显示"未知"
+      // 设备离线：只清存储信息（显示"未知"）。API 版本信息保留——老 SDK(<208)
+      // 设备会被判"离线"但列表还要显示它的 API 版本（启动时版本队列会现场探到，
+      // 探不到的真死机设备本来就没有值，不会误留旧值）
       if (newStatus === 'offline') {
-          // 清除 API 版本信息
-          deviceVersionInfo.value.delete(device.id);
         // 清除存储信息
         deviceFirmwareInfo.value.delete(device.id);
         // console.log(`[心跳] 🔒 设备 ${ip} 离线，已清除缓存数据`);
@@ -19807,7 +19881,7 @@ const handleBindsTest = async () => {
               :filtered-devices-by-group="filteredDevicesByGroup"
               :device-groups-tree="deviceGroupsTree"
               :is-batch-projection-controlling="isBatchProjectionControlling"
-              @update:device-filter="deviceFilter = $event"
+              @update:device-filter="handleDeviceFilterChange"
               @update:device-group-filter="deviceGroupFilter = $event"
               @refch-devices="refchDevices"
               @handle-batch-delete-devices="handleBatchDeleteDevices"

@@ -20,7 +20,7 @@
                 size="small"
                 @click="debouncedRefresh"
                 class="refresh-button"
-                :disabled="loading || isOfflineView"
+                :disabled="loading"
               >
                 <el-icon :class="{ 'is-rotating': loading }"><Refresh /></el-icon> {{ t('common.refresh') }}
               </el-button>
@@ -76,7 +76,7 @@
                 type="primary"
                 size="small"
                 @click="startBatchUpgrade"
-                :disabled="isBatchUpgrading || isOfflineView"
+                :disabled="isBatchUpgrading"
                 class="batch-upgrade-button"
               >
                 <el-icon><Download /></el-icon> {{ t('common.batchUpgradeAPI') }}
@@ -203,7 +203,7 @@
           @selection-change="handleDirectSelectionChange"
         >
           <el-table-column v-if="!isViewingDeviceDetails" type="selection" width="55"></el-table-column>
-          <el-table-column :label="t('common.device')" width="250" align="center">
+          <el-table-column :label="t('common.device')" width="200" align="center">
             <template #default="scope">
               <div class="device-info-cell" style="display: flex; align-items: center; justify-content: center;">
                 <div 
@@ -261,7 +261,7 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column :label="t('common.apiVersion')" width="200" align="center" v-if="localDeviceFilter === 'online'">
+          <el-table-column :label="t('common.apiVersion')" width="200" align="center">
             <template #default="scope">
               <div>
                 <div v-if="deviceVersionInfo.get(scope.row.id)" style="display: flex; align-items: center; flex-wrap: nowrap; gap: 8px;">
@@ -279,6 +279,10 @@
                   >
                     {{ t('common.upgrade') }}
                   </el-button>
+                </div>
+                <!-- 探不到版本的多半是真死机设备，显示"未知"而不是一直转圈 -->
+                <div v-else-if="devicesStatusCache.get(scope.row.id) === 'offline'">
+                  {{ t('common.unknown') }}
                 </div>
                 <div v-else>
                   <el-icon class="is-loading"><Loading /></el-icon> {{ t('common.loading') }}...
@@ -1136,7 +1140,7 @@ import { Delete, Refresh, List, HelpFilled, Plus, Download, Calendar, DataAnalys
 import { Events } from '@wailsio/runtime';
 import AddDeviceDialog from './AddDeviceDialog.vue';
 import { SyncAuthorization, UpgradeSDK, BatchUpgradeDevices, GetPhoneVCode, UnbindHost } from '../../bindings/edgeclient/app';
-import { getDevicePassword, startProjection, startBatchProjection, startProjectionBatchControl } from '../services/api.js';
+import { getDevicePassword, getDeviceVersionInfo, startProjection, startBatchProjection, startProjectionBatchControl } from '../services/api.js';
 
 // 国际化支持
 const { proxy } = getCurrentInstance()
@@ -1402,7 +1406,8 @@ const localSelectedImageCategory = ref('online');
 // 本地存储设备过滤条件，避免直接修改props
 const localDeviceFilter = ref(props.deviceFilter);
 
-// 离线设备视图下，除删除外的操作按钮统一禁用
+// 离线设备视图下，除删除和刷新外的操作按钮统一禁用（刷新要能点：
+// 离线设备的 API 版本列靠它现场重探 /info）
 const isOfflineView = computed(() => localDeviceFilter.value === 'offline');
 
 // IP搜索
@@ -2093,11 +2098,28 @@ const startBatchUpgrade = async () => {
   try {
     // 使用用户在界面上选择的设备，而不是重新计算所有设备
     let devicesToUpgrade = [...localSelectedHostDevices.value]
-    
+
+    // 老 SDK(<208) 设备没有事件流会被判"离线"（心跳还会清掉版本缓存），
+    // 但 HTTP 仍可达：先现场并行调一次 /info 拿当前/最新版本，才能过滤出要升级的
+    const offlineVersionInfo = new Map()
+    await Promise.all(devicesToUpgrade
+      .filter(device => device.version === 'v3' && props.devicesStatusCache.get(device.id) !== 'online')
+      .map(async device => {
+        try {
+          const info = await getDeviceVersionInfo(device, getDevicePassword(device.ip))
+          if (info && info.code === 0 && info.data) {
+            offlineVersionInfo.set(device.id, info.data)
+          }
+        } catch (e) {
+          console.log('[批量升级] 离线设备版本探测失败:', device.ip)
+        }
+      }))
+
     // 过滤出需要升级的设备
     devicesToUpgrade = devicesToUpgrade.filter(device => {
-      // 只处理在线设备
-      if (props.devicesStatusCache.get(device.id) === 'online' && device.version === 'v3') {
+      if (device.version !== 'v3') return false
+      // 在线设备：用心跳维护的版本缓存判断
+      if (props.devicesStatusCache.get(device.id) === 'online') {
         // 检查是否需要升级
         const versionInfo = props.deviceVersionInfo.get(device.id)
         if (!versionInfo) return false
@@ -2105,7 +2127,12 @@ const startBatchUpgrade = async () => {
         const latest = parseFloat(versionInfo.latestVersion)
         return !isNaN(current) && !isNaN(latest) && current < latest
       }
-      return false
+      // 离线设备：用刚现场查到的版本判断（探测不到说明真不可达，跳过）
+      const versionInfo = offlineVersionInfo.get(device.id)
+      if (!versionInfo) return false
+      const current = parseFloat(versionInfo.currentVersion)
+      const latest = parseFloat(versionInfo.latestVersion)
+      return !isNaN(current) && !isNaN(latest) && current < latest
     })
     
     if (devicesToUpgrade.length === 0) {
@@ -2121,7 +2148,7 @@ const startBatchUpgrade = async () => {
     
     // 🔧 构建批量升级请求参数（每台设备生成独立 taskId 关联任务队列）
     const upgradeRequests = devicesToUpgrade.map(device => {
-      const versionInfo = props.deviceVersionInfo.get(device.id)
+      const versionInfo = props.deviceVersionInfo.get(device.id) || offlineVersionInfo.get(device.id)
       const password = device.password || getDevicePassword(device.ip) || ''
       const taskId = `sdkUpgrade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${device.ip}`
 

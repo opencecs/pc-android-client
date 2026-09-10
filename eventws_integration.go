@@ -173,6 +173,19 @@ func (a *App) eventwsReconnect(ip string) {
 	a.eventwsSvc.Connect(d)
 }
 
+// ReconnectDeviceEventWS 前端发现"离线"设备的 HTTP 其实活着时调用：立刻重拨
+// 它的事件通道，不等 404 降级的到期定时器（最长还要 10 分钟）。
+//
+// 典型场景：设备被别人（另一台客户端 / 现场）升级到带 /ws/events 的新 SDK——
+// 事件通道那边我只会等到降级到期才发现。版本探测（切页 / 切筛选 / 手动刷新
+// 时前端直连 /info）拿到了响应，说明设备活着且版本在动，就值得立刻试拨一把：
+// 拨到 hello 自动上线；设备其实还是老 SDK 就重新 404 降级，自愈无害。SkipWS
+// 公网设备由 eventwsReconnect 内部守卫跳过。自己升级的设备走升级轮询里的
+// eventwsReconnect，不依赖这里。
+func (a *App) ReconnectDeviceEventWS(deviceIP string) {
+	a.eventwsReconnect(deviceIP)
+}
+
 // eventwsHealthy 报告这台设备的容器数据是否已由事件流供着（且仍在供数）。
 // 集成层据此把被取代的周期轮询缩到"事件管不到的设备"上。
 func (a *App) eventwsHealthy(ip string) bool {

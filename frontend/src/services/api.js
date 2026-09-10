@@ -1939,7 +1939,7 @@ async function getAnnouncement() {
     } else {
       // 降级到直接调用HTTP API
       console.log('GetAnnouncement绑定未生成，使用axios直接调用');
-      const response = await axios.get('https://newapi.moyunteng.com/api/announcement');
+      const response = await axios.get('https://newapi.moyunteng.com/api/v1/announcements');
       console.log('获取系统公告成功:', response.data);
       return response.data;
     }

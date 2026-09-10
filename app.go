@@ -370,22 +370,25 @@ type AnnouncementData struct {
 	DisplayDuration  FlexibleInt `json:"displayDuration"`
 	ValidDuration    FlexibleInt `json:"validDuration"`
 	IsPopup          bool        `json:"isPopup"`
+	IsExpired        bool        `json:"isExpired"`
 	CreatedAt        string      `json:"createdAt"`
 	ValidUntil       string      `json:"validUntil"`
 }
 
 // AnnouncementResponse 公告接口响应结构
 type AnnouncementResponse struct {
-	CodeID int              `json:"code_id"`
-	Msg    string           `json:"msg"`
-	Data   AnnouncementData `json:"data"` // data为单个对象
+	CodeID int                `json:"code_id"`
+	Msg    string             `json:"msg"`
+	Data   []AnnouncementData `json:"data"` // data为数组（/api/v1/announcements）
 }
 
 // GetAnnouncement 获取系统公告
 func (a *App) GetAnnouncement() map[string]interface{} {
 	log.Printf("[GetAnnouncement] 开始获取系统公告...")
 
-	apiURL := "https://newapi.moyunteng.com/api/v1/announcement"
+	// 2026-09-08：旧接口 /api/v1/announcement 已下线（返回前端页面 HTML），
+	// 服务端迁移到 /api/v1/announcements，data 也从单对象变为数组
+	apiURL := "https://newapi.moyunteng.com/api/v1/announcements"
 
 	// 创建HTTP客户端
 	client := &http.Client{
@@ -440,8 +443,8 @@ func (a *App) GetAnnouncement() map[string]interface{} {
 		}
 	}
 
-	// 检查data是否为空（无公告时 announcementId 为 0）
-	if result.Data.AnnouncementID == 0 {
+	// 检查data是否为空（无公告时数组为空）
+	if len(result.Data) == 0 {
 		log.Printf("[GetAnnouncement] 当前无公告")
 		return map[string]interface{}{
 			"code_id": result.CodeID,
@@ -450,15 +453,16 @@ func (a *App) GetAnnouncement() map[string]interface{} {
 		}
 	}
 
-	// 取公告数据
-	item := &result.Data
-	log.Printf("[GetAnnouncement] 成功获取公告: title=%s, isPopup=%v", item.Title, item.IsPopup)
-
-	// 返回标准格式
-	return map[string]interface{}{
-		"code_id": result.CodeID,
-		"msg":     result.Msg,
-		"data": map[string]interface{}{
+	// data为数组：跳过已过期的公告，保持服务端返回顺序（前端取第一条展示）
+	items := make([]map[string]interface{}, 0, len(result.Data))
+	for i := range result.Data {
+		item := &result.Data[i]
+		if item.IsExpired {
+			log.Printf("[GetAnnouncement] 跳过已过期公告: title=%s", item.Title)
+			continue
+		}
+		log.Printf("[GetAnnouncement] 获取到公告: title=%s, isPopup=%v", item.Title, item.IsPopup)
+		items = append(items, map[string]interface{}{
 			"announcementId":   item.AnnouncementID,
 			"title":            item.Title,
 			"content":          item.Content,
@@ -468,7 +472,23 @@ func (a *App) GetAnnouncement() map[string]interface{} {
 			"isPopup":          item.IsPopup,
 			"createdAt":        item.CreatedAt,
 			"validUntil":       item.ValidUntil,
-		},
+		})
+	}
+
+	if len(items) == 0 {
+		log.Printf("[GetAnnouncement] 公告均已过期")
+		return map[string]interface{}{
+			"code_id": result.CodeID,
+			"msg":     result.Msg,
+			"data":    nil,
+		}
+	}
+
+	// 返回标准格式（data为数组，与接口格式一致）
+	return map[string]interface{}{
+		"code_id": result.CodeID,
+		"msg":     result.Msg,
+		"data":    items,
 	}
 }
 
@@ -2648,16 +2668,24 @@ func (a *App) retryRefreshDeviceVersion(deviceIP string) {
 		}
 		a.deviceStatusMutex.Unlock()
 
-		a.checkDeviceAPIVersion(deviceIP)
+		// 升级中的设备正被事件通道判"离线"（老 SDK 404 降级 / 重启断连），
+		// checkDeviceAPIVersion 的"在线才查"闸门会把它整个拦掉——一个 /info
+		// 都发不出去，升级完成就永远探不到。这里走不带闸门的
+		// fetchDeviceAPIVersion 直接问，返回值说明这次是否真的拿到了。
+		fetched := a.fetchDeviceAPIVersion(deviceIP)
 		a.checkDeviceStorage(deviceIP)
 
 		a.deviceStatusMutex.RLock()
 		st := a.deviceStatusMap[deviceIP]
-		ready := st != nil && st.APIVersion != "" && st.APIVersion != "0"
+		ready := fetched && st != nil && st.APIVersion != "" && st.APIVersion != "0"
 		a.deviceStatusMutex.RUnlock()
 
 		if ready {
 			log.Printf("[UpgradeSDK] ✅ 设备 %s 版本已刷新 (第%d次尝试)", deviceIP, attempt)
+			// 设备已带着新版本起来了：立刻重拨事件通道，别再等 404 降级的
+			// 到期定时器（最长还要 degradeDuration=10 分钟）。hello/snapshot
+			// 一到设备就自动转在线。
+			a.eventwsReconnect(deviceIP)
 			return
 		}
 		time.Sleep(retryInterval)
@@ -8425,12 +8453,15 @@ func (a *App) UpgradeDeviceWithNewAPI(deviceIP interface{}, latestVersion interf
 			}
 			a.deviceStatusMutex.Unlock()
 
-			a.checkDeviceAPIVersion(deviceIP)
+			// 升级中的设备被事件通道判"离线"（老 SDK 404 降级 / 重启断连），
+			// checkDeviceAPIVersion 的"在线才查"闸门会把它整个拦掉，必须走
+			// 不带闸门的 fetchDeviceAPIVersion 才探得到升级完成
+			fetched := a.fetchDeviceAPIVersion(deviceIP)
 
 			a.deviceStatusMutex.RLock()
 			st := a.deviceStatusMap[deviceIP]
 			ready := false
-			if st != nil && st.APIVersion != "" && st.APIVersion != "0" {
+			if fetched && st != nil && st.APIVersion != "" && st.APIVersion != "0" {
 				if targetVersion != "" {
 					// 达到目标版本即认为升级完成
 					if st.APIVersion == targetVersion {
@@ -8447,6 +8478,8 @@ func (a *App) UpgradeDeviceWithNewAPI(deviceIP interface{}, latestVersion interf
 
 			if ready {
 				log.Printf("[单设备升级] ✅ 设备 %s 版本已刷新为 %s (第%d次轮询)", deviceIP, finalVersion, attempt)
+				// 设备已带着新版本起来了：立刻重拨事件通道，不等 404 降级的到期定时器
+				a.eventwsReconnect(deviceIP)
 				return finalVersion
 			}
 			log.Printf("[单设备升级] ⏳ 第%d次轮询，设备 %s 未就绪，继续等待", attempt, deviceIP)
@@ -8898,20 +8931,25 @@ func (a *App) BatchUpgradeDevices(devices interface{}) map[string]interface{} {
 				}
 				a.deviceStatusMutex.Unlock()
 
-				a.checkDeviceAPIVersion(ip)
+				// 升级中的设备被事件通道判"离线"（老 SDK 404 降级 / 重启断连），
+				// checkDeviceAPIVersion 的"在线才查"闸门会把它整个拦掉，必须走
+				// 不带闸门的 fetchDeviceAPIVersion 才探得到升级完成
+				fetched := a.fetchDeviceAPIVersion(ip)
 				a.checkDeviceStorage(ip)
 
 				// 检查是否已拿到新版本（APIVersion 非空且非零）
 				a.deviceStatusMutex.RLock()
 				st := a.deviceStatusMap[ip]
 				ready := false
-				if st != nil && st.APIVersion != "" && st.APIVersion != "0" {
+				if fetched && st != nil && st.APIVersion != "" && st.APIVersion != "0" {
 					ready = true
 				}
 				a.deviceStatusMutex.RUnlock()
 				if ready {
 					done = append(done, ip)
 					log.Printf("[批量升级] ✅ 设备 %s 版本已刷新 (第%d次尝试)", ip, attempt)
+					// 版本已确认：立刻重拨事件通道，不等 404 降级的到期定时器
+					a.eventwsReconnect(ip)
 				}
 			}
 			for _, ip := range done {
