@@ -81,7 +81,7 @@
                                     </div>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 10px;">
-                                    <span style="color: #606266; font-size: 14px;">{{ $t('network.selectedNodes', { count: selectedVpcNodes.length }) }}</span>
+                                    <span style="color: var(--el-text-color-regular); font-size: 14px;">{{ $t('network.selectedNodes', { count: selectedVpcNodes.length }) }}</span>
                                     <el-button type="danger" @click="batchDeleteVpcNodes" size="small">
                                         {{ $t('network.batchDeleteNodes') }}
                                     </el-button>
@@ -265,7 +265,7 @@
 
                                 <!-- 查询行：容器下拉 + 当前查询来源标签 -->
                                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                                    <span style="font-weight: 600; color: #303133; font-size: 14px; white-space: nowrap; flex-shrink: 0;">{{ $t('network.queryContainerDomainFilter') }}</span>
+                                    <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 14px; white-space: nowrap; flex-shrink: 0;">{{ $t('network.queryContainerDomainFilter') }}</span>
                                     <el-select
                                         v-model="domainFilterContainerID"
                                         :placeholder="$t('network.selectContainer')"
@@ -285,7 +285,7 @@
                                             <span>{{ ct.containerName }}</span>
                                         </el-option>
                                         <template #empty>
-                                            <div style="padding: 8px 12px; color: #909399; font-size: 13px; text-align: center;">
+                                            <div style="padding: 8px 12px; color: var(--el-text-color-secondary); font-size: 13px; text-align: center;">
                                                 {{ $t(domainFilterVpcLoading ? 'common.loading' : 'network.noVpcContainers') }}
                                             </div>
                                         </template>
@@ -339,10 +339,10 @@
                                         :value="ct.containerName"
                                     >
                                         <span>{{ ct.containerName }}</span>
-                                        <span style="color: #909399; font-size: 12px; margin-left: 8px;">{{ ct.containerIP }}</span>
+                                        <span style="color: var(--el-text-color-secondary); font-size: 12px; margin-left: 8px;">{{ ct.containerIP }}</span>
                                     </el-option>
                                     <template #empty>
-                                        <div style="padding: 8px 12px; color: #909399; font-size: 13px; text-align: center;">
+                                        <div style="padding: 8px 12px; color: var(--el-text-color-secondary); font-size: 13px; text-align: center;">
                                             {{ $t(domainFilterVpcLoading ? 'common.loading' : 'network.noVpcContainers') }}
                                         </div>
                                     </template>
@@ -385,7 +385,7 @@
 
                             <!-- 规则说明 -->
                             <el-form-item>
-                                <div style="background: #f5f7fa; border-radius: 4px; padding: 10px 12px; font-size: 12px; color: #606266; line-height: 1.9; width: 100%;">
+                                <div style="background: #f5f7fa; border-radius: 4px; padding: 10px 12px; font-size: 12px; color: var(--el-text-color-regular); line-height: 1.9; width: 100%;">
                                     <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:</code> {{ $t('network.domainRuleDesc') }}</div>
                                     <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:</code> {{ $t('network.fullRuleDesc') }}</div>
                                     <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:</code> {{ $t('network.keywordRuleDesc') }}</div>
@@ -448,7 +448,7 @@
 
                             <!-- 规则说明 -->
                             <el-form-item>
-                                <div style="background: #f5f7fa; border-radius: 4px; padding: 10px 12px; font-size: 12px; color: #606266; line-height: 1.9; width: 100%;">
+                                <div style="background: #f5f7fa; border-radius: 4px; padding: 10px 12px; font-size: 12px; color: var(--el-text-color-regular); line-height: 1.9; width: 100%;">
                                     <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:</code> {{ $t('network.domainRuleDesc') }}</div>
                                     <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:</code> {{ $t('network.fullRuleDesc') }}</div>
                                     <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:</code> {{ $t('network.keywordRuleDesc') }}</div>
@@ -510,7 +510,7 @@
 
                                 <!-- 查询行：容器下拉 -->
                                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                                    <span style="font-weight: 600; color: #303133; font-size: 14px; white-space: nowrap; flex-shrink: 0;">{{ $t('network.queryContainerDomainDirect') }}</span>
+                                    <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 14px; white-space: nowrap; flex-shrink: 0;">{{ $t('network.queryContainerDomainDirect') }}</span>
                                     <el-select
                                         v-model="domainDirectContainerID"
                                         :placeholder="$t('network.selectContainer')"
@@ -530,7 +530,7 @@
                                             <span>{{ ct.containerName }}</span>
                                         </el-option>
                                         <template #empty>
-                                            <div style="padding: 8px 12px; color: #909399; font-size: 13px; text-align: center;">
+                                            <div style="padding: 8px 12px; color: var(--el-text-color-secondary); font-size: 13px; text-align: center;">
                                                 {{ $t(domainDirectVpcLoading ? 'common.loading' : 'network.noVpcContainers') }}
                                             </div>
                                         </template>
@@ -582,10 +582,10 @@
                                         :value="ct.containerName"
                                     >
                                         <span>{{ ct.containerName }}</span>
-                                        <span style="color: #909399; font-size: 12px; margin-left: 8px;">{{ ct.containerIP }}</span>
+                                        <span style="color: var(--el-text-color-secondary); font-size: 12px; margin-left: 8px;">{{ ct.containerIP }}</span>
                                     </el-option>
                                     <template #empty>
-                                        <div style="padding: 8px 12px; color: #909399; font-size: 13px; text-align: center;">
+                                        <div style="padding: 8px 12px; color: var(--el-text-color-secondary); font-size: 13px; text-align: center;">
                                             {{ $t(domainDirectVpcLoading ? 'common.loading' : 'network.noVpcContainers') }}
                                         </div>
                                     </template>
@@ -627,7 +627,7 @@
 
                             <!-- 说明 -->
                             <el-form-item>
-                                <div style="background: #f5f7fa; border-radius: 4px; padding: 10px 12px; font-size: 12px; color: #606266; line-height: 1.9; width: 100%;">
+                                <div style="background: #f5f7fa; border-radius: 4px; padding: 10px 12px; font-size: 12px; color: var(--el-text-color-regular); line-height: 1.9; width: 100%;">
                                     <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:</code> {{ $t('network.domainRuleDesc') }}</div>
                                     <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:</code> {{ $t('network.fullRuleDesc') }}</div>
                                     <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:</code> {{ $t('network.keywordRuleDesc') }}</div>
@@ -686,7 +686,7 @@
 
                                 <!-- 查询行：容器下拉 -->
                                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                                    <span style="font-weight: 600; color: #303133; font-size: 14px; white-space: nowrap; flex-shrink: 0;">{{ $t('network.queryContainerDomainRoute') }}</span>
+                                    <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 14px; white-space: nowrap; flex-shrink: 0;">{{ $t('network.queryContainerDomainRoute') }}</span>
                                     <el-select
                                         v-model="domainRouteContainerID"
                                         :placeholder="$t('network.selectContainer')"
@@ -706,7 +706,7 @@
                                             <span>{{ ct.containerName }}</span>
                                         </el-option>
                                         <template #empty>
-                                            <div style="padding: 8px 12px; color: #909399; font-size: 13px; text-align: center;">
+                                            <div style="padding: 8px 12px; color: var(--el-text-color-secondary); font-size: 13px; text-align: center;">
                                                 {{ $t(domainRouteVpcLoading ? 'common.loading' : 'network.noVpcContainers') }}
                                             </div>
                                         </template>
@@ -766,10 +766,10 @@
                                         :value="ct.containerName"
                                     >
                                         <span>{{ ct.containerName }}</span>
-                                        <span style="color: #909399; font-size: 12px; margin-left: 8px;">{{ ct.containerIP }}</span>
+                                        <span style="color: var(--el-text-color-secondary); font-size: 12px; margin-left: 8px;">{{ ct.containerIP }}</span>
                                     </el-option>
                                     <template #empty>
-                                        <div style="padding: 8px 12px; color: #909399; font-size: 13px; text-align: center;">
+                                        <div style="padding: 8px 12px; color: var(--el-text-color-secondary); font-size: 13px; text-align: center;">
                                             {{ $t(domainRouteVpcLoading ? 'common.loading' : 'network.noVpcContainers') }}
                                         </div>
                                     </template>
@@ -785,7 +785,7 @@
                                         style="border: 1px solid #ebeef5; border-radius: 6px; padding: 12px; margin-bottom: 12px; background: #fafafa;"
                                     >
                                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                            <span style="font-weight: 600; color: #303133; font-size: 13px;">#{{ rIdx + 1 }}</span>
+                                            <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">#{{ rIdx + 1 }}</span>
                                             <el-button
                                                 :icon="Delete"
                                                 circle
@@ -828,7 +828,7 @@
                                         </div>
                                         <!-- 目标 VPC 节点 -->
                                         <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span style="font-size: 13px; color: #606266; white-space: nowrap; flex-shrink: 0;">{{ $t('network.targetVpcNode') }}</span>
+                                            <span style="font-size: 13px; color: var(--el-text-color-regular); white-space: nowrap; flex-shrink: 0;">{{ $t('network.targetVpcNode') }}</span>
                                             <el-select
                                                 v-model="route.vpcID"
                                                 :placeholder="$t('network.selectVpcNode')"
@@ -842,7 +842,7 @@
                                                     :value="n.id"
                                                 />
                                                 <template #empty>
-                                                    <div style="padding: 8px 12px; color: #909399; font-size: 13px; text-align: center;">
+                                                    <div style="padding: 8px 12px; color: var(--el-text-color-secondary); font-size: 13px; text-align: center;">
                                                         {{ $t('network.noVpcNodes') }}
                                                     </div>
                                                 </template>
@@ -855,7 +855,7 @@
 
                             <!-- 规则说明 -->
                             <el-form-item>
-                                <div style="background: #f5f7fa; border-radius: 4px; padding: 10px 12px; font-size: 12px; color: #606266; line-height: 1.9; width: 100%;">
+                                <div style="background: #f5f7fa; border-radius: 4px; padding: 10px 12px; font-size: 12px; color: var(--el-text-color-regular); line-height: 1.9; width: 100%;">
                                     <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:</code> {{ $t('network.domainRuleDesc') }}</div>
                                     <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:</code> {{ $t('network.fullRuleDesc') }}</div>
                                     <div><code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:</code> {{ $t('network.keywordRuleDesc') }}</div>
@@ -877,7 +877,7 @@
                     <!-- 功能说明 -->
                     <div style="margin: 0 20px 20px 20px; padding: 12px 16px; background: #f0f9ff; border-left: 4px solid #409EFF; border-radius: 4px;">
                         <div style="font-weight: bold; color: #409EFF; font-size: 14px; margin-bottom: 8px;">💡 {{ $t('network.privateNicDesc') }}</div>
-                        <div style="font-size: 13px; line-height: 1.8; color: #606266;">
+                        <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular);">
                             {{ $t('network.privateNicDescDetail') }}
 
                         </div>
@@ -930,7 +930,7 @@
                     <!-- 功能说明 -->
                     <div style="margin: 0 20px 20px 20px; padding: 12px 16px; background: #f0f9ff; border-left: 4px solid #67C23A; border-radius: 4px;">
                         <div style="font-weight: bold; color: #67C23A; font-size: 14px; margin-bottom: 8px;">💡 {{ $t('network.publicNicDesc') }}</div>
-                        <div style="font-size: 13px; line-height: 1.8; color: #606266;">
+                        <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular);">
                             {{ $t('network.publicNicDescDetail') }}
 
                         </div>
@@ -961,7 +961,7 @@
                                 <span>{{ $t('network.publicNic') }}</span>
                             </div>
                             <div v-for="(nic, index) in publicNicList" :key="index" style="margin-bottom: 20px;">
-                                <div style="font-weight: bold; margin-top: 15px; font-size: 16px;color: #000;">{{ nic.name }}</div>
+                                <div style="font-weight: bold; margin-top: 15px; font-size: 16px;color: var(--el-text-color-primary);">{{ nic.name }}</div>
                                 <el-form :model="nic" label-width="280px" style="max-width: 500px;">
                                     <el-form-item label="网关">
                                         <el-input v-model="nic.gw" placeholder="例如: 10.10.0.1" disabled />
@@ -973,7 +973,7 @@
                                     <!-- 更新按钮说明 -->
                                     <div v-if="nic.type === 'macvlan'" style="margin-bottom: 15px; padding: 12px; background: #fff7e6; border-left: 4px solid #E6A23C; border-radius: 4px;">
                                         <div style="font-weight: bold; color: #E6A23C; font-size: 13px; margin-bottom: 8px;">⚠️ {{ $t('network.updateMacVlanTitle') }}</div>
-                                        <div style="font-size: 12px; line-height: 1.8; color: #606266;">
+                                        <div style="font-size: 12px; line-height: 1.8; color: var(--el-text-color-regular);">
                                             <div style="margin-bottom: 4px;"><strong>功能说明：</strong>用于在更换局域网网段后，将物理网卡的最新网络信息同步到MacVlan配置中。</div>
                                             <div style="margin-bottom: 4px;"><strong>执行过程：</strong></div>
                                             <div style="padding-left: 16px; margin-bottom: 4px;">1. 自动关闭该设备上所有正在运行的虚拟机和容器</div>
@@ -1011,9 +1011,9 @@
                                 <!-- 1. 功能概述 -->
                                 <el-collapse-item name="overview" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">💡 功能概述</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">💡 功能概述</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">网络代理分组功能允许您为虚拟机/容器配置代理节点，实现网络加速和优化。通过配置代理分组，您可以：</p>
                                         <ul style="margin: 0; padding-left: 20px;">
                                             <li>为不同的虚拟机/容器指定不同的网络代理节点</li>
@@ -1027,9 +1027,9 @@
                                 <!-- 2. 配置方式 -->
                                 <el-collapse-item name="config-methods" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">🔧 配置方式说明</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">🔧 配置方式说明</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 12px;">
                                             <div style="font-weight: bold; color: #409EFF; margin-bottom: 6px;">方式一：订阅地址（推荐）</div>
                                             <p style="margin: 0 0 8px 0;">通过输入订阅链接，自动获取和更新多个代理节点。</p>
@@ -1067,9 +1067,9 @@
                                 <!-- 3. 订阅地址配置步骤 -->
                                 <el-collapse-item name="subscription-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📋 订阅地址配置步骤</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📋 订阅地址配置步骤</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 12px;">
                                             <div style="font-weight: bold; margin-bottom: 6px;">步骤1：获取订阅地址</div>
                                             <p style="margin: 0 0 6px 0;">从第三方代理服务商处获取订阅链接。常见的服务商包括：</p>
@@ -1104,9 +1104,9 @@
                                 <!-- 4. 代理协议配置步骤 -->
                                 <el-collapse-item name="protocol-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">⚙️ 代理协议配置步骤</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">⚙️ 代理协议配置步骤</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <ol style="margin: 0 0 12px 0; padding-left: 20px;">
                                             <li style="margin-bottom: 8px;">
                                                 <strong>选择配置类型：</strong>点击"新增分组"，选择类型为"代理协议"
@@ -1136,15 +1136,15 @@
                                 <!-- 5. 支持的协议格式 -->
                                 <el-collapse-item name="protocols" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📝 支持的协议格式</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📝 支持的协议格式</span>
                                     </template>
-                                    <div style="font-size: 12px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 12px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 12px;">
                                             <div style="font-weight: bold; color: #409EFF; margin-bottom: 4px;">1. VMess协议</div>
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 vmess://base64(json配置)
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">标准的VMess协议格式，使用base64编码的JSON配置</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">标准的VMess协议格式，使用base64编码的JSON配置</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1152,7 +1152,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 vless://uuid@server:port?type=ws&security=tls&sni=xxx#remarks
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">支持WebSocket、gRPC等传输方式</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">支持WebSocket、gRPC等传输方式</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1160,7 +1160,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 ss://base64(method:password)@server:port#remarks
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">遵循SIP002标准格式</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">遵循SIP002标准格式</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1168,7 +1168,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 trojan://password@server:port?type=tcp&security=tls&sni=xxx#remarks
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">支持TCP、WebSocket等传输方式</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">支持TCP、WebSocket等传输方式</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1176,7 +1176,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 server/port/username/password/remarks/
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">用户名和密码可以为空，用斜杠分隔</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">用户名和密码可以为空，用斜杠分隔</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1184,7 +1184,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 server/port/username/password/remarks/
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">格式与SOCKS5相同</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">格式与SOCKS5相同</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1192,7 +1192,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 wireguard://privateKey@server:port?publickey=xxx&address=xxx&mtu=xxx#remarks
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">现代化的VPN协议，性能优秀</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">现代化的VPN协议，性能优秀</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1200,7 +1200,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 hysteria2://auth@server:port?sni=xxx&insecure=1&obfs-password=xxx#remarks
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">基于QUIC的高性能代理协议</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">基于QUIC的高性能代理协议</div>
                                         </div>
 
                                         <div>
@@ -1208,7 +1208,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 sstp://username:password@server:port?sni=xxx&insecure=1#remarks
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">基于HTTPS的安全套接字隧道协议，用户名和密码可为空</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">基于HTTPS的安全套接字隧道协议，用户名和密码可为空</div>
                                         </div>
                                     </div>
                                 </el-collapse-item>
@@ -1216,9 +1216,9 @@
                                 <!-- 6. 常见问题 -->
                                 <el-collapse-item name="faq" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">❓ 常见问题</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">❓ 常见问题</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 12px;">
                                             <div style="font-weight: bold; color: #E6A23C; margin-bottom: 4px;">Q1: 配置保存失败怎么办？</div>
                                             <div style="padding-left: 16px;">
@@ -1276,9 +1276,9 @@
                                 <!-- 7. 重要提示 -->
                                 <el-collapse-item name="notice" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">⚠️ 重要提示</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">⚠️ 重要提示</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="background: #fff7e6; padding: 12px; border-radius: 4px; border-left: 4px solid #E6A23C; margin-bottom: 12px;">
                                             <div style="font-weight: bold; color: #E6A23C; margin-bottom: 8px;">🚨 功能互斥说明</div>
                                             <p style="margin: 0 0 8px 0;">网络代理分组功能与MacVlan公有网卡功能<strong>互相排斥，不能同时使用</strong>。</p>
@@ -1321,9 +1321,9 @@
                             <el-collapse v-model="activeHelpSections" style="border: none; background: transparent;">
                                 <el-collapse-item name="vpc-overview" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">💡 功能概述</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">💡 功能概述</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">节点分配功能用于将已配置好的代理节点指定给具体的云机（容器），实现精细化的网络代理管控。</p>
                                         <ul style="margin: 0; padding-left: 20px;">
                                             <li>可以为每台云机独立指定代理节点（指定模式）</li>
@@ -1336,9 +1336,9 @@
 
                                 <el-collapse-item name="vpc-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📋 操作步骤</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📋 操作步骤</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <ol style="margin: 0; padding-left: 20px;">
                                             <li style="margin-bottom: 8px;"><strong>选择设备：</strong>在左侧设备列表中点击目标设备</li>
                                             <li style="margin-bottom: 8px;"><strong>查看已分配节点：</strong>右侧面板展示该设备下所有云机的VPC节点分配情况</li>
@@ -1357,9 +1357,9 @@
 
                                 <el-collapse-item name="vpc-notice" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">⚠️ 注意事项</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">⚠️ 注意事项</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="background: #fff7e6; padding: 10px 12px; border-radius: 4px; border-left: 3px solid #E6A23C;">
                                             <ul style="margin: 0; padding-left: 20px;">
                                                 <li>设置 MacVlan 后节点管理与节点分配功能将<strong>不再可用</strong></li>
@@ -1380,9 +1380,9 @@
                             <el-collapse v-model="activeHelpSections" style="border: none; background: transparent;">
                                 <el-collapse-item name="domain-overview" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">💡 功能概述</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">💡 功能概述</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">域名过滤功能可以为云机容器或整个设备设置"域名屏蔽规则"，符合规则的域名请求将被代理<strong>直接丢弃拦截</strong>，不会转发也不会响应。</p>
                                         <ul style="margin: 0; padding-left: 20px;">
                                             <li><strong>容器域名过滤：</strong>仅对指定的单个云机容器生效</li>
@@ -1395,38 +1395,38 @@
 
                                 <el-collapse-item name="domain-rule-types" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📝 规则匹配类型说明</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📝 规则匹配类型说明</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 10px;">
                                             <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
                                                 <code style="background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 12px;">domain:</code>
                                                 <span style="font-weight: bold;">子域名 / IP 匹配（推荐）</span>
                                             </div>
-                                            <div style="padding-left: 16px; color: #909399;">匹配该域名及其所有子域名，也支持直接填写 IP 地址。例如 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:example.com</code> 会同时匹配 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code> 和 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code>；填写 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:192.168.1.1</code> 则直接匹配该 IP</div>
+                                            <div style="padding-left: 16px; color: var(--el-text-color-secondary);">匹配该域名及其所有子域名，也支持直接填写 IP 地址。例如 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:example.com</code> 会同时匹配 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code> 和 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code>；填写 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:192.168.1.1</code> 则直接匹配该 IP</div>
                                         </div>
                                         <div style="margin-bottom: 10px;">
                                             <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
                                                 <code style="background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 12px;">full:</code>
                                                 <span style="font-weight: bold;">完整域名 / IP 精确匹配</span>
                                             </div>
-                                            <div style="padding-left: 16px; color: #909399;">仅精确匹配完整域名或完整 IP。例如 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:www.example.com</code> 仅匹配 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code>，不匹配 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code>；<code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:1.2.3.4</code> 仅匹配该 IP</div>
+                                            <div style="padding-left: 16px; color: var(--el-text-color-secondary);">仅精确匹配完整域名或完整 IP。例如 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:www.example.com</code> 仅匹配 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code>，不匹配 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code>；<code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:1.2.3.4</code> 仅匹配该 IP</div>
                                         </div>
                                         <div>
                                             <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
                                                 <code style="background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 12px;">keyword:</code>
                                                 <span style="font-weight: bold;">关键字匹配</span>
                                             </div>
-                                            <div style="padding-left: 16px; color: #909399;">匹配包含该关键字的任意域名或 IP。例如 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:google</code> 匹配所有含 "google" 的域名；<code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:192.168</code> 匹配所有含该字段的 IP</div>
+                                            <div style="padding-left: 16px; color: var(--el-text-color-secondary);">匹配包含该关键字的任意域名或 IP。例如 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:google</code> 匹配所有含 "google" 的域名；<code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:192.168</code> 匹配所有含该字段的 IP</div>
                                         </div>
                                     </div>
                                 </el-collapse-item>
 
                                 <el-collapse-item name="domain-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📋 操作步骤</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📋 操作步骤</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 12px;">
                                             <div style="font-weight: bold; color: #409EFF; margin-bottom: 6px;">{{ $t('network.setContainerDomainFilter') }}：</div>
                                             <ol style="margin: 0; padding-left: 20px;">
@@ -1466,9 +1466,9 @@
                             <el-collapse v-model="activeHelpSections" style="border: none; background: transparent;">
                                 <el-collapse-item name="domain-direct-overview" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">💡 功能概述</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">💡 功能概述</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">域名直连功能可以为指定容器设置"直连白名单"，符合规则的域名请求将<strong>绕过 VPC 代理</strong>，直接走本地网络连接。</p>
                                         <ul style="margin: 0; padding-left: 20px;">
                                             <li><strong>仅对指定容器生效：</strong>每条规则绑定到单个云机容器</li>
@@ -1481,38 +1481,38 @@
 
                                 <el-collapse-item name="domain-direct-rule-types" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📝 规则匹配类型说明</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📝 规则匹配类型说明</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 10px;">
                                             <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
                                                 <code style="background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 12px;">domain:</code>
                                                 <span style="font-weight: bold;">子域名 / IP 匹配（推荐）</span>
                                             </div>
-                                            <div style="padding-left: 16px; color: #909399;">匹配该域名及其所有子域名。例如 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:example.com</code> 会同时匹配 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code> 和 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code></div>
+                                            <div style="padding-left: 16px; color: var(--el-text-color-secondary);">匹配该域名及其所有子域名。例如 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:example.com</code> 会同时匹配 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code> 和 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code></div>
                                         </div>
                                         <div style="margin-bottom: 10px;">
                                             <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
                                                 <code style="background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 12px;">full:</code>
                                                 <span style="font-weight: bold;">完整域名 / IP 精确匹配</span>
                                             </div>
-                                            <div style="padding-left: 16px; color: #909399;">仅精确匹配完整域名或完整 IP。例如 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:www.example.com</code> 仅匹配 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code>，不匹配 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code></div>
+                                            <div style="padding-left: 16px; color: var(--el-text-color-secondary);">仅精确匹配完整域名或完整 IP。例如 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:www.example.com</code> 仅匹配 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code>，不匹配 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code></div>
                                         </div>
                                         <div>
                                             <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
                                                 <code style="background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 12px;">keyword:</code>
                                                 <span style="font-weight: bold;">关键字匹配</span>
                                             </div>
-                                            <div style="padding-left: 16px; color: #909399;">匹配包含该关键字的任意域名或 IP。例如 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:google</code> 匹配所有含 "google" 的域名</div>
+                                            <div style="padding-left: 16px; color: var(--el-text-color-secondary);">匹配包含该关键字的任意域名或 IP。例如 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:google</code> 匹配所有含 "google" 的域名</div>
                                         </div>
                                     </div>
                                 </el-collapse-item>
 
                                 <el-collapse-item name="domain-direct-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📋 操作步骤</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📋 操作步骤</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <ol style="margin: 0; padding-left: 20px;">
                                             <li>在左侧选择目标设备</li>
                                             <li>点击"设置域名直连"按钮</li>
@@ -1535,9 +1535,9 @@
                             <el-collapse v-model="activeHelpSections" style="border: none; background: transparent;">
                                 <el-collapse-item name="private-nic-overview" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">💡 功能概述</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">💡 功能概述</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">私有网卡（mytBridge）会在设备内创建一个独立的虚拟网桥，为虚拟机/容器分配该网桥下的私有IP地址，从而实现：</p>
                                         <ul style="margin: 0 0 8px 0; padding-left: 20px;">
                                             <li>同一设备上不同云机之间的<strong>网络隔离</strong></li>
@@ -1552,9 +1552,9 @@
 
                                 <el-collapse-item name="private-nic-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📋 操作步骤</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📋 操作步骤</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <ol style="margin: 0; padding-left: 20px;">
                                             <li style="margin-bottom: 8px;"><strong>选择设备：</strong>在左侧列表中点击目标设备</li>
                                             <li style="margin-bottom: 8px;"><strong>创建网卡：</strong>点击"创建网卡"按钮，填写以下信息：
@@ -1570,9 +1570,9 @@
 
                                 <el-collapse-item name="private-nic-cidr" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📝 CIDR填写说明</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📝 CIDR填写说明</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">CIDR（无类别域间路由）格式为 <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">IP地址/前缀长度</code>，例如：</p>
                                         <div style="background: #f5f5f5; padding: 8px 12px; border-radius: 4px; font-family: monospace; margin-bottom: 8px;">
                                             172.20.0.0/16 → 可分配 IP 范围：172.20.0.1 ~ 172.20.255.254<br>
@@ -1594,9 +1594,9 @@
                             <el-collapse v-model="activeHelpSections" style="border: none; background: transparent;">
                                 <el-collapse-item name="public-nic-overview" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">💡 功能概述</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">💡 功能概述</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">公有网卡（MacVlan）模式下，虚拟机/容器将直接使用设备所在局域网的网关和子网，与物理设备处于同一网段。</p>
                                         <div style="margin-bottom: 10px;">
                                             <div style="font-weight: bold; color: #67C23A; margin-bottom: 4px;">✅ 优点：</div>
@@ -1618,9 +1618,9 @@
 
                                 <el-collapse-item name="public-nic-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📋 操作步骤</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📋 操作步骤</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <ol style="margin: 0; padding-left: 20px;">
                                             <li style="margin-bottom: 8px;"><strong>选择设备：</strong>在左侧设备列表中点击目标设备</li>
                                             <li style="margin-bottom: 8px;"><strong>查看网卡：</strong>右侧面板展示该设备物理网卡的当前配置（网关、子网掩码等）</li>
@@ -1636,9 +1636,9 @@
 
                                 <el-collapse-item name="public-nic-notice" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">⚠️ 重要提示</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">⚠️ 重要提示</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="background: #fff7e6; padding: 12px; border-radius: 4px; border-left: 4px solid #E6A23C; margin-bottom: 10px;">
                                             <div style="font-weight: bold; color: #E6A23C; margin-bottom: 6px;">🚨 功能互斥警告</div>
                                             <p style="margin: 0;">启用 MacVlan（公有网卡）后，<strong>节点管理、节点分配功能将被禁用</strong>。如需切换，请先在公有网卡中移除所有 MacVlan 配置后再使用节点管理功能。</p>
@@ -1671,9 +1671,9 @@
                                 <!-- 1. Feature Overview -->
                                 <el-collapse-item name="overview" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">💡 Feature Overview</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">💡 Feature Overview</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">The proxy group feature allows you to configure proxy nodes for VMs/Containers to achieve network acceleration and optimization. You can:</p>
                                         <ul style="margin: 0; padding-left: 20px;">
                                             <li>Assign different proxy nodes to different VMs/Containers</li>
@@ -1687,9 +1687,9 @@
                                 <!-- 2. 配置方式 -->
                                 <el-collapse-item name="config-methods" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">🔧 Configuration Methods</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">🔧 Configuration Methods</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 12px;">
                                             <div style="font-weight: bold; color: #409EFF; margin-bottom: 6px;">Method 1: Subscription URL (Recommended)</div>
                                             <p style="margin: 0 0 8px 0;">Automatically fetch and update multiple proxy nodes by inputting a subscription link.</p>
@@ -1727,9 +1727,9 @@
                                 <!-- 3. Subscription Config Steps -->
                                 <el-collapse-item name="subscription-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📋 Subscription Config Steps</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📋 Subscription Config Steps</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 12px;">
                                             <div style="font-weight: bold; margin-bottom: 6px;">Step 1: Get Subscription URL</div>
                                             <p style="margin: 0 0 6px 0;">Obtain a subscription link from third-party proxy providers. Common providers include:</p>
@@ -1764,9 +1764,9 @@
                                 <!-- 4. Proxy Protocol Config Steps -->
                                 <el-collapse-item name="protocol-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">⚙️ Proxy Protocol Config Steps</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">⚙️ Proxy Protocol Config Steps</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <ol style="margin: 0 0 12px 0; padding-left: 20px;">
                                             <li style="margin-bottom: 8px;">
                                                 <strong>Select Config Type:</strong>Click "Add Group", select "Proxy Protocol" type
@@ -1796,15 +1796,15 @@
                                 <!-- 5. Supported Protocol Formats -->
                                 <el-collapse-item name="protocols" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📝 Supported Protocol Formats</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📝 Supported Protocol Formats</span>
                                     </template>
-                                    <div style="font-size: 12px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 12px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 12px;">
                                             <div style="font-weight: bold; color: #409EFF; margin-bottom: 4px;">1. VMess Protocol</div>
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 vmess://base64(json配置)
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">Standard VMess protocol format, using base64 encoded JSON configs</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">Standard VMess protocol format, using base64 encoded JSON configs</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1812,7 +1812,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 vless://uuid@server:port?type=ws&security=tls&sni=xxx#remarks
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">Supports WebSocket, gRPC, and other transport methods</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">Supports WebSocket, gRPC, and other transport methods</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1820,7 +1820,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 ss://base64(method:password)@server:port#remarks
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">Complies with the SIP002 standard format</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">Complies with the SIP002 standard format</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1828,7 +1828,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 trojan://password@server:port?type=tcp&security=tls&sni=xxx#remarks
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">Supports TCP, WebSocket transport methods</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">Supports TCP, WebSocket transport methods</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1836,7 +1836,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 server/port/username/password/remarks/
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">Username and password can be empty, separated by slashes</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">Username and password can be empty, separated by slashes</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1844,7 +1844,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 server/port/username/password/remarks/
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">Format is the same as SOCKS5</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">Format is the same as SOCKS5</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1852,7 +1852,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 wireguard://privateKey@server:port?publickey=xxx&address=xxx&mtu=xxx#remarks
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">Modernized VPN protocol with excellent performance</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">Modernized VPN protocol with excellent performance</div>
                                         </div>
 
                                         <div style="margin-bottom: 12px;">
@@ -1860,7 +1860,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 hysteria2://auth@server:port?sni=xxx&insecure=1&obfs-password=xxx#remarks
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">High-performance proxy protocol based on QUIC</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">High-performance proxy protocol based on QUIC</div>
                                         </div>
 
                                         <div>
@@ -1868,7 +1868,7 @@
                                             <div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto;">
                                                 sstp://username:password@server:port?sni=xxx&insecure=1#remarks
                                             </div>
-                                            <div style="color: #909399; margin-top: 4px;">Secure Socket Tunneling Protocol over HTTPS, username and password can be empty</div>
+                                            <div style="color: var(--el-text-color-secondary); margin-top: 4px;">Secure Socket Tunneling Protocol over HTTPS, username and password can be empty</div>
                                         </div>
                                     </div>
                                 </el-collapse-item>
@@ -1876,9 +1876,9 @@
                                 <!-- 6. Frequently Asked Questions (FAQ) -->
                                 <el-collapse-item name="faq" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">❓ Frequently Asked Questions (FAQ)</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">❓ Frequently Asked Questions (FAQ)</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 12px;">
                                             <div style="font-weight: bold; color: #E6A23C; margin-bottom: 4px;">Q1: Config saving failed?</div>
                                             <div style="padding-left: 16px;">
@@ -1936,9 +1936,9 @@
                                 <!-- 7. Important Notices -->
                                 <el-collapse-item name="notice" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">⚠️ Important Notices</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">⚠️ Important Notices</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="background: #fff7e6; padding: 12px; border-radius: 4px; border-left: 4px solid #E6A23C; margin-bottom: 12px;">
                                             <div style="font-weight: bold; color: #E6A23C; margin-bottom: 8px;">🚨 Mutually Exclusive Features</div>
                                             <p style="margin: 0 0 8px 0;">Network Proxy Group feature and MacVlan Public NIC feature<strong>are mutually exclusive and cannot be used simultaneously</strong>。</p>
@@ -1981,9 +1981,9 @@
                             <el-collapse v-model="activeHelpSections" style="border: none; background: transparent;">
                                 <el-collapse-item name="vpc-overview" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">💡 Feature Overview</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">💡 Feature Overview</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">The Node Allocation feature assigns configured proxy nodes to specific VMs (containers) for fine-grained network control.</p>
                                         <ul style="margin: 0; padding-left: 20px;">
                                             <li>You can independently assign a node to each VM (Assigned Mode)</li>
@@ -1996,9 +1996,9 @@
 
                                 <el-collapse-item name="vpc-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📋 Operation Steps</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📋 Operation Steps</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <ol style="margin: 0; padding-left: 20px;">
                                             <li style="margin-bottom: 8px;"><strong>Select Device:</strong>Click the target device from the left device list</li>
                                             <li style="margin-bottom: 8px;"><strong>View Assigned Nodes:</strong>The right panel shows the VPC node allocation for all VMs on this device</li>
@@ -2017,9 +2017,9 @@
 
                                 <el-collapse-item name="vpc-notice" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">⚠️ Cautions</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">⚠️ Cautions</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="background: #fff7e6; padding: 10px 12px; border-radius: 4px; border-left: 3px solid #E6A23C;">
                                             <ul style="margin: 0; padding-left: 20px;">
                                                 <li>Enabling MacVlan will cause Node Management and Allocation to be<strong>UNAVAILABLE</strong></li>
@@ -2040,9 +2040,9 @@
                             <el-collapse v-model="activeHelpSections" style="border: none; background: transparent;">
                                 <el-collapse-item name="domain-overview" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">💡 Feature Overview</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">💡 Feature Overview</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">Domain Filtering sets domain blocking rules for specific containers or devices. Matching requests are<strong>DROPPED and INTERCEPTED directly</strong>，and will neither be forwarded nor responded to.</p>
                                         <ul style="margin: 0; padding-left: 20px;">
                                             <li><strong>Container Domain Filtering:</strong>Applies ONLY to a specific VM container</li>
@@ -2055,38 +2055,38 @@
 
                                 <el-collapse-item name="domain-rule-types" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📝 Match Rule Types Guide</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📝 Match Rule Types Guide</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 10px;">
                                             <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
                                                 <code style="background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 12px;">domain:</code>
                                                 <span style="font-weight: bold;">Subdomain / IP Match (Recommended)</span>
                                             </div>
-                                            <div style="padding-left: 16px; color: #909399;">Matches domains and all subdomains, including direct IPs.For example: <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:example.com</code> will match both <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code> and <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code>; inputting <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:192.168.1.1</code> will directly block that IP</div>
+                                            <div style="padding-left: 16px; color: var(--el-text-color-secondary);">Matches domains and all subdomains, including direct IPs.For example: <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:example.com</code> will match both <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code> and <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code>; inputting <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:192.168.1.1</code> will directly block that IP</div>
                                         </div>
                                         <div style="margin-bottom: 10px;">
                                             <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
                                                 <code style="background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 12px;">full:</code>
                                                 <span style="font-weight: bold;">Exact Domain / IP Match</span>
                                             </div>
-                                            <div style="padding-left: 16px; color: #909399;">Matches strictly exact domain strings or exact IPs.For example: <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:www.example.com</code> will ONLY match <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code>, and NOT match <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code>；<code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:1.2.3.4</code> will ONLY match该 IP</div>
+                                            <div style="padding-left: 16px; color: var(--el-text-color-secondary);">Matches strictly exact domain strings or exact IPs.For example: <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:www.example.com</code> will ONLY match <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code>, and NOT match <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code>；<code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:1.2.3.4</code> will ONLY match该 IP</div>
                                         </div>
                                         <div>
                                             <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
                                                 <code style="background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 12px;">keyword:</code>
                                                 <span style="font-weight: bold;">Keyword Match</span>
                                             </div>
-                                            <div style="padding-left: 16px; color: #909399;">Matches any domain or IP containing the keyword.For example: <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:google</code> will match any domain with "google";<code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:192.168</code> will match any IP containing that string</div>
+                                            <div style="padding-left: 16px; color: var(--el-text-color-secondary);">Matches any domain or IP containing the keyword.For example: <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:google</code> will match any domain with "google";<code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:192.168</code> will match any IP containing that string</div>
                                         </div>
                                     </div>
                                 </el-collapse-item>
 
                                 <el-collapse-item name="domain-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📋 Operation Steps</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📋 Operation Steps</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 12px;">
                                             <div style="font-weight: bold; color: #409EFF; margin-bottom: 6px;">{{ $t('network.setContainerDomainFilter') }}：</div>
                                             <ol style="margin: 0; padding-left: 20px;">
@@ -2126,9 +2126,9 @@
                             <el-collapse v-model="activeHelpSections" style="border: none; background: transparent;">
                                 <el-collapse-item name="domain-direct-overview" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">💡 Feature Overview</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">💡 Feature Overview</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">Direct Domain assigns a "bypass whitelist" to specific containers. Matched domains will<strong>BYPASS VPC Proxies</strong>, and connect directly through local networks.</p>
                                         <ul style="margin: 0; padding-left: 20px;">
                                             <li><strong>Applying Only to Specific Containers:</strong>Each rule bounds to a single VM container</li>
@@ -2141,38 +2141,38 @@
 
                                 <el-collapse-item name="domain-direct-rule-types" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📝 Match Rule Types Guide</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📝 Match Rule Types Guide</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="margin-bottom: 10px;">
                                             <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
                                                 <code style="background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 12px;">domain:</code>
                                                 <span style="font-weight: bold;">Subdomain / IP Match (Recommended)</span>
                                             </div>
-                                            <div style="padding-left: 16px; color: #909399;">匹配该域名及其所有子域名。For example: <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:example.com</code> will match both <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code> and <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code></div>
+                                            <div style="padding-left: 16px; color: var(--el-text-color-secondary);">匹配该域名及其所有子域名。For example: <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">domain:example.com</code> will match both <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code> and <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code></div>
                                         </div>
                                         <div style="margin-bottom: 10px;">
                                             <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
                                                 <code style="background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 12px;">full:</code>
                                                 <span style="font-weight: bold;">Exact Domain / IP Match</span>
                                             </div>
-                                            <div style="padding-left: 16px; color: #909399;">Matches strictly exact domain strings or exact IPs.For example: <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:www.example.com</code> will ONLY match <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code>, and NOT match <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code></div>
+                                            <div style="padding-left: 16px; color: var(--el-text-color-secondary);">Matches strictly exact domain strings or exact IPs.For example: <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">full:www.example.com</code> will ONLY match <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">www.example.com</code>, and NOT match <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">example.com</code></div>
                                         </div>
                                         <div>
                                             <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
                                                 <code style="background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 12px;">keyword:</code>
                                                 <span style="font-weight: bold;">Keyword Match</span>
                                             </div>
-                                            <div style="padding-left: 16px; color: #909399;">Matches any domain or IP containing the keyword.For example: <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:google</code> 匹配所有含 "google" 的域名</div>
+                                            <div style="padding-left: 16px; color: var(--el-text-color-secondary);">Matches any domain or IP containing the keyword.For example: <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">keyword:google</code> 匹配所有含 "google" 的域名</div>
                                         </div>
                                     </div>
                                 </el-collapse-item>
 
                                 <el-collapse-item name="domain-direct-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📋 Operation Steps</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📋 Operation Steps</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <ol style="margin: 0; padding-left: 20px;">
                                             <li>Select target device on the left</li>
                                             <li>点击"设置域名直连"按钮</li>
@@ -2195,9 +2195,9 @@
                             <el-collapse v-model="activeHelpSections" style="border: none; background: transparent;">
                                 <el-collapse-item name="private-nic-overview" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">💡 Feature Overview</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">💡 Feature Overview</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">The Private NIC (mytBridge) creates an isolated virtual bridge on the device to allocate private IP addresses to VMs, enabling:</p>
                                         <ul style="margin: 0 0 8px 0; padding-left: 20px;">
                                             <li>Traffic between VMs on the same device being<strong>NETWORK ISOLATED</strong></li>
@@ -2212,9 +2212,9 @@
 
                                 <el-collapse-item name="private-nic-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📋 Operation Steps</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📋 Operation Steps</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <ol style="margin: 0; padding-left: 20px;">
                                             <li style="margin-bottom: 8px;"><strong>Select Device:</strong>在左侧列表中点击目标设备</li>
                                             <li style="margin-bottom: 8px;"><strong>Create NIC:</strong>Click "Create NIC" and provide the following:
@@ -2230,9 +2230,9 @@
 
                                 <el-collapse-item name="private-nic-cidr" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📝 CIDR Format Guildelines</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📝 CIDR Format Guildelines</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">CIDR（无类别域间路由）The format is <code style="background:#e8e8e8;padding:1px 4px;border-radius:3px;">IP地址/前缀长度</code>，For example:</p>
                                         <div style="background: #f5f5f5; padding: 8px 12px; border-radius: 4px; font-family: monospace; margin-bottom: 8px;">
                                             172.20.0.0/16 → Allocatable IP ranges:172.20.0.1 ~ 172.20.255.254<br>
@@ -2254,9 +2254,9 @@
                             <el-collapse v-model="activeHelpSections" style="border: none; background: transparent;">
                                 <el-collapse-item name="public-nic-overview" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">💡 Feature Overview</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">💡 Feature Overview</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p style="margin: 0 0 8px 0;">In Public NIC (MacVlan) mode, VMs utilize the gateway and subnet of the host device explicitly, positioning themselves on the EXACT local network.</p>
                                         <div style="margin-bottom: 10px;">
                                             <div style="font-weight: bold; color: #67C23A; margin-bottom: 4px;">✅ Advantages:</div>
@@ -2278,9 +2278,9 @@
 
                                 <el-collapse-item name="public-nic-steps" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📋 Operation Steps</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📋 Operation Steps</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <ol style="margin: 0; padding-left: 20px;">
                                             <li style="margin-bottom: 8px;"><strong>Select Device:</strong>Click the target device from the left device list</li>
                                             <li style="margin-bottom: 8px;"><strong>View NIC:</strong>The right panel illustrates current hardware network metadata (Gateways, Subnets)</li>
@@ -2296,9 +2296,9 @@
 
                                 <el-collapse-item name="public-nic-notice" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">⚠️ Important Notices</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">⚠️ Important Notices</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <div style="background: #fff7e6; padding: 12px; border-radius: 4px; border-left: 4px solid #E6A23C; margin-bottom: 10px;">
                                             <div style="font-weight: bold; color: #E6A23C; margin-bottom: 6px;">🚨 Mutual Exclusion Warning</div>
                                             <p style="margin: 0;">Upon engaging MacVlan (Public NIC),<strong>Node allocation capabilities shall irrevocably be disabled</strong>. To switch modes, unconditionally flush any MacVlan setup prior to using proxies.</p>
@@ -2505,7 +2505,7 @@
                                     :label="row.id">
                                     <span></span>
                                 </el-radio>
-                                <span v-else style="color: #909399; font-size: 12px;">随机模式</span>
+                                <span v-else style="color: var(--el-text-color-secondary); font-size: 12px;">随机模式</span>
                             </template>
                         </el-table-column>
                     </el-table>
@@ -5698,7 +5698,7 @@ defineExpose({
     padding: 12px 16px;
     border-bottom: 1px solid #ebeef5;
     font-weight: 600;
-    color: #303133;
+    color: var(--el-text-color-primary);
     background: #f5f7fa;
     display: flex;
     justify-content: space-between;
@@ -5737,7 +5737,7 @@ defineExpose({
 
 .device-ip {
     font-size: 14px;
-    color: #606266;
+    color: var(--el-text-color-regular);
     white-space: nowrap;
 }
 
@@ -5846,7 +5846,7 @@ defineExpose({
 
 .via-config-addr {
     font-size: 11px;
-    color: #909399;
+    color: var(--el-text-color-secondary);
     margin-bottom: 4px;
     overflow: hidden;
     text-overflow: ellipsis;

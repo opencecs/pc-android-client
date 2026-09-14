@@ -19674,13 +19674,13 @@ const handleBindsTest = async () => {
           </el-button>
           <template #dropdown>
             <el-dropdown-menu style="width: 400px; max-height: 500px; overflow-y: auto;">
-              <div style="padding: 12px; font-weight: bold; border-bottom: 1px solid #e4e7ed; color: #303133; display: flex; justify-content: space-between; align-items: center;">
+              <div style="padding: 12px; font-weight: bold; border-bottom: 1px solid #e4e7ed; color: var(--el-text-color-primary); display: flex; justify-content: space-between; align-items: center;">
                 <span>{{ t('common.taskQueue') }}</span>
                 <el-button type="link" size="small" @click="handleClearTasks" :disabled="taskQueue.length === 0">
                   {{ t('common.delete') }}{{ t('common.taskQueue') }}
                 </el-button>
               </div>
-              <div v-if="taskQueue.length === 0" style="padding: 20px; text-align: center; color: #909399;">
+              <div v-if="taskQueue.length === 0" style="padding: 20px; text-align: center; color: var(--el-text-color-secondary);">
                 {{ t('common.taskQueue') }}为空
               </div>
               <el-dropdown-item v-else v-for="task in taskQueue" :key="task.id" style="padding: 0; border-bottom: 1px solid #f0f0f0; text-align: left !important; display: block;">
@@ -19699,13 +19699,13 @@ const handleBindsTest = async () => {
                         {{ task.status === 'running' ? '运行中' : task.status === 'completed' ? '已完成' : task.status === 'failed' ? '失败' : task.status === 'canceled' ? '已取消' : '等待中' }}
                       </el-tag>
                     </div>
-                    <div style="font-size: 12px; color: #909399; text-align: right !important;">{{ new Date(task.startTime || 0).toLocaleTimeString() }}</div>
+                    <div style="font-size: 12px; color: var(--el-text-color-secondary); text-align: right !important;">{{ new Date(task.startTime || 0).toLocaleTimeString() }}</div>
                   </div>
                   
                   <!-- 批量上传镜像/文件按设备IP分进度条显示 -->
                   <div v-if="(task.type === 'uploadImage' || task.type === 'uploadFile') && task.deviceIps && task.deviceIps.length > 0" class="device-progress-list" style="margin-top: 8px;">
                     <div v-for="deviceIP in task.deviceIps" :key="deviceIP" class="device-progress-item" style="display: flex; align-items: center; margin-bottom: 4px;">
-                      <span style="width: 100px; font-size: 12px; color: #606266; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ deviceIP }}</span>
+                      <span style="width: 100px; font-size: 12px; color: var(--el-text-color-regular); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ deviceIP }}</span>
                       <el-progress 
                         :percentage="getDeviceProgress(task, deviceIP)" 
                         :status="getDeviceProgressStatus(task, deviceIP)"
@@ -19715,7 +19715,7 @@ const handleBindsTest = async () => {
                       <component :is="getDeviceProgressText(task, deviceIP).icon" v-if="getDeviceProgressText(task, deviceIP).icon === 'CircleCheck'" style="width: 16px; height: 16px; color: #67c23a; margin-left: 8px;" />
                       <component :is="getDeviceProgressText(task, deviceIP).icon" v-else-if="getDeviceProgressText(task, deviceIP).icon === 'CircleClose'" style="width: 16px; height: 16px; color: #f56c6c; margin-left: 8px;" />
                       <component :is="getDeviceProgressText(task, deviceIP).icon" v-else-if="getDeviceProgressText(task, deviceIP).icon === 'Loading'" style="width: 16px; height: 16px; color: #409eff; margin-left: 8px;" class="rotating" />
-                      <el-icon v-else style="width: 16px; height: 16px; color: #909399; margin-left: 8px;"><Timer /></el-icon>
+                      <el-icon v-else style="width: 16px; height: 16px; color: var(--el-text-color-secondary); margin-left: 8px;"><Timer /></el-icon>
                     </div>
                   </div>
                   <!-- 其他任务显示总进度 -->
@@ -19725,8 +19725,8 @@ const handleBindsTest = async () => {
                   
                   <!-- 清理磁盘任务显示步骤 -->
                   <div v-if="task.type === 'cleanDisk' && task.steps && task.steps.length > 0" style="margin-top: 8px;">
-                    <div style="font-size: 12px; color: #606266; margin-bottom: 4px;">执行步骤:</div>
-                    <div style="max-height: 150px; overflow-y: auto; background: #f5f7fa; padding: 8px; border-radius: 4px; font-size: 11px; color: #606266; font-family: monospace;">
+                    <div style="font-size: 12px; color: var(--el-text-color-regular); margin-bottom: 4px;">执行步骤:</div>
+                    <div style="max-height: 150px; overflow-y: auto; background: #f5f7fa; padding: 8px; border-radius: 4px; font-size: 11px; color: var(--el-text-color-regular); font-family: monospace;">
                       <div v-for="(step, index) in task.steps" :key="index" style="margin-bottom: 2px; word-break: break-all;">{{ step }}</div>
                     </div>
                   </div>
@@ -19736,19 +19736,19 @@ const handleBindsTest = async () => {
                     <div v-if="task.status === 'completed'" style="color: #67c23a;">
                       设备清理完毕，正在重启
                     </div>
-                    <div v-else style="color: #606266;">
+                    <div v-else style="color: var(--el-text-color-regular);">
                       设备: {{ task.deviceIP }} | 步骤: {{ task.currentStep }}/{{ task.totalSteps }}
                     </div>
                   </div>
                   <!-- SDK升级任务显示日志与状态 -->
                   <div v-else-if="task.type === 'sdkUpgrade'" style="margin-top: 5px; font-size: 12px; text-align: left !important; display: block;">
-                    <div style="color: #606266; margin-bottom: 4px;">
+                    <div style="color: var(--el-text-color-regular); margin-bottom: 4px;">
                       设备: {{ task.deviceIP }}<span v-if="task.currentStage"> | 阶段: {{ task.currentStage }}</span>
                     </div>
                     <div v-if="task.currentMsg" style="color: #409eff; margin-bottom: 4px; word-break: break-all;">
                       {{ task.currentMsg }}
                     </div>
-                    <div v-if="task.logs && task.logs.length > 0" style="max-height: 150px; overflow-y: auto; background: #f5f7fa; padding: 8px; border-radius: 4px; font-size: 11px; color: #606266; font-family: monospace;">
+                    <div v-if="task.logs && task.logs.length > 0" style="max-height: 150px; overflow-y: auto; background: #f5f7fa; padding: 8px; border-radius: 4px; font-size: 11px; color: var(--el-text-color-regular); font-family: monospace;">
                       <div v-for="(log, idx) in task.logs" :key="idx" style="margin-bottom: 2px; word-break: break-all;">{{ log }}</div>
                     </div>
                   </div>
@@ -19761,11 +19761,11 @@ const handleBindsTest = async () => {
                       <span style="color: #67c23a;">创建第{{ task.completed + task.failed }}个 ({{ task.completed + task.failed }}/{{ task.total }})</span>
                     </template>
                     <template v-else>
-                      <span style="color: #606266;">创建第{{ task.completed + task.failed }}个 ({{ task.completed + task.failed }}/{{ task.total }})</span>
+                      <span style="color: var(--el-text-color-regular);">创建第{{ task.completed + task.failed }}个 ({{ task.completed + task.failed }}/{{ task.total }})</span>
                     </template>
-                    <span style="color: #909399; margin-left: 8px;">成功: {{ task.completed }}, 失败: {{ task.failed }}</span>
+                    <span style="color: var(--el-text-color-secondary); margin-left: 8px;">成功: {{ task.completed }}, 失败: {{ task.failed }}</span>
                   </div>
-                  <div v-else style="margin-top: 5px; font-size: 12px; color: #606266; text-align: left !important; display: block;">
+                  <div v-else style="margin-top: 5px; font-size: 12px; color: var(--el-text-color-regular); text-align: left !important; display: block;">
                       总进度: {{ task.progress }}% (成功: {{ task.completed }}, 失败: {{ task.failed }})
                     </div>
                     <div v-if="(task.type === 'uploadImage' || task.type === 'downloadImage') && task.imageName" style="margin-top: 3px; font-size: 12px; color: #67c23a; text-align: left !important; display: block;">
@@ -19777,12 +19777,12 @@ const handleBindsTest = async () => {
                     <!-- 复制云机：流式日志列表 -->
                     <div v-if="task.type === 'copy' && task.copyLogs && task.copyLogs.length > 0" style="margin-top: 6px; max-height: 160px; overflow-y: auto; background: #f5f7fa; border-radius: 4px; padding: 6px 8px;">
                       <div v-for="(log, li) in task.copyLogs" :key="li" style="display:flex; align-items:center; gap:4px; font-size:11px; margin-bottom:3px; font-family:monospace;">
-                        <span style="color:#909399; flex-shrink:0;">[{{ log.current }}/{{ log.total }}]</span>
-                        <span style="color:#303133; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" :title="log.name">{{ log.name }}</span>
+                        <span style="color:var(--el-text-color-secondary); flex-shrink:0;">[{{ log.current }}/{{ log.total }}]</span>
+                        <span style="color:var(--el-text-color-primary); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" :title="log.name">{{ log.name }}</span>
                         <el-tag size="small" :type="log.status === 'success' ? 'success' : log.status === 'failed' ? 'danger' : 'info'" style="flex-shrink:0; padding:0 4px; height:16px; line-height:16px;">
                           {{ log.status === 'success' ? '✓' : log.status === 'failed' ? '✗' : '…' }}
                         </el-tag>
-                        <span style="color:#606266; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-shrink:0;" :title="log.message">{{ log.message }}</span>
+                        <span style="color:var(--el-text-color-regular); max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-shrink:0;" :title="log.message">{{ log.message }}</span>
                       </div>
                     </div>
                     <div v-if="task.failed > 0" style="margin-top: 3px; font-size: 12px; color: #f56c6c; text-align: left !important; display: block;">
@@ -19791,7 +19791,7 @@ const handleBindsTest = async () => {
                         <div v-for="(failedTarget, index) in task.failedTargets.slice(0, 3)" :key="index" style="margin-top: 2px; text-align: left !important; display: block;">
                           坑位{{ failedTarget.slot }}: {{ failedTarget.error || '未知错误' }}
                         </div>
-                        <div v-if="task.failedTargets.length > 3" style="margin-top: 2px; color: #909399; text-align: left !important; display: block;">
+                        <div v-if="task.failedTargets.length > 3" style="margin-top: 2px; color: var(--el-text-color-secondary); text-align: left !important; display: block;">
                           ...等{{ task.failedTargets.length }}个失败记录
                         </div>
                       </template>
@@ -19800,7 +19800,7 @@ const handleBindsTest = async () => {
                         <div v-for="(failedTarget, index) in task.failedTargets.slice(0, 3)" :key="index" style="margin-top: 2px; text-align: left !important; display: block;">
                           {{ failedTarget.filePath?.split('\\').pop() || '未知文件' }} -> {{ formatInstanceName(failedTarget.machineName) || '未知云机' }}: {{ failedTarget.error || '未知错误' }}
                         </div>
-                        <div v-if="task.failedTargets.length > 3" style="margin-top: 2px; color: #909399; text-align: left !important; display: block;">
+                        <div v-if="task.failedTargets.length > 3" style="margin-top: 2px; color: var(--el-text-color-secondary); text-align: left !important; display: block;">
                           ...等{{ task.failedTargets.length }}个失败记录
                         </div>
                       </template>
@@ -19809,7 +19809,7 @@ const handleBindsTest = async () => {
                           <span v-for="(failedTarget, index) in task.failedTargets.slice(0, 3)" :key="index" style="display: block; margin-bottom: 2px;">
                             {{ failedTarget.machineName ? `${failedTarget.deviceIP || '未知设备'} ${failedTarget.machineName}` : (failedTarget.deviceIP || '未知设备') }}: {{ failedTarget.error || '未知错误' }}
                           </span>
-                          <div v-if="task.failedTargets.length > 3" style="margin-top: 2px; color: #909399;">
+                          <div v-if="task.failedTargets.length > 3" style="margin-top: 2px; color: var(--el-text-color-secondary);">
                             ...等{{ task.failedTargets.length }}个失败记录
                           </div>
                         </div>
@@ -20148,7 +20148,7 @@ const handleBindsTest = async () => {
                             <el-tag size="small" type="info" style="margin-left: 5px;">{{ device.name || $t('common.device') }}</el-tag>
                           </el-menu-item>
                           
-                          <div v-if="devices.length === 0" style="padding: 20px; text-align: center; color: #909399;">
+                          <div v-if="devices.length === 0" style="padding: 20px; text-align: center; color: var(--el-text-color-secondary);">
                             {{ $t('common.noDevice') }}
                           </div>
                         </el-menu>
@@ -20186,9 +20186,9 @@ const handleBindsTest = async () => {
                                     <p>{{ $t('common.imageSize') }}: {{ image.size }}</p>
                                     <p>{{ $t('common.createTime') }}: {{ image.createTime }}</p>
                                     <p v-if="image.matched" style="color: #67c23a;">{{ $t('common.matchedWithOnlineImage') }}</p>
-                                    <p v-else style="color: #909399;">{{ $t('common.notMatchedWithOnlineImage') }}</p>
-                                    <p v-if="image.matched" style="font-size: 12px; color: #909399; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $t('common.onlineURL') }}: {{ image.onlineImageUrl }}</p>
-                                    <p v-else style="font-size: 12px; color: #909399; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $t('common.deviceURL') }}: {{ image.url }}</p>
+                                    <p v-else style="color: var(--el-text-color-secondary);">{{ $t('common.notMatchedWithOnlineImage') }}</p>
+                                    <p v-if="image.matched" style="font-size: 12px; color: var(--el-text-color-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $t('common.onlineURL') }}: {{ image.onlineImageUrl }}</p>
+                                    <p v-else style="font-size: 12px; color: var(--el-text-color-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ $t('common.deviceURL') }}: {{ image.url }}</p>
                                   </div>
                                 </div>
                               </el-card>
@@ -20483,7 +20483,7 @@ const handleBindsTest = async () => {
         </el-table-column>
         <el-table-column :label="$t('image.availableSpace')" width="140" align="center">
           <template #default="scope">
-            <span v-if="devicesStatusCache.get(scope.row.id) !== 'online'" style="color: #909399;">
+            <span v-if="devicesStatusCache.get(scope.row.id) !== 'online'" style="color: var(--el-text-color-secondary);">
               未知
             </span>
             <span v-else-if="getDeviceStorageInfo(scope.row.id)">
@@ -20495,7 +20495,7 @@ const handleBindsTest = async () => {
                 {{ $t('image.insufficient') }}
               </span>
             </span>
-            <span v-else style="color: #909399;">{{ $t('common.loading') }}</span>
+            <span v-else style="color: var(--el-text-color-secondary);">{{ $t('common.loading') }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -20634,7 +20634,7 @@ const handleBindsTest = async () => {
           </el-button>
         </div>
         <div>
-          <span v-if="selectedBackupList.length > 0" style="margin-right: 12px; color: #909399;">{{ $t('common.selectedItems', { count: selectedBackupList.length }) }}</span>
+          <span v-if="selectedBackupList.length > 0" style="margin-right: 12px; color: var(--el-text-color-secondary);">{{ $t('common.selectedItems', { count: selectedBackupList.length }) }}</span>
           <el-button 
             type="danger" 
             size="small" 
@@ -20708,7 +20708,7 @@ const handleBindsTest = async () => {
           </template>
         </el-table-column>
         <template #empty>
-          <div style="padding: 20px; text-align: center; color: #909399;">
+          <div style="padding: 20px; text-align: center; color: var(--el-text-color-secondary);">
             当前坑位没有可用的备份
           </div>
         </template>
@@ -20729,8 +20729,8 @@ const handleBindsTest = async () => {
       <!-- 总进度条 -->
       <div style="margin-bottom: 16px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <span style="font-size: 13px; color: #606266;">总进度</span>
-          <span style="font-size: 13px; color: #303133; font-weight: 500;">
+          <span style="font-size: 13px; color: var(--el-text-color-regular);">总进度</span>
+          <span style="font-size: 13px; color: var(--el-text-color-primary); font-weight: 500;">
             {{ batchSwitchBackupDone }} / {{ batchSwitchBackupTotal }}
           </span>
         </div>
@@ -20750,12 +20750,12 @@ const handleBindsTest = async () => {
           style="display: flex; align-items: center; padding: 7px 0; border-bottom: 1px solid #f0f0f0; gap: 8px;"
         >
           <!-- 坑位 + 设备IP -->
-          <div style="min-width: 100px; font-size: 12px; color: #606266; flex-shrink: 0;">
+          <div style="min-width: 100px; font-size: 12px; color: var(--el-text-color-regular); flex-shrink: 0;">
             <span>坑位 {{ item.slotNum }}</span>
-            <span v-if="cloudManageMode === 'batch'" style="display: block; color: #909399; font-size: 11px;">{{ item.deviceIp }}</span>
+            <span v-if="cloudManageMode === 'batch'" style="display: block; color: var(--el-text-color-secondary); font-size: 11px;">{{ item.deviceIp }}</span>
           </div>
           <!-- 备份名称 -->
-          <div style="flex: 1; min-width: 0; font-size: 12px; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.backupName">
+          <div style="flex: 1; min-width: 0; font-size: 12px; color: var(--el-text-color-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.backupName">
             → {{ item.backupName }}
           </div>
           <!-- 状态 -->
@@ -20839,7 +20839,7 @@ const handleBindsTest = async () => {
             <span class="create-type-tag create-type-tag-muted">{{ $t('common.oldVersionImage') }}</span>
           </div>
         </div>
-        <div style="margin-top: 8px; font-size: 12px; color: #606266; display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
+        <div style="margin-top: 8px; font-size: 12px; color: var(--el-text-color-regular); display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
           <template v-if="createMode !== 'multi-device-batch'">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span>{{ $t('common.deviceRemainingSpace') }}:</span>
@@ -20967,17 +20967,17 @@ const handleBindsTest = async () => {
              <div v-if="createForm.containerResolution === 'custom'" class="custom-resolution-container" style="margin-top: 15px;">
                 <div style="display: flex; gap: 20px; margin-bottom: 15px;">
                   <div style="flex: 1; display: flex; align-items: center;">
-                    <label style="width: 60px; color: #606266;">{{ $t('common.deviceWidth') }}</label>
+                    <label style="width: 60px; color: var(--el-text-color-regular);">{{ $t('common.deviceWidth') }}</label>
                     <el-input v-model="createForm.containerCustomResolution.width" style="flex: 1;"></el-input>
                   </div>
                   <div style="flex: 1; display: flex; align-items: center;">
-                    <label style="width: 60px; color: #606266;">{{ $t('common.deviceHeight') }}</label>
+                    <label style="width: 60px; color: var(--el-text-color-regular);">{{ $t('common.deviceHeight') }}</label>
                     <el-input v-model="createForm.containerCustomResolution.height" style="flex: 1;"></el-input>
                   </div>
                 </div>
                 <div style="display: flex; gap: 20px; align-items: center;">
                   <div style="flex: 1; display: flex; align-items: center;">
-                    <label style="width: 60px; color: #606266;">DPI</label>
+                    <label style="width: 60px; color: var(--el-text-color-regular);">DPI</label>
                     <el-input v-model="createForm.containerCustomResolution.dpi" style="flex: 1;"></el-input>
                   </div>
                   <div style="flex: 1; color: #f56c6c; font-size: 12px;">
@@ -21046,7 +21046,7 @@ const handleBindsTest = async () => {
             </el-radio-group>
             
             <!-- 网卡类型功能说明 -->
-            <!-- <div style="margin-top: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 4px; font-size: 12px; line-height: 1.6; color: #606266;">
+            <!-- <div style="margin-top: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 4px; font-size: 12px; line-height: 1.6; color: var(--el-text-color-regular);">
               <div style="margin-bottom: 6px;">
                 <span style="font-weight: bold; color: #409EFF;">私有网卡：</span>
                 在设备内创建独立的网关和掩码，为每个容器分配该网关下的IP地址。可实现容器间网络隔离，仍可使用网络管理的IP代理功能。
@@ -21097,7 +21097,7 @@ const handleBindsTest = async () => {
             
             <!-- MacVlan网络信息和注意事项 -->
             <div style="margin-top: 8px;">
-              <div v-if="currentDeviceMacVlanInfo.subnet || currentDeviceMacVlanInfo.gw" style="font-size: 12px; color: #606266; margin-bottom: 5px;">
+              <div v-if="currentDeviceMacVlanInfo.subnet || currentDeviceMacVlanInfo.gw" style="font-size: 12px; color: var(--el-text-color-regular); margin-bottom: 5px;">
                 <span v-if="currentDeviceMacVlanInfo.subnet">子网: {{ currentDeviceMacVlanInfo.subnet }}</span>
                 <span v-if="currentDeviceMacVlanInfo.gw" style="margin-left: 10px;">网关: {{ currentDeviceMacVlanInfo.gw }}</span>
               </div>
@@ -21271,7 +21271,7 @@ const handleBindsTest = async () => {
                     ]
                   }"
                 >
-                  <el-icon style="margin-left: 8px; cursor: help; color: #909399; font-size: 14px;">
+                  <el-icon style="margin-left: 8px; cursor: help; color: var(--el-text-color-secondary); font-size: 14px;">
                     <QuestionFilled />
                   </el-icon>
                 </el-tooltip>
@@ -21304,7 +21304,7 @@ const handleBindsTest = async () => {
             <!-- ADB端口（安全模式下显示） -->
             <el-form-item v-if="createForm.enforce" label="ADB端口">
               <el-input-number v-model="createForm.adbPort" :min="0" :max="65535" :step="1" controls-position="right" style="width: 200px;" @change="validateAdbPort"></el-input-number>
-              <span style="margin-left: 8px; color: #909399; font-size: 12px;">设置0不开启ADB</span>
+              <span style="margin-left: 8px; color: var(--el-text-color-secondary); font-size: 12px;">设置0不开启ADB</span>
             </el-form-item>
             
             <div v-if="createForm.s5Type !== '0'" style="margin-top: 0; margin-bottom: 20px; padding: 15px; background-color: #f5f7fa; border-radius: 4px;">
@@ -21356,15 +21356,15 @@ const handleBindsTest = async () => {
               <div v-if="createForm.resolution === 'custom'" class="custom-resolution-form" style="margin-top: 10px;">
                 <div style="display: flex; flex-direction: column; gap: 8px;">
                   <div style="display: flex; align-items: center; gap: 8px;">
-                    <label style="width: 60px; color: #606266; flex-shrink: 0;">{{ $t('common.width') }}</label>
+                    <label style="width: 60px; color: var(--el-text-color-regular); flex-shrink: 0;">{{ $t('common.width') }}</label>
                     <el-input v-model="createForm.customResolution.width" style="flex: 1;"></el-input>
                   </div>
                   <div style="display: flex; align-items: center; gap: 8px;">
-                    <label style="width: 60px; color: #606266; flex-shrink: 0;">{{ $t('common.height') }}</label>
+                    <label style="width: 60px; color: var(--el-text-color-regular); flex-shrink: 0;">{{ $t('common.height') }}</label>
                     <el-input v-model="createForm.customResolution.height" style="flex: 1;"></el-input>
                   </div>
                   <div style="display: flex; align-items: center; gap: 8px;">
-                    <label style="width: 60px; color: #606266; flex-shrink: 0;">DPI</label>
+                    <label style="width: 60px; color: var(--el-text-color-regular); flex-shrink: 0;">DPI</label>
                     <el-input v-model="createForm.customResolution.dpi" style="flex: 1;"></el-input>
                   </div>
                 </div>
@@ -21463,7 +21463,7 @@ const handleBindsTest = async () => {
                 <el-radio label="specified">{{ $t('common.specifiedNode') }}</el-radio>
                 <el-radio label="random">{{ $t('common.randomNode') }}</el-radio>
               </el-radio-group>
-              <!-- <div v-if="createForm.networkCardType === 'public' && createForm.macVlanIp" style="margin-top: 5px; font-size: 12px; color: #909399;">
+              <!-- <div v-if="createForm.networkCardType === 'public' && createForm.macVlanIp" style="margin-top: 5px; font-size: 12px; color: var(--el-text-color-secondary);">
                 提示：设置了MacVlan（公有网卡）后，网络管理选项被禁用
               </div> -->
             </el-form-item>
@@ -21481,7 +21481,7 @@ const handleBindsTest = async () => {
                 </el-radio-group>
                 
                 <!-- 网卡类型功能说明 -->
-                <!-- <div style="margin-top: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 4px; font-size: 12px; line-height: 1.6; color: #606266;">
+                <!-- <div style="margin-top: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 4px; font-size: 12px; line-height: 1.6; color: var(--el-text-color-regular);">
                   <div style="margin-bottom: 6px;">
                     <span style="font-weight: bold; color: #409EFF;">私有网卡：</span>
                     在设备内创建独立的网关和掩码，为每个虚拟机分配该网关下的IP地址。可实现虚拟机间网络隔离，仍可使用网络管理的IP代理功能。
@@ -21531,7 +21531,7 @@ const handleBindsTest = async () => {
                  
                  <!-- MacVlan网络信息和注意事项 -->
                  <div style="margin-top: 8px;">
-                   <div v-if="currentDeviceMacVlanInfo.subnet || currentDeviceMacVlanInfo.gw" style="font-size: 12px; color: #606266; margin-bottom: 5px;">
+                   <div v-if="currentDeviceMacVlanInfo.subnet || currentDeviceMacVlanInfo.gw" style="font-size: 12px; color: var(--el-text-color-regular); margin-bottom: 5px;">
                      <span v-if="currentDeviceMacVlanInfo.subnet">子网: {{ currentDeviceMacVlanInfo.subnet }}</span>
                      <span v-if="currentDeviceMacVlanInfo.gw" style="margin-left: 10px;">网关: {{ currentDeviceMacVlanInfo.gw }}</span>
                    </div>
@@ -21626,17 +21626,17 @@ const handleBindsTest = async () => {
              <div v-if="updateImageForm.resolution === 'custom'" class="custom-resolution-container" style="margin-top: 15px;">
                 <div style="display: flex; gap: 20px; margin-bottom: 15px;">
                   <div style="flex: 1; display: flex; align-items: center;">
-                    <label style="width: 60px; color: #606266;">设备宽</label>
+                    <label style="width: 60px; color: var(--el-text-color-regular);">设备宽</label>
                     <el-input v-model="updateImageForm.customResolution.width" style="flex: 1;"></el-input>
                   </div>
                   <div style="flex: 1; display: flex; align-items: center;">
-                    <label style="width: 60px; color: #606266;">设备长</label>
+                    <label style="width: 60px; color: var(--el-text-color-regular);">设备长</label>
                     <el-input v-model="updateImageForm.customResolution.height" style="flex: 1;"></el-input>
                   </div>
                 </div>
                 <div style="display: flex; gap: 20px; align-items: center;">
                   <div style="flex: 1; display: flex; align-items: center;">
-                    <label style="width: 60px; color: #606266;">DPI</label>
+                    <label style="width: 60px; color: var(--el-text-color-regular);">DPI</label>
                     <el-input v-model="updateImageForm.customResolution.dpi" style="flex: 1;"></el-input>
                   </div>
                   <div style="flex: 1; color: #f56c6c; font-size: 12px;">
@@ -21682,7 +21682,7 @@ const handleBindsTest = async () => {
             </el-radio-group>
             
             <!-- 网卡类型功能说明 -->
-            <!-- <div style="margin-top: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 4px; font-size: 12px; line-height: 1.6; color: #606266;">
+            <!-- <div style="margin-top: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 4px; font-size: 12px; line-height: 1.6; color: var(--el-text-color-regular);">
               <div style="margin-bottom: 6px;">
                 <span style="font-weight: bold; color: #409EFF;">私有网卡：</span>
                 在设备内创建独立的网关和掩码，为每个容器分配该网关下的IP地址。可实现容器间网络隔离，仍可使用网络管理的IP代理功能。
@@ -21721,7 +21721,7 @@ const handleBindsTest = async () => {
             
             <!-- MacVlan网络信息和注意事项 -->
             <div style="margin-top: 8px;">
-              <div v-if="currentDeviceMacVlanInfo.subnet || currentDeviceMacVlanInfo.gw" style="font-size: 12px; color: #606266; margin-bottom: 5px;">
+              <div v-if="currentDeviceMacVlanInfo.subnet || currentDeviceMacVlanInfo.gw" style="font-size: 12px; color: var(--el-text-color-regular); margin-bottom: 5px;">
                 <span v-if="currentDeviceMacVlanInfo.subnet">子网: {{ currentDeviceMacVlanInfo.subnet }}</span>
                 <span v-if="currentDeviceMacVlanInfo.gw" style="margin-left: 10px;">网关: {{ currentDeviceMacVlanInfo.gw }}</span>
               </div>
@@ -21839,7 +21839,7 @@ const handleBindsTest = async () => {
                 </el-radio-group>
                 
                 <!-- 网卡类型功能说明 -->
-                <!-- <div style="margin-top: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 4px; font-size: 12px; line-height: 1.6; color: #606266;">
+                <!-- <div style="margin-top: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 4px; font-size: 12px; line-height: 1.6; color: var(--el-text-color-regular);">
                   <div style="margin-bottom: 6px;">
                     <span style="font-weight: bold; color: #409EFF;">私有网卡：</span>
                     在设备内创建独立的网关和掩码，为每个虚拟机分配该网关下的IP地址。可实现虚拟机间网络隔离，仍可使用网络管理的IP代理功能。
@@ -21886,7 +21886,7 @@ const handleBindsTest = async () => {
                  
                  <!-- MacVlan网络信息和注意事项 -->
                  <div style="margin-top: 8px;">
-                   <div v-if="currentDeviceMacVlanInfo.subnet || currentDeviceMacVlanInfo.gw" style="font-size: 12px; color: #606266; margin-bottom: 5px;">
+                   <div v-if="currentDeviceMacVlanInfo.subnet || currentDeviceMacVlanInfo.gw" style="font-size: 12px; color: var(--el-text-color-regular); margin-bottom: 5px;">
                      <span v-if="currentDeviceMacVlanInfo.subnet">子网: {{ currentDeviceMacVlanInfo.subnet }}</span>
                      <span v-if="currentDeviceMacVlanInfo.gw" style="margin-left: 10px;">网关: {{ currentDeviceMacVlanInfo.gw }}</span>
                    </div>
@@ -21929,9 +21929,9 @@ const handleBindsTest = async () => {
   >
     <div v-for="(group, gIdx) in batchUpdateImageGroups" :key="group.groupKey" :style="{ marginBottom: gIdx < batchUpdateImageGroups.length - 1 ? '20px' : '0' }">
       <!-- 分组标题 -->
-      <div style="font-weight:600;font-size:14px;color:#303133;padding:6px 0 10px 0;border-bottom:1px solid #ebeef5;margin-bottom:12px;">
+      <div style="font-weight:600;font-size:14px;color:var(--el-text-color-primary);padding:6px 0 10px 0;border-bottom:1px solid #ebeef5;margin-bottom:12px;">
         {{ group.groupLabel }}
-        <span style="font-weight:400;color:#909399;font-size:12px;margin-left:8px;">{{ $t('common.totalCloudMachines', { count: group.containers.length }) }}</span>
+        <span style="font-weight:400;color:var(--el-text-color-secondary);font-size:12px;margin-left:8px;">{{ $t('common.totalCloudMachines', { count: group.containers.length }) }}</span>
       </div>
 
       <el-form label-width="90px">
@@ -21943,7 +21943,7 @@ const handleBindsTest = async () => {
           </el-radio-group>
         </el-form-item>
         <el-form-item v-else :label="$t('common.versionType')">
-          <span style="color:#606266;">{{ group.androidType === 'V2' ? $t('common.v2Container') : $t('common.v3Simulator') }}</span>
+          <span style="color:var(--el-text-color-regular);">{{ group.androidType === 'V2' ? $t('common.v2Container') : $t('common.v3Simulator') }}</span>
         </el-form-item>
 
         <!-- V2 模式：安卓版本选择 -->
@@ -21983,7 +21983,7 @@ const handleBindsTest = async () => {
           </el-select>
           <div
             v-if="group.androidType === 'V2' && getBatchUpdateV2List(group.deviceName, group.v2AndroidVersion).length === 0 && group.selectedUrl !== 'custom'"
-            style="color:#909399;font-size:12px;margin-top:4px;"
+            style="color:var(--el-text-color-secondary);font-size:12px;margin-top:4px;"
           >
             {{ $t('common.noImageForVersion') }}
           </div>
@@ -22057,7 +22057,7 @@ const handleBindsTest = async () => {
         </el-form-item>
         <el-form-item :label="$t('common.isolationMode')">
           <el-checkbox v-model="addMacvlanForm.isPrivate">{{ $t('common.enablePrivateIsolation') }}</el-checkbox>
-          <div style="font-size: 12px; color: #909399; margin-top: 5px;">
+          <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-top: 5px;">
             {{ $t('common.isolationTip') }}
           </div>
         </el-form-item>
@@ -22094,7 +22094,7 @@ const handleBindsTest = async () => {
         </el-form-item>
         <el-form-item :label="$t('common.isolationMode')">
           <el-checkbox v-model="editNetworkForm.isPrivate">{{ $t('common.enablePrivateIsolation') }}</el-checkbox>
-          <div style="font-size: 12px; color: #909399; margin-top: 5px;">
+          <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-top: 5px;">
             {{ $t('common.isolationTip') }}
           </div>
         </el-form-item>
@@ -22144,7 +22144,7 @@ const handleBindsTest = async () => {
       </div>
       
       <div class="api-details-footer">
-        <p style="color: #909399; font-size: 12px; margin-top: 10px;">
+        <p style="color: var(--el-text-color-secondary); font-size: 12px; margin-top: 10px;">
           {{ $t('common.clickToCopy') }}
         </p>
       </div>
@@ -22182,7 +22182,7 @@ const handleBindsTest = async () => {
             <el-button @click="parseVpcInfo">{{ $t('common.parseAndFill') }}</el-button>
           </template>
         </el-input>
-        <div style="font-size: 12px; color: #909399; margin-top: 4px;">
+        <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px;">
           {{ $t('common.s5InfoExample') }}
         </div>
       </el-form-item>
@@ -22712,7 +22712,7 @@ const handleBindsTest = async () => {
 
       <!-- 共享目录路径设置 -->
       <div style="margin-bottom: 12px; padding: 10px 12px; background: #f5f7fa; border-radius: 4px; border: 1px solid #e4e7ed;">
-        <div style="font-size: 12px; color: #606266; margin-bottom: 8px; font-weight: 500;">📂 文件来源目录</div>
+        <div style="font-size: 12px; color: var(--el-text-color-regular); margin-bottom: 8px; font-weight: 500;">📂 文件来源目录</div>
         <div style="display: flex; align-items: center; gap: 8px;">
           <el-input
             v-model="singleUploadSharedDirInfo.path"
@@ -22732,7 +22732,7 @@ const handleBindsTest = async () => {
             v-if="!singleUploadSharedDirInfo.isDefault"
             type="text"
             size="small"
-            style="color: #909399; padding: 0;"
+            style="color: var(--el-text-color-secondary); padding: 0;"
             :loading="singleUploadSharedDirLoading"
             @click="handleResetSingleUploadSharedDir"
           >
@@ -23464,7 +23464,7 @@ const handleBindsTest = async () => {
                   >
                     {{ $t('common.closePassword') }}
                   </el-button>
-                  <span class="password-hint" style="color: #606266; font-size: 12px;">
+                  <span class="password-hint" style="color: var(--el-text-color-regular); font-size: 12px;">
                     {{ $t('common.passwordHint') }}
                   </span>
                 </el-space>
@@ -23624,9 +23624,9 @@ const handleBindsTest = async () => {
                     <p>镜像大小: {{ image.size }}</p>
                     <p>创建时间: {{ image.createTime }}</p>
                     <p v-if="image.matched" style="color: #67c23a;">✓ 已与线上镜像匹配</p>
-                    <p v-else style="color: #909399;">✗ 未与线上镜像匹配</p>
-                    <p v-if="image.matched" style="font-size: 12px; color: #909399;">线上URL: {{ image.onlineImageUrl }}</p>
-                    <p v-else style="font-size: 12px; color: #909399;">设备中URL: {{ image.url }}</p>
+                    <p v-else style="color: var(--el-text-color-secondary);">✗ 未与线上镜像匹配</p>
+                    <p v-if="image.matched" style="font-size: 12px; color: var(--el-text-color-secondary);">线上URL: {{ image.onlineImageUrl }}</p>
+                    <p v-else style="font-size: 12px; color: var(--el-text-color-secondary);">设备中URL: {{ image.url }}</p>
                   </div>
                 </div>
               </el-card>
@@ -23768,7 +23768,7 @@ const handleBindsTest = async () => {
                   >
                     <div style="display: flex; justify-content: space-between;">
                       <span>随机</span>
-                      <span style="color: #909399; font-size: 12px;">random</span>
+                      <span style="color: var(--el-text-color-secondary); font-size: 12px;">random</span>
                     </div>
                   </el-option>
                   
@@ -23782,7 +23782,7 @@ const handleBindsTest = async () => {
                     >
                       <div style="display: flex; justify-content: space-between;">
                         <span>{{ model.name }}</span>
-                        <span style="color: #909399; font-size: 12px;">{{ model.id }}</span>
+                        <span style="color: var(--el-text-color-secondary); font-size: 12px;">{{ model.id }}</span>
                       </div>
                     </el-option>
                   </template>
@@ -23954,7 +23954,7 @@ const handleBindsTest = async () => {
     />
 
     <div style="padding: 8px 0;">
-      <div style="margin-bottom: 12px; color: #606266; font-size: 13px;">
+      <div style="margin-bottom: 12px; color: var(--el-text-color-regular); font-size: 13px;">
         {{ $t('common.supportedFormats') }}：<strong>.pem</strong>、<strong>.xml</strong>
       </div>
 
@@ -23975,7 +23975,7 @@ const handleBindsTest = async () => {
         <el-icon :size="22" style="color: #409eff; flex-shrink: 0;"><Upload /></el-icon>
         <span
           v-if="googleCertFileName"
-          style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #303133; font-size: 14px;"
+          style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--el-text-color-primary); font-size: 14px;"
         >{{ googleCertFileName }}</span>
         <span v-else style="flex: 1; color: #aaa; font-size: 14px;">{{ $t('common.clickToSelectCert') }}</span>
         <el-button
@@ -24014,10 +24014,10 @@ const handleBindsTest = async () => {
   >
     <div style="padding: 8px 0;">
       <div style="margin-bottom: 20px;">
-        <div style="font-weight: bold; margin-bottom: 12px; color: #303133; font-size: 14px;">
+        <div style="font-weight: bold; margin-bottom: 12px; color: var(--el-text-color-primary); font-size: 14px;">
           文件保存路径
         </div>
-        <div style="font-size: 12px; color: #909399; margin-bottom: 12px; line-height: 1.6;">
+        <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 12px; line-height: 1.6;">
           设置下载镜像、本地机型、备份机型、备份云机等文件的保存位置。<br>
           默认保存在 C 盘系统目录，建议修改到其他磁盘以避免 C 盘空间不足。
         </div>
@@ -24049,7 +24049,7 @@ const handleBindsTest = async () => {
             v-if="!storagePathInfo.isDefault"
             type="text"
             size="small"
-            style="color: #909399;"
+            style="color: var(--el-text-color-secondary);"
             @click="handleResetStoragePath"
             :loading="settingsLoading"
           >
@@ -24057,7 +24057,7 @@ const handleBindsTest = async () => {
           </el-button>
         </div>
 
-        <div v-if="storagePathInfo.defaultPath" style="margin-top: 10px; font-size: 12px; color: #c0c4cc;">
+        <div v-if="storagePathInfo.defaultPath" style="margin-top: 10px; font-size: 12px; color: var(--el-text-color-placeholder);">
           默认路径：{{ storagePathInfo.defaultPath }}
         </div>
 
@@ -24072,11 +24072,11 @@ const handleBindsTest = async () => {
 
       <!-- APK自动授权设置 -->
       <div style="margin-bottom: 20px;">
-        <div style="font-weight: bold; margin-bottom: 12px; color: #303133; font-size: 14px;">
+        <div style="font-weight: bold; margin-bottom: 12px; color: var(--el-text-color-primary); font-size: 14px;">
           {{ t('common.autoGrantApkPermission') }}
         </div>
         <div style="display: flex; align-items: center; justify-content: space-between;">
-          <div style="font-size: 12px; color: #909399; line-height: 1.6; flex: 1; padding-right: 16px;">
+          <div style="font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.6; flex: 1; padding-right: 16px;">
             {{ t('common.autoGrantApkPermissionDesc') }}
           </div>
           <el-switch v-model="autoGrantApkPermission" />
@@ -24230,7 +24230,7 @@ const handleBindsTest = async () => {
 }
 
 .no-slots-assigned {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   text-align: center;
   padding: 10px;
 }
@@ -24411,7 +24411,7 @@ const handleBindsTest = async () => {
 
 .sdk-loading-text {
   margin-top: 15px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   font-size: 16px;
 }
 
@@ -24428,7 +24428,7 @@ const handleBindsTest = async () => {
   justify-content: center;
   padding: 40px;
   font-size: 16px;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .scanning-devices .el-icon {
@@ -24443,7 +24443,7 @@ const handleBindsTest = async () => {
 
 .no-devices .tip {
   margin-top: 10px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 14px;
 }
 
@@ -24470,7 +24470,7 @@ const handleBindsTest = async () => {
 }
 
 .selected-info {
-  color: #606266;
+  color: var(--el-text-color-regular);
   margin-top: 10px;
 }
 
@@ -24654,7 +24654,7 @@ const handleBindsTest = async () => {
 .model-title {
   font-size: 18px;
   margin-bottom: 15px;
-  color: #303133;
+  color: var(--el-text-color-primary);
   font-weight: bold;
 }
 
@@ -24687,7 +24687,7 @@ const handleBindsTest = async () => {
 
 .image-name {
   font-weight: bold;
-  color: #303133;
+  color: var(--el-text-color-primary);
   font-size: 16px;
 }
 
@@ -24701,12 +24701,12 @@ const handleBindsTest = async () => {
 }
 
 .image-detail .label {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-right: 8px;
 }
 
 .image-detail .value {
-  color: #303133;
+  color: var(--el-text-color-primary);
   word-break: break-all;
 }
 
@@ -24835,7 +24835,7 @@ const handleBindsTest = async () => {
 }
 
 .create-type-tag-muted {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   border-color: #dcdfe6;
   background: transparent;
 }
@@ -24888,7 +24888,7 @@ const handleBindsTest = async () => {
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background-color: #f5f7fa;
-  color: #303133;
+  color: var(--el-text-color-primary);
   font-size: 14px;
 }
 
@@ -25163,7 +25163,7 @@ html, body {
   height: 200px;
   background-color: #f5f7fa;
   border-radius: 4px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 /* 截图离线状态 */
@@ -25185,7 +25185,7 @@ html, body {
   height: 200px;
   background-color: #f5f7fa;
   border-radius: 4px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 /* 加载图标旋转动画 */
@@ -25232,7 +25232,7 @@ el-icon.is-loading {
   width: 100%;
   height: 100%;
   background-color: #f5f7fa;
-  color: #606266;
+  color: var(--el-text-color-regular);
   gap: 5px;
 }
 
@@ -25244,7 +25244,7 @@ el-icon.is-loading {
   width: 100%;
   height: 100%;
   background-color: #f5f7fa;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 /* 文件树样式 */
@@ -25295,7 +25295,7 @@ el-icon.is-loading {
 .node-name {
   flex: 1;
   font-size: 14px;
-  color: #303133;
+  color: var(--el-text-color-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -25304,7 +25304,7 @@ el-icon.is-loading {
 /* 节点大小 */
 .node-size {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-left: 16px;
   width: 80px;
   text-align: right;
@@ -25313,7 +25313,7 @@ el-icon.is-loading {
 /* 节点日期 */
 .node-date {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-left: 16px;
   width: 120px;
   text-align: right;
@@ -25373,7 +25373,7 @@ el-icon.is-loading {
   width: 100%;
   height: 100%;
   background-color: #f5f7fa;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 /* 修复窗口大小变化时的布局问题 */
@@ -25494,25 +25494,25 @@ el-icon.is-loading {
 .guide-title {
   font-size: 18px;
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
   margin: 0 0 4px 0;
 }
 
 .guide-section-title {
   font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
   margin: 0 0 12px 0;
 }
 
 .guide-text {
-  color: #606266;
+  color: var(--el-text-color-regular);
   line-height: 1.8;
   margin-bottom: 10px;
 }
 
 .guide-list {
-  color: #606266;
+  color: var(--el-text-color-regular);
   line-height: 2;
   padding-left: 20px;
   margin: 0 0 4px 0;
@@ -25911,7 +25911,7 @@ el-icon.is-loading {
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   margin: 0;
   font-weight: 500;
   overflow: hidden;
@@ -25932,7 +25932,7 @@ el-icon.is-loading {
   justify-content: center;
   gap: 5px;
   background-color: #f5f7fa;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 /* 确保坑位模式下截图加载状态的文本正确显示，防止堆叠 */
@@ -26295,7 +26295,7 @@ el-icon.is-loading {
 
 /* 分隔符 */
 .divider {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-weight: 300;
 }
 
@@ -26589,7 +26589,7 @@ el-icon.is-loading {
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   border-radius: 0;
   margin: 0;
   font-weight: 500;
@@ -26603,7 +26603,7 @@ el-icon.is-loading {
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   border-radius: 6px;
   font-weight: 500;
 }
@@ -26619,7 +26619,7 @@ el-icon.is-loading {
 }
 
 .screenshot-loading-small {
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .screenshot-error-small {
@@ -26627,7 +26627,7 @@ el-icon.is-loading {
 }
 
 .screenshot-empty-small {
-  color: #c0c4cc;
+  color: var(--el-text-color-placeholder);
 }
 
 .cloud-machine-info {
@@ -26941,7 +26941,7 @@ el-icon.is-loading {
   justify-content: center;
   align-items: center;
   z-index: 1000;
-  color: #303133;
+  color: var(--el-text-color-primary);
   font-size: 16px;
   border-radius: 8px;
 }
@@ -26996,7 +26996,7 @@ el-icon.is-loading {
   font-weight: bold;
   padding: 4px 8px;
   margin-right: 4px;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 /* 刷新按钮样式 */
@@ -27014,7 +27014,7 @@ el-icon.is-loading {
 .batch-create-btn {
   margin-left: 5px;
   padding: 0;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .device-menu-item-content {
@@ -27028,7 +27028,7 @@ el-icon.is-loading {
 }
 
 .switching-backup-overlay-dialog span {
-  color: #303133;
+  color: var(--el-text-color-primary);
   font-weight: 600;
 }
 
@@ -27175,7 +27175,7 @@ el-icon.is-loading {
   margin-top: 10px;
   text-align: center;
   font-size: 14px;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 /* 文件管理器 */
@@ -27204,12 +27204,13 @@ el-icon.is-loading {
   gap: 8px;
 }
 
-/* 右键菜单样式 */
+/* 右键菜单样式（用 Element Plus CSS 变量适配深色模式：
+   深色下 fixDarkBackgrounds 会把白色背景刷黑，写死浅色会导致黑底黑字） */
 .context-menu {
   position: fixed;
   z-index: 1000;
-  background: white;
-  border: 1px solid #e4e7ed;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
   border-radius: 4px;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
   min-width: 150px;
@@ -27226,7 +27227,7 @@ el-icon.is-loading {
 }
 
 .context-menu-item:hover {
-  background-color: #f5f7fa;
+  background-color: var(--el-fill-color-light);
 }
 
 .context-menu-item .el-icon {
@@ -27236,7 +27237,7 @@ el-icon.is-loading {
 
 .context-menu-item span {
   font-size: 14px;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 /* 文件项样式 */
@@ -27260,13 +27261,13 @@ el-icon.is-loading {
   width: 100px;
   text-align: right;
   margin-right: 16px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .file-date {
   width: 180px;
   text-align: right;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 12px;
 }
 
@@ -27283,7 +27284,7 @@ el-icon.is-loading {
 /* 离线设备行样式 */
 .device-selection-table :deep(.device-offline-row) {
   background-color: #f5f7fa !important;
-  color: #909399 !important;
+  color: var(--el-text-color-secondary) !important;
   opacity: 0.6;
 }
 
@@ -27320,7 +27321,7 @@ el-icon.is-loading {
 .upload-progress-text {
   margin-top: 15px;
   font-size: 14px;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .xterm .xterm-viewport {
@@ -27367,7 +27368,7 @@ el-icon.is-loading {
 
 .batch-slot-checkbox-group .slot-gray .el-checkbox-button__inner {
   border-color: #909399;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .batch-slot-checkbox-group .el-checkbox-button.is-checked .el-checkbox-button__inner {
@@ -27429,7 +27430,7 @@ el-icon.is-loading {
 .announcement-text {
   font-size: 15px;
   line-height: 1.8;
-  color: #606266;
+  color: var(--el-text-color-regular);
   white-space: pre-wrap;
   text-align: center;
   padding: 0 10px;

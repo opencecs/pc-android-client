@@ -51,7 +51,7 @@
                 <el-tag v-if="getDeviceServiceStatus(scope.row.ip).mytPanel" type="success" size="small">互联</el-tag>
                 <el-tag v-if="getDeviceServiceStatus(scope.row.ip).tunnel" type="warning" size="small">穿透</el-tag>
                 <el-tag v-if="getDeviceServiceStatus(scope.row.ip).mytAgent" type="primary" size="small">Agent</el-tag>
-                <span v-if="!getDeviceServiceStatus(scope.row.ip).mytPanel && !getDeviceServiceStatus(scope.row.ip).tunnel && !getDeviceServiceStatus(scope.row.ip).mytAgent" style="color: #c0c4cc; font-size: 12px;">未安装</span>
+                <span v-if="!getDeviceServiceStatus(scope.row.ip).mytPanel && !getDeviceServiceStatus(scope.row.ip).tunnel && !getDeviceServiceStatus(scope.row.ip).mytAgent" style="color: var(--el-text-color-placeholder); font-size: 12px;">未安装</span>
               </div>
             </template>
           </el-table-column>
@@ -211,11 +211,11 @@
             </el-alert>
             <!-- 检测发现服务未运行时，附上设备 frpc 日志尾部，便于直接看出原因（如网络未就绪、凭据错误） -->
             <pre v-if="tunnelStatus.detail" class="tunnel-detail">{{ tunnelStatus.detail }}</pre>
-            <div v-if="tunnelStatus.serverAddr" style="margin-top: 6px; font-size: 13px; color: #606266;">
+            <div v-if="tunnelStatus.serverAddr" style="margin-top: 6px; font-size: 13px; color: var(--el-text-color-regular);">
               服务端地址: <span style="font-weight: 600;">{{ tunnelStatus.serverAddr }}:7500</span>
             </div>
             <!-- frpc 管理界面凭据：不再内嵌到 URL（会导致面板自身的 /api 请求失败），改为展示+可复制 -->
-            <div v-if="tunnelStatus.frpcWebUser" style="margin-top: 6px; font-size: 13px; color: #606266;">
+            <div v-if="tunnelStatus.frpcWebUser" style="margin-top: 6px; font-size: 13px; color: var(--el-text-color-regular);">
               管理界面账号:
               <span style="font-weight: 600;">{{ tunnelStatus.frpcWebUser }}</span> /
               <span style="font-weight: 600;">{{ tunnelStatus.frpcWebPassword }}</span>
@@ -246,12 +246,12 @@
               <div class="service-name">{{ t('extension.mytAgent') }}</div>
               <div class="service-desc">{{ t('extension.mytAgentDesc') }}</div>
               <div style="margin-top: 4px; font-size: 12px;">
-                <span style="color: #909399;">{{ t('extension.mytAgentSdkRequired') }}: </span>
+                <span style="color: var(--el-text-color-secondary);">{{ t('extension.mytAgentSdkRequired') }}: </span>
                 <span :style="{ color: mytAgentSdkMet ? '#67C23A' : '#E6A23C', fontWeight: 'bold' }">
                   ≥ 177
                 </span>
-                <span style="color: #909399; margin-left: 8px;">{{ t('extension.mytAgentSdkCurrent') }}: </span>
-                <span style="color: #606266; font-weight: bold;">
+                <span style="color: var(--el-text-color-secondary); margin-left: 8px;">{{ t('extension.mytAgentSdkCurrent') }}: </span>
+                <span style="color: var(--el-text-color-regular); font-weight: bold;">
                   {{ getSdkIntVersion(selectedDevice) || '-' }}
                 </span>
               </div>
@@ -336,7 +336,7 @@
       <div v-if="usageGuideType === 'tunnel'" class="usage-guide">
         <div style="line-height: 2; font-size: 14px;">
           <p><strong>什么是公网穿透？</strong></p>
-          <p style="color: #909399;">公网穿透可以将内网设备的服务暴露到公网，让你从任何地方远程访问。</p>
+          <p style="color: var(--el-text-color-secondary);">公网穿透可以将内网设备的服务暴露到公网，让你从任何地方远程访问。</p>
           <el-divider />
           <p><strong>使用步骤：</strong></p>
           <p><strong>1.</strong> 准备一台有公网 IP 的 Linux 服务器</p>
@@ -360,7 +360,7 @@
       <div v-if="usageGuideType === 'mytAgent'" class="usage-guide">
         <div style="line-height: 2; font-size: 14px;">
           <p><strong>{{ t('extension.mytAgent') }}</strong></p>
-          <p style="color: #909399;">{{ t('extension.mytAgentGuideIntro') }}</p>
+          <p style="color: var(--el-text-color-secondary);">{{ t('extension.mytAgentGuideIntro') }}</p>
           <el-divider />
           <p><strong>{{ t('extension.mytAgentGuideReq') }}</strong></p>
           <p><strong>1.</strong> {{ t('extension.mytAgentGuideStep1') }}</p>
@@ -1084,7 +1084,7 @@ const uninstallTunnelAll = async () => {
 }
 
 .service-desc {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 12px;
 }
 

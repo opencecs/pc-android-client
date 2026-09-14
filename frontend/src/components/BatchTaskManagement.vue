@@ -110,7 +110,7 @@
 <div style="margin-bottom: 10px;">
                   <div style="margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
                     <span style="font-weight: bold; font-size: 13px;">🔖 {{ $t('batchTask.quickCmd') }}</span>
-                    <span style="color: #999; font-size: 10px;">{{ $t('batchTask.clickToFill') }}</span>
+                    <span style="color: var(--el-text-color-secondary); font-size: 10px;">{{ $t('batchTask.clickToFill') }}</span>
                   </div>
                   
                   <!-- 分类显示命令 -->
@@ -177,7 +177,7 @@
                           + {{ $t('batchTask.addShortcut') }}
                         </el-button>
                       </div>
-                      <div v-if="customShortcuts.length === 0" style="color: #bbb; font-size: 11px; text-align: center; padding: 4px 0;">
+                      <div v-if="customShortcuts.length === 0" style="color: var(--el-text-color-placeholder); font-size: 11px; text-align: center; padding: 4px 0;">
                         {{ $t('batchTask.noCustomShortcut') }}
                       </div>
                       <div v-else style="display: flex; flex-wrap: wrap; gap: 3px;">
@@ -200,7 +200,7 @@
                           </template>
                           <div style="font-size: 12px;">
                             <div style="font-weight: bold; margin-bottom: 4px;">{{ shortcut.name }}</div>
-                            <div style="font-family: 'Courier New', monospace; background: #f5f5f5; padding: 4px 6px; border-radius: 3px; word-break: break-all; color: #606266; max-height: 120px; overflow-y: auto;">
+                            <div style="font-family: 'Courier New', monospace; background: #f5f5f5; padding: 4px 6px; border-radius: 3px; word-break: break-all; color: var(--el-text-color-regular); max-height: 120px; overflow-y: auto;">
                               {{ shortcut.command }}
                             </div>
                             <div style="margin-top: 6px; display: flex; justify-content: flex-end; gap: 4px;">
@@ -216,7 +216,7 @@
 
                 <!-- 循环次数 + 执行按钮 -->
                 <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-                  <span style="white-space: nowrap; font-size: 13px; color: #606266;">{{ $t('common.loopCount') }}</span>
+                  <span style="white-space: nowrap; font-size: 13px; color: var(--el-text-color-regular);">{{ $t('common.loopCount') }}</span>
                   <el-input-number
                     v-model="loopCount"
                     :min="1"
@@ -226,7 +226,7 @@
                     controls-position="right"
                     style="width: 120px;"
                   />
-                  <span style="font-size: 12px; color: #999;">次</span>
+                  <span style="font-size: 12px; color: var(--el-text-color-secondary);">次</span>
                   <el-button
                     type="primary"
                     size="default"
@@ -267,7 +267,7 @@
                         style="display: flex; align-items: center; margin: 6px 0; gap: 6px;"
                       >
                         <div style="flex: 1; height: 1px; background: #dcdfe6;"></div>
-                        <span style="font-size: 11px; color: #909399; white-space: nowrap;">{{ $t('batchTask.loopPrefix') }} {{ result.loop }} / {{ result.total }} {{ $t('batchTask.loopSuffix') }}</span>
+                        <span style="font-size: 11px; color: var(--el-text-color-secondary); white-space: nowrap;">{{ $t('batchTask.loopPrefix') }} {{ result.loop }} / {{ result.total }} {{ $t('batchTask.loopSuffix') }}</span>
                         <div style="flex: 1; height: 1px; background: #dcdfe6;"></div>
                       </div>
                       <!-- 正常结果行 -->
@@ -285,9 +285,9 @@
                             <span v-if="result.containerName" style="color: #409EFF; font-size: 10px;">
                               {{ formatContainerName(result.containerName) }}
                             </span>
-                            <span style="color: #999; font-size: 10px;">{{ result.containerShortID }}</span>
+                            <span style="color: var(--el-text-color-secondary); font-size: 10px;">{{ result.containerShortID }}</span>
                           </div>
-                          <span style="color: #999; font-size: 10px;">{{ result.duration }}</span>
+                          <span style="color: var(--el-text-color-secondary); font-size: 10px;">{{ result.duration }}</span>
                         </div>
                         <div v-if="result.output" style="font-family: 'Courier New', monospace; font-size: 10px; color: #666; background: #f5f5f5; padding: 5px; border-radius: 2px; max-height: 150px; overflow-y: auto; line-height: 1.3; white-space: pre-wrap; word-break: break-all;">
                           {{ result.output }}

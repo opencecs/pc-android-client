@@ -264,7 +264,7 @@
           
           <!-- 统一使用滑动条控制缩放（坑位模式和批量模式通用） -->
           <div style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
-            <span style="font-size: 12px; color: #606266; white-space: nowrap;">{{ t('common.zoom') }}:</span>
+            <span style="font-size: 12px; color: var(--el-text-color-regular); white-space: nowrap;">{{ t('common.zoom') }}:</span>
             <el-slider 
               v-model="screenshotScale" 
               :min="25" 
@@ -276,7 +276,7 @@
               size="small"
               @change="saveScreenshotScale"
             />
-            <span style="font-size: 12px; color: #909399; min-width: 36px;">{{ screenshotScale }}%</span>
+            <span style="font-size: 12px; color: var(--el-text-color-secondary); min-width: 36px;">{{ screenshotScale }}%</span>
           </div>
           
           <el-select v-model="layoutMode" :placeholder="t('common.layout')" size="small" style="width: 80px;">
@@ -608,17 +608,17 @@
         
         <!-- 批量模式：选中的云机列表 -->
         <div v-else class="batch-cloud-machines">
-          <h3 style="margin-bottom: 16px; font-size: 14px; color: #606266;">
+          <h3 style="margin-bottom: 16px; font-size: 14px; color: var(--el-text-color-regular);">
             {{ t('common.selectedCloudMachineList', { count: selectedCloudMachines.length }) }}
           </h3>
           
           <!-- 空状态提示 -->
-          <div v-if="selectedCloudMachines.length === 0" style="text-align: center; padding: 60px 20px; color: #909399;">
-            <el-icon :size="48" style="margin-bottom: 16px; color: #C0C4CC;">
+          <div v-if="selectedCloudMachines.length === 0" style="text-align: center; padding: 60px 20px; color: var(--el-text-color-secondary);">
+            <el-icon :size="48" style="margin-bottom: 16px; color: var(--el-text-color-placeholder);">
               <InfoFilled />
             </el-icon>
             <p style="font-size: 14px; margin: 0 0 8px 0;">{{ t('common.noSelectedCloudMachine') }}</p>
-            <p style="font-size: 12px; margin: 0; color: #C0C4CC;">{{ t('common.pleaseSelectCloudMachine') }}</p>
+            <p style="font-size: 12px; margin: 0; color: var(--el-text-color-placeholder);">{{ t('common.pleaseSelectCloudMachine') }}</p>
           </div>
           
           <!-- 云机列表 - 网格布局 -->
@@ -798,7 +798,7 @@
   >
     <div class="add-device-to-group-content">
       <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-        <span style="color: #909399;">{{ t('common.selectDevicesToAdd') }}</span>
+        <span style="color: var(--el-text-color-secondary);">{{ t('common.selectDevicesToAdd') }}</span>
         <el-checkbox
           v-model="isAllDevicesToAddSelected"
           :indeterminate="isDevicesToAddIndeterminate"
@@ -865,7 +865,7 @@
           controls-position="right"
           style="width: 100%;"
         />
-        <div style="font-size: 12px; color: #909399; margin-top: 4px;">{{ t('common.targetSlotHint') }}</div>
+        <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px;">{{ t('common.targetSlotHint') }}</div>
       </el-form-item>
       <el-form-item :label="t('common.copyCount')">
         <el-input-number
@@ -915,7 +915,7 @@
 
       <!-- 注意事项 -->
       <el-divider content-position="left">
-        <span style="font-size: 13px; color: #606266;">{{ t('common.projectionNotes') }}</span>
+        <span style="font-size: 13px; color: var(--el-text-color-regular);">{{ t('common.projectionNotes') }}</span>
       </el-divider>
       <ul class="projection-settings-notes">
         <li>{{ t('common.projectionNote1') }}</li>
@@ -3019,7 +3019,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   background-color: #f0f2f5;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: max(8px, calc(14px * var(--screenshot-scale, 1)));
 }
 
@@ -3030,7 +3030,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   background-color: #f0f2f5;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: max(8px, calc(14px * var(--screenshot-scale, 1)));
 }
 
@@ -3041,7 +3041,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   background-color: #f0f2f5;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: max(8px, calc(14px * var(--screenshot-scale, 1)));
 }
 
@@ -3133,7 +3133,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   background-color: #f0f2f5;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .screenshot-error-small {
@@ -3153,7 +3153,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   background-color: #f0f2f5;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .device-ip-text {
@@ -3211,7 +3211,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid #ebeef5;
   font-size: 13px;
   font-weight: 500;
-  color: #606266;
+  color: var(--el-text-color-regular);
   cursor: pointer;
   transition: background-color 0.2s;
   /* display: inline-block; */
@@ -3273,7 +3273,7 @@ onBeforeUnmount(() => {
   align-items: center;
   cursor: grab;
   margin-right: 4px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   opacity: 0.5;
   transition: opacity 0.2s, color 0.2s;
 }
@@ -3336,7 +3336,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   font-size: 13px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   background-color: transparent;
   border-radius: 6px;
   padding: 4px 8px;
@@ -3363,7 +3363,7 @@ onBeforeUnmount(() => {
 
 .mode-switch-text .divider {
   padding: 0 4px;
-  color: #c0c4cc;
+  color: var(--el-text-color-placeholder);
   font-weight: 300;
 }
 
@@ -3452,7 +3452,7 @@ onBeforeUnmount(() => {
 }
 .batch-device-ip {
   font-size: 13px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   margin-left: 4px;
 }
 .batch-device-machines {
@@ -3469,12 +3469,12 @@ onBeforeUnmount(() => {
 }
 .batch-machine-name {
   font-size: 12px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   margin-left: 4px;
 }
 .batch-expand-icon {
   transition: transform 0.2s;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 12px;
   margin-right: 2px;
 }
@@ -3487,7 +3487,7 @@ onBeforeUnmount(() => {
 .batch-empty-hint {
   padding: 8px 12px;
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--el-text-color-placeholder);
   text-align: center;
 }
 
@@ -3638,18 +3638,18 @@ onBeforeUnmount(() => {
 .projection-settings-title {
   font-size: 14px;
   font-weight: 500;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 .projection-settings-desc {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   line-height: 1.5;
 }
 .projection-settings-notes {
   margin: 8px 0 0;
   padding-left: 20px;
   font-size: 12px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   line-height: 1.7;
 }
 .projection-settings-notes li {

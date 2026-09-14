@@ -73,7 +73,7 @@
           <span class="selected-count" v-if="selectedModels.length > 0">
             {{ $t('model.selectedCount', { count: selectedModels.length }) }}
           </span>
-          <span class="selected-count" v-else style="color: #909399;">{{ $t('model.noModelSelected') }}</span>
+          <span class="selected-count" v-else style="color: var(--el-text-color-secondary);">{{ $t('model.noModelSelected') }}</span>
           <el-button
             type="primary"
             size="small"
@@ -1401,7 +1401,7 @@ defineExpose({
   padding: 10px 20px;
   cursor: pointer;
   font-size: 14px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   margin-right: 10px;
   border-bottom: 2px solid transparent;
   transition: all 0.3s ease;
@@ -1458,7 +1458,7 @@ defineExpose({
 /* 自定义总条数文本样式 */
 .total-text {
   font-size: 14px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   line-height: 32px;
   margin-left: 10px;
 }
@@ -1501,7 +1501,7 @@ defineExpose({
 .array-item-header {
   margin-bottom: 10px;
   font-weight: bold;
-  color: #303133;
+  color: var(--el-text-color-primary);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1521,7 +1521,7 @@ defineExpose({
   margin-bottom: 20px;
   font-weight: bold;
   font-size: 16px;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 /* 配置表单样式 */
@@ -1541,7 +1541,7 @@ defineExpose({
 /* 标签样式 */
 .config-form .el-form-item__label {
   font-weight: 500;
-  color: #303133;
+  color: var(--el-text-color-primary);
   width: 180px;
   text-align: right;
   padding-right: 20px;
@@ -1581,7 +1581,7 @@ defineExpose({
 .json-help {
   margin-top: 5px;
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 /* 表单滚动条样式 */
@@ -1619,7 +1619,7 @@ defineExpose({
 .dialog-title {
   font-size: 16px;
   font-weight: 500;
-  color: #000;
+  color: var(--el-text-color-primary);
 }
 
 .dialog-warning {
@@ -1654,7 +1654,7 @@ defineExpose({
 
 .push-progress-title {
   font-size: 13px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   margin-bottom: 8px;
   font-weight: 500;
 }
@@ -1662,7 +1662,7 @@ defineExpose({
 .push-progress-current {
   margin-top: 6px;
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 /* 待推送机型展示 */
@@ -1701,7 +1701,7 @@ defineExpose({
 .dialog-description {
   margin: 0;
   font-size: 14px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1734,7 +1734,7 @@ defineExpose({
 .qrcode-description {
   margin-bottom: 20px;
   font-size: 16px;
-  color: #303133;
+  color: var(--el-text-color-primary);
   font-weight: 500;
 }
 
@@ -1754,7 +1754,7 @@ defineExpose({
 
 .qrcode-url {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   word-break: break-all;
   text-align: center;
   /* max-width: 350px; */
@@ -1817,7 +1817,7 @@ defineExpose({
 .help-section-title {
   font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
   margin-bottom: 10px;
   padding: 6px 12px;
   background: #f0f7ff;
@@ -1828,7 +1828,7 @@ defineExpose({
 .help-section p,
 .help-section ul {
   font-size: 13px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   line-height: 1.8;
   margin: 0 0 6px 0;
   padding-left: 16px;

@@ -16,7 +16,7 @@
         <!-- 加载中 -->
         <div v-if="containersLoading" style="text-align:center;padding:16px">
           <el-icon class="rotating"><Loading /></el-icon>
-          <span style="font-size:12px;color:#909399;margin-left:6px">{{ $t('common.loadingContainers') }}</span>
+          <span style="font-size:12px;color:var(--el-text-color-secondary);margin-left:6px">{{ $t('common.loadingContainers') }}</span>
         </div>
 
         <!-- 容器列表（按主机 IP 分组） -->
@@ -25,7 +25,7 @@
             <div v-for="group in containerGroups" :key="group.deviceIP" class="device-group">
               <!-- 主机标题行 -->
               <div class="group-header" @click="toggleGroup(group.deviceIP)">
-                <el-icon style="font-size:12px;color:#909399">
+                <el-icon style="font-size:12px;color:var(--el-text-color-secondary)">
                   <component :is="collapsedGroups.has(group.deviceIP) ? ArrowRight : ArrowDown" />
                 </el-icon>
                 <span class="group-ip">{{ group.deviceIP }}</span>
@@ -285,7 +285,7 @@
         <el-form label-width="120px">
           <el-form-item :label="$t('common.breakerRoundLimit')">
             <el-input-number v-model="globalConfig.maxRounds" :min="0" :max="200" style="width:100%" />
-            <div style="font-size:11px;color:#909399;margin-top:4px">{{ $t('common.breakerHint') }}</div>
+            <div style="font-size:11px;color:var(--el-text-color-secondary);margin-top:4px">{{ $t('common.breakerHint') }}</div>
           </el-form-item>
           <el-form-item :label="$t('common.stepDelay')">
             <el-input-number v-model="globalConfig.stepDelayMs" :min="0" :max="5000" :step="100" style="width:100%" />
@@ -1592,7 +1592,7 @@ defineExpose({ fetchRpaAgent })
   user-select: none;
   font-size: 12px;
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .group-header:hover {
@@ -1639,7 +1639,7 @@ defineExpose({ fetchRpaAgent })
 .ct-name {
   font-size: 12px;
   font-weight: 500;
-  color: #303133;
+  color: var(--el-text-color-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1653,7 +1653,7 @@ defineExpose({ fetchRpaAgent })
 
 .ct-port {
   font-size: 10px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-family: monospace;
 }
 
@@ -1684,7 +1684,7 @@ defineExpose({ fetchRpaAgent })
 .progress-ip {
   flex: 1;
   font-size: 12px;
-  color: #303133;
+  color: var(--el-text-color-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1704,8 +1704,8 @@ defineExpose({ fetchRpaAgent })
   line-height: 1.5;
 }
 
-.log-time { color: #909399; flex-shrink: 0; }
-.log-text { color: #606266; word-break: break-all; }
+.log-time { color: var(--el-text-color-secondary); flex-shrink: 0; }
+.log-text { color: var(--el-text-color-regular); word-break: break-all; }
 .log-line.success .log-text { color: #67c23a; }
 .log-line.error .log-text { color: #f56c6c; }
 .log-line.warn .log-text { color: #e6a23c; }
@@ -1731,7 +1731,7 @@ defineExpose({ fetchRpaAgent })
 
 .task-cards-title {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-bottom: 8px;
 }
 
@@ -1759,7 +1759,7 @@ defineExpose({ fetchRpaAgent })
 .task-card.active { border-color: #409eff; background: #ecf5ff; box-shadow: 0 0 0 2px rgba(64,158,255,0.2); }
 .task-card.disabled { opacity: 0.6; cursor: not-allowed; pointer-events: none; }
 .task-card-icon { font-size: 20px; }
-.task-card-name { font-size: 11px; color: #303133; }
+.task-card-name { font-size: 11px; color: var(--el-text-color-primary); }
 
 .chat-area {
   flex: 1;
@@ -1786,10 +1786,10 @@ defineExpose({ fetchRpaAgent })
 }
 
 .chat-msg.user .msg-bubble { background: #409eff; color: #fff; }
-.chat-msg.assistant .msg-bubble { background: #f5f7fa; border: 1px solid #e4e7ed; color: #303133; }
-.chat-msg.tool .msg-bubble { background: #fdf6ec; border: 1px solid #faecd8; color: #606266; font-size: 12px; }
+.chat-msg.assistant .msg-bubble { background: #f5f7fa; border: 1px solid #e4e7ed; color: var(--el-text-color-primary); }
+.chat-msg.tool .msg-bubble { background: #fdf6ec; border: 1px solid #faecd8; color: var(--el-text-color-regular); font-size: 12px; }
 
-.msg-role { font-size: 11px; color: #909399; margin-bottom: 4px; }
+.msg-role { font-size: 11px; color: var(--el-text-color-secondary); margin-bottom: 4px; }
 .chat-msg.user .msg-role { color: rgba(255,255,255,0.7); }
 
 .msg-content { word-break: break-word; }
@@ -1804,10 +1804,10 @@ defineExpose({ fetchRpaAgent })
 
 .tool-calls { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
 .tool-call-item { display: flex; align-items: center; gap: 6px; }
-.tool-args { font-size: 11px; color: #909399; word-break: break-all; }
+.tool-args { font-size: 11px; color: var(--el-text-color-secondary); word-break: break-all; }
 
 .tool-result { margin-top: 4px; display: flex; align-items: center; gap: 6px; }
-.tool-result-text { font-size: 11px; color: #606266; word-break: break-all; }
+.tool-result-text { font-size: 11px; color: var(--el-text-color-regular); word-break: break-all; }
 
 .input-area {
   flex-shrink: 0;
@@ -1829,5 +1829,5 @@ defineExpose({ fetchRpaAgent })
 .input-row { display: flex; gap: 8px; align-items: flex-end; }
 .input-row .el-textarea { flex: 1; }
 .input-btns { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
-.input-tips { font-size: 11px; color: #909399; margin-top: 6px; }
+.input-tips { font-size: 11px; color: var(--el-text-color-secondary); margin-top: 6px; }
 </style>

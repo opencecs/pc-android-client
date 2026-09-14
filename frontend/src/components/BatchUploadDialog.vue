@@ -44,25 +44,25 @@
           <el-checkbox label="replace" style="margin: 0; height: auto;">
             <div style="line-height: 1.3; font-size: 12px;">
               <span>替换已存在的应用</span>
-              <span style="color: #909399; font-size: 10px; margin-left: 4px;">(-r 覆盖安装)</span>
+              <span style="color: var(--el-text-color-secondary); font-size: 10px; margin-left: 4px;">(-r 覆盖安装)</span>
             </div>
           </el-checkbox>
           <el-checkbox label="test" style="margin: 0; height: auto;">
             <div style="line-height: 1.3; font-size: 12px;">
               <span>允许安装测试应用</span>
-              <span style="color: #909399; font-size: 10px; margin-left: 4px;">(-t 测试模式)</span>
+              <span style="color: var(--el-text-color-secondary); font-size: 10px; margin-left: 4px;">(-t 测试模式)</span>
             </div>
           </el-checkbox>
           <el-checkbox label="grant" style="margin: 0; height: auto;">
             <div style="line-height: 1.3; font-size: 12px;">
               <span>自动授予所有权限</span>
-              <span style="color: #909399; font-size: 10px; margin-left: 4px;">(-g 自动授权)</span>
+              <span style="color: var(--el-text-color-secondary); font-size: 10px; margin-left: 4px;">(-g 自动授权)</span>
             </div>
           </el-checkbox>
           <el-checkbox label="deleteAfterInstall" style="margin: 0; height: auto;">
             <div style="line-height: 1.3; font-size: 12px;">
               <span>安装成功后删除安装包</span>
-              <span style="color: #909399; font-size: 10px; margin-left: 4px;">(失败时保留)</span>
+              <span style="color: var(--el-text-color-secondary); font-size: 10px; margin-left: 4px;">(失败时保留)</span>
             </div>
           </el-checkbox>
         </el-checkbox-group>
@@ -85,7 +85,7 @@
 
         <!-- 共享目录路径设置 -->
         <div style="margin-bottom: 12px; padding: 10px 12px; background: #f5f7fa; border-radius: 4px; border: 1px solid #e4e7ed;">
-          <div style="font-size: 12px; color: #606266; margin-bottom: 8px; font-weight: 500;">📂 文件来源目录</div>
+          <div style="font-size: 12px; color: var(--el-text-color-regular); margin-bottom: 8px; font-weight: 500;">📂 文件来源目录</div>
           <div style="display: flex; align-items: center; gap: 8px;">
             <el-input
               v-model="sharedDirPathInfo.path"
@@ -105,7 +105,7 @@
               v-if="!sharedDirPathInfo.isDefault"
               type="text"
               size="small"
-              style="color: #909399; padding: 0;"
+              style="color: var(--el-text-color-secondary); padding: 0;"
               :loading="sharedDirLoading"
               @click="handleResetSharedDirPath"
             >
@@ -641,7 +641,7 @@ defineExpose({
 .section-title {
   font-weight: 500;
   margin-bottom: 8px;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .slots-list {
@@ -694,14 +694,14 @@ defineExpose({
 .node-size {
   width: 80px;
   text-align: right;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 12px;
 }
 
 .node-date {
   width: 150px;
   text-align: right;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 12px;
   margin-left: 12px;
 }
@@ -721,7 +721,7 @@ defineExpose({
 .upload-status {
   margin-top: 8px;
   text-align: center;
-  color: #606266;
+  color: var(--el-text-color-regular);
   font-size: 14px;
 }
 </style>

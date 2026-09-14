@@ -143,7 +143,7 @@
                 <el-icon><Search /></el-icon>
               </template>
             </el-input>
-            <span style="font-size: 12px; color: #909399;width: 30px;">{{ t('common.group') }}:</span>
+            <span style="font-size: 12px; color: var(--el-text-color-secondary);width: 30px;">{{ t('common.group') }}:</span>
             <el-select 
               v-model="localGroupFilter" 
               size="small" 
@@ -386,7 +386,7 @@
             :title="t('common.collapseRightSidebar')"
             style="
               background-color: #f0f0f0; 
-              color: #606266;
+              color: var(--el-text-color-regular);
               border: 1px solid #dcdfe6;
               border-radius: 50%; 
               width: 40px; 
@@ -671,7 +671,7 @@
                   >
                     {{ t('common.closePassword') }}
                   </el-button>
-                  <span class="password-hint" style="color: #606266; font-size: 12px;">
+                  <span class="password-hint" style="color: var(--el-text-color-regular); font-size: 12px;">
                     {{ t('common.passwordHint') }}
                   </span>
                 </el-space>
@@ -4058,13 +4058,13 @@ const refreshBoxImages = async () => {
   align-items: center;
   gap: 5px;
   font-size: 12px;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .image-description {
   margin-bottom: 15px;
   font-size: 13px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   line-height: 1.5;
 }
 
@@ -4082,7 +4082,7 @@ const refreshBoxImages = async () => {
   text-align: center;
   margin-top: 10px;
   font-size: 14px;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .image-table-wrapper {

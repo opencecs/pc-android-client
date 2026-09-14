@@ -373,9 +373,9 @@
                                 <!-- 备份机型 -->
                                 <el-collapse-item name="backup-model" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📦 备份机型</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📦 备份机型</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p>用于将设备上的云机配置（机型模板）导出保存到本地，或将本地备份的机型导入到其他设备。</p>
                                         <ul style="margin: 6px 0; padding-left: 20px;">
                                             <li><strong>导出</strong>：在左侧选择设备后，右侧列表会显示该设备上的备份机型。点击"导出"按钮，将机型文件下载到本地保存。</li>
@@ -390,9 +390,9 @@
                                 <!-- 备份云机 -->
                                 <el-collapse-item name="backup-machine" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">☁️ 备份云机</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">☁️ 备份云机</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p>用于将设备上的完整云机镜像文件导出到本地，或将本地已下载的云机镜像恢复到指定设备和坑位。</p>
                                         <ul style="margin: 6px 0; padding-left: 20px;">
                                             <li><strong>下载</strong>：点击"下载"按钮，将设备上的云机备份文件下载到本机保存。下载过程中按钮会显示"下载中"状态，请勿重复点击。</li>
@@ -410,9 +410,9 @@
                                 <!-- 批量导入 -->
                                 <el-collapse-item name="batch-import-help" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">🚀 批量导入</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">🚀 批量导入</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p>支持将本地已有的云机备份文件批量分发并导入到多台设备，适合大规模初始化场景。</p>
                                         <ul style="margin: 6px 0; padding-left: 20px;">
                                             <li>在"批量导入"标签页中，选择本地备份文件，再勾选目标设备，点击"开始导入"即可批量执行。</li>
@@ -425,9 +425,9 @@
                                 <!-- 云机管理 -->
                                 <el-collapse-item name="cloud-manage-help" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">🖥️ 云机管理</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">🖥️ 云机管理</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p>用于按坑位管理和操作设备上的云机实例，支持开机、关机、删除、修改名称等操作。</p>
                                         <ul style="margin: 6px 0; padding-left: 20px;">
                                             <li><strong>选择设备</strong>：在左侧设备列表中点击选择目标设备，右侧将显示该设备上的云机列表。</li>
@@ -459,9 +459,9 @@
                                 <!-- 备份机型 -->
                                 <el-collapse-item name="backup-model" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">📦 Backup Model</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">📦 Backup Model</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p>Export VM configurations (model templates) from devices to local storage, or import locally backed-up models to other devices.</p>
                                         <ul style="margin: 6px 0; padding-left: 20px;">
                                             <li><strong>Export</strong>: After selecting a device on the left, the right panel shows its backup models. Click "Export" to download the model file to local storage.</li>
@@ -476,9 +476,9 @@
                                 <!-- 备份云机 -->
                                 <el-collapse-item name="backup-machine" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">☁️ Backup VM</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">☁️ Backup VM</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p>Export complete VM image files from devices to local storage, or restore locally downloaded VM images to specified devices and slots.</p>
                                         <ul style="margin: 6px 0; padding-left: 20px;">
                                             <li><strong>Download</strong>: Click "Download" to save the VM backup file locally. The button will show "Downloading" status during the process — do not click repeatedly.</li>
@@ -496,9 +496,9 @@
                                 <!-- 批量导入 -->
                                 <el-collapse-item name="batch-import-help" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">🚀 Batch Import</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">🚀 Batch Import</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p>Supports batch distribution and import of locally available VM backup files to multiple devices — ideal for large-scale initialization scenarios.</p>
                                         <ul style="margin: 6px 0; padding-left: 20px;">
                                             <li>In the "Batch Import" tab, select local backup files, check target devices, then click "Start Import" to execute in batch.</li>
@@ -511,9 +511,9 @@
                                 <!-- Cloud Manage -->
                                 <el-collapse-item name="cloud-manage-help" style="margin-bottom: 8px;">
                                     <template #title>
-                                        <span style="font-weight: 600; color: #303133; font-size: 13px;">🖥️ Cloud Manage</span>
+                                        <span style="font-weight: 600; color: var(--el-text-color-primary); font-size: 13px;">🖥️ Cloud Manage</span>
                                     </template>
-                                    <div style="font-size: 13px; line-height: 1.8; color: #606266; padding: 8px 12px;">
+                                    <div style="font-size: 13px; line-height: 1.8; color: var(--el-text-color-regular); padding: 8px 12px;">
                                         <p>Manage and operate cloud machine instances by slot on devices. Supports power on/off, delete, and rename operations.</p>
                                         <ul style="margin: 6px 0; padding-left: 20px;">
                                             <li><strong>Select Device</strong>: Click a device in the left panel to view its machines on the right.</li>
@@ -618,9 +618,9 @@
             <div v-if="backupMachineCreating" style="margin-top: 8px;">
                 <el-progress :percentage="exportProgress" :stroke-width="16" striped :striped-flow="exportProgress < 100"
                     :status="exportProgress >= 100 ? 'success' : undefined" />
-                <div style="margin-top: 8px; min-height: 20px; font-size: 13px; color: #606266;">
+                <div style="margin-top: 8px; min-height: 20px; font-size: 13px; color: var(--el-text-color-regular);">
                     <span v-if="exportMsg">{{ exportMsg }}</span>
-                    <span v-if="exportCurrent != null && exportTotal != null" style="margin-left: 8px; color: #909399;">
+                    <span v-if="exportCurrent != null && exportTotal != null" style="margin-left: 8px; color: var(--el-text-color-secondary);">
                         ({{ exportCurrent }} / {{ exportTotal }})
                     </span>
                 </div>
@@ -667,13 +667,13 @@
                             </div>
                         </el-option>
                     </el-select>
-                    <div v-if="importBackupFromCloud" style="font-size: 12px; color: #909399; margin-top: 4px;">
+                    <div v-if="importBackupFromCloud" style="font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px;">
                         云机备份仅存在于当前设备，不可跨设备导入
                     </div>
                 </el-form-item>
                 <el-form-item :label="t('backup.slotNumber')" v-if="importBackupDeviceIP">
                     <el-input-number v-model="importBackupSlot" :min="1" :max="importBackupSlotList.length" size="medium" style="width: 100%;" />
-                    <div style="font-size: 12px; color: #909399; margin-top: 4px;">
+                    <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px;">
                         {{ t('backup.availableSlots') }}: {{ importBackupSlotList.join(', ') || t('backup.noAvailableSlots') }}
                     </div>
                 </el-form-item>
@@ -682,7 +682,7 @@
                 </el-form-item>
                 <el-form-item :label="t('backup.powerOnAfterImport')" v-if="importBackupDeviceIP">
                     <el-switch v-model="importBackupStart" />
-                    <span style="font-size: 12px; color: #909399; margin-left: 8px;">{{ t('backup.powerOnAfterImportTip') }}</span>
+                    <span style="font-size: 12px; color: var(--el-text-color-secondary); margin-left: 8px;">{{ t('backup.powerOnAfterImportTip') }}</span>
                 </el-form-item>
             </el-form>
 
@@ -690,9 +690,9 @@
             <div v-if="importBackupLoading" style="margin-top: 4px;">
                 <el-progress :percentage="importProgress" :stroke-width="16" striped :striped-flow="importProgress < 100"
                     :status="importProgress >= 100 ? 'success' : undefined" />
-                <div style="font-size: 13px; color: #606266; margin-top: 8px;">
+                <div style="font-size: 13px; color: var(--el-text-color-regular); margin-top: 8px;">
                     {{ importMsg || '导入中…' }}
-                    <span v-if="importDetailText" style="color: #909399;">（{{ importDetailText }}）</span>
+                    <span v-if="importDetailText" style="color: var(--el-text-color-secondary);">（{{ importDetailText }}）</span>
                 </div>
             </div>
 
@@ -2321,7 +2321,7 @@ defineExpose({
     padding: 12px 16px;
     border-bottom: 1px solid #ebeef5;
     font-weight: 600;
-    color: #303133;
+    color: var(--el-text-color-primary);
     background: #f5f7fa;
     display: flex;
     justify-content: space-between;
@@ -2360,7 +2360,7 @@ defineExpose({
 
 .device-ip {
     font-size: 14px;
-    color: #606266;
+    color: var(--el-text-color-regular);
     white-space: nowrap;
 }
 

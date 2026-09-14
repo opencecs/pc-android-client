@@ -74,20 +74,20 @@
       <div v-if="backupFiles.length === 0 && !loading" style="min-height: 300px;">
         <el-empty description=" ">
           <template #image>
-            <el-icon style="font-size: 80px; color: #C0C4CC;">
+            <el-icon style="font-size: 80px; color: var(--el-text-color-placeholder);">
               <FolderOpened />
             </el-icon>
           </template>
           <template #description>
             <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 20px;">
-              <div style="color: #909399; font-size: 15px; font-weight: 500;">
+              <div style="color: var(--el-text-color-secondary); font-size: 15px; font-weight: 500;">
                 {{ $t('common.noBackupFiles') }}
               </div>
               <el-button type="primary" size="large" @click="openBackupFolder">
                 <el-icon><FolderOpened /></el-icon>
                 {{ $t('common.openImportFolder') }}
               </el-button>
-              <div style="color: #C0C4CC; font-size: 13px; max-width: 420px; text-align: center; line-height: 1.8;">
+              <div style="color: var(--el-text-color-placeholder); font-size: 13px; max-width: 420px; text-align: center; line-height: 1.8;">
                 {{ $t('common.copyToImportFolder') }}<br>{{ $t('common.thenRefresh') }}
               </div>
             </div>
@@ -118,7 +118,7 @@
             <el-icon style="font-size: 20px;"><Document /></el-icon>
             <div>
               <div style="font-weight: bold;">当前备份文件:</div>
-              <div style="font-size: 12px; color: #606266; margin-top: 4px;">{{ currentBackupFile?.name }}</div>
+              <div style="font-size: 12px; color: var(--el-text-color-regular); margin-top: 4px;">{{ currentBackupFile?.name }}</div>
             </div>
           </div>
         </template>
@@ -251,8 +251,8 @@
               <span style="font-size: 18px; font-weight: bold; color: #409EFF;">
                 {{ importProgress.completedTasks + importProgress.failedTasks }}
               </span>
-              <span style="color: #909399;">/</span>
-              <span style="font-size: 16px; color: #606266;">{{ importProgress.totalTasks }}</span>
+              <span style="color: var(--el-text-color-secondary);">/</span>
+              <span style="font-size: 16px; color: var(--el-text-color-regular);">{{ importProgress.totalTasks }}</span>
             </div>
           </div>
           <el-progress
@@ -284,15 +284,15 @@
           <div style="display: flex; align-items: center; gap: 10px; padding: 12px; background: #F0F9FF; border: 1px solid #91D5FF; border-radius: 4px;">
             <el-icon class="is-loading" style="color: #409EFF; font-size: 20px;"><Refresh /></el-icon>
             <div style="flex: 1;">
-              <div style="font-weight: bold; color: #303133;">正在导入...</div>
-              <div style="font-size: 13px; color: #606266; margin-top: 4px;">
+              <div style="font-weight: bold; color: var(--el-text-color-primary);">正在导入...</div>
+              <div style="font-size: 13px; color: var(--el-text-color-regular); margin-top: 4px;">
                 设备: <span style="font-weight: 600;">{{ importProgress.currentDevice }}</span>
                 <span style="margin: 0 8px;">|</span>
                 坑位: <span style="font-weight: 600;">{{ importProgress.currentSlot }}</span>
               </div>
               <!-- 大文件上传进度条 -->
               <div v-if="uploadProgress.active && uploadProgress.total > 0" style="margin-top: 10px;">
-                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #606266; margin-bottom: 4px;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--el-text-color-regular); margin-bottom: 4px;">
                   <span>正在上传备份包...</span>
                   <span>{{ formatBytes(uploadProgress.uploaded) }} / {{ formatBytes(uploadProgress.total) }}</span>
                 </div>
@@ -322,9 +322,9 @@
               <div style="flex: 1;">
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <el-tag type="success" size="small">✓</el-tag>
-                  <span style="font-weight: 600; color: #303133;">{{ detail.machine_name }}</span>
+                  <span style="font-weight: 600; color: var(--el-text-color-primary);">{{ detail.machine_name }}</span>
                 </div>
-                <div style="font-size: 12px; color: #909399; margin-top: 4px; padding-left: 32px;">
+                <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px; padding-left: 32px;">
                   设备: {{ detail.device_ip }} | 坑位: {{ detail.slot_number }}
                 </div>
               </div>
@@ -347,9 +347,9 @@
             >
               <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
                 <el-tag type="danger" size="small">✗</el-tag>
-                <span style="font-weight: 600; color: #303133;">{{ detail.machine_name || '未知' }}</span>
+                <span style="font-weight: 600; color: var(--el-text-color-primary);">{{ detail.machine_name || '未知' }}</span>
               </div>
-              <div style="font-size: 12px; color: #909399; padding-left: 32px;">
+              <div style="font-size: 12px; color: var(--el-text-color-secondary); padding-left: 32px;">
                 设备: {{ detail.device_ip }} | 坑位: {{ detail.slot_number }}
               </div>
               <div style="color: #F56C6C; font-size: 12px; margin-top: 6px; padding-left: 32px; background: #FEF0F0; padding: 6px; border-radius: 3px;">
@@ -1162,7 +1162,7 @@ onMounted(() => {
 .slot-number {
   font-weight: bold;
   margin-bottom: 10px;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .slot-copy-input {

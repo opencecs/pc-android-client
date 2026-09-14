@@ -21,7 +21,7 @@
               <el-icon v-if="!isScanning"><Search /></el-icon>
               <span>{{ isScanning ? t('addDevice.scanning') : t('addDevice.scanDevices') }}</span>
             </el-button>
-            <span class="scan-hint" style="margin-left: 12px; color: #909399; font-size: 13px;">
+            <span class="scan-hint" style="margin-left: 12px; color: var(--el-text-color-secondary); font-size: 13px;">
               {{ t('addDevice.autoDiscoverHint') }}
             </span>
           </div>
@@ -43,7 +43,7 @@
               >
                 {{ t('addDevice.selectAllToggle') }}
               </el-checkbox>
-              <span style="margin-left: auto; color: #909399; font-size: 13px;">
+              <span style="margin-left: auto; color: var(--el-text-color-secondary); font-size: 13px;">
                 {{ t('addDevice.devicesCount', { total: scannedDevices.length, filtered: filteredScannedDevices.length, selected: selectedDeviceIds.size }) }}
               </span>
             </div>
@@ -99,7 +99,7 @@
         <div class="manual-tab-content">
           <div class="manual-input-section">
             <div class="input-label">{{ t('addDevice.enterDeviceIP') }}</div>
-            <div class="input-hint" style="margin-bottom: 12px; color: #909399; font-size: 13px;">
+            <div class="input-hint" style="margin-bottom: 12px; color: var(--el-text-color-secondary); font-size: 13px;">
               {{ t('addDevice.multipleIPHint') }}
             </div>
             <el-input
@@ -137,7 +137,7 @@
                 <div style="color: #E6A23C; font-weight: 500; margin-bottom: 8px;">
                   {{ t('addDevice.noResponseDevices', { count: manualAddResult.failedIPs.length }) }}
                 </div>
-                <div style="color: #909399; font-size: 13px; word-break: break-all;">
+                <div style="color: var(--el-text-color-secondary); font-size: 13px; word-break: break-all;">
                   {{ manualAddResult.failedIPs.join(', ') }}
                 </div>
               </div>
@@ -150,7 +150,7 @@
                 show-icon
               />
               <div v-if="manualAddResult.failedIPs && manualAddResult.failedIPs.length > 0" class="failed-list" style="margin-top: 12px;">
-                <div style="color: #909399; font-size: 13px; word-break: break-all;">
+                <div style="color: var(--el-text-color-secondary); font-size: 13px; word-break: break-all;">
                   {{ t('addDevice.noResponseLabel') }}{{ manualAddResult.failedIPs.join(', ') }}
                 </div>
               </div>

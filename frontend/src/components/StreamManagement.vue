@@ -37,7 +37,7 @@
               <el-button type="success" size="small" @click="addNewStream">{{ $t('common.newStream') }}</el-button>
               <el-button type="primary" size="small" @click="refreshStreams" style="margin-left: 10px;">{{ $t('stream.refreshList') }}</el-button>
             </div>
-            <div style="padding: 12px; background: #f5f7fa; border-bottom: 1px solid #ebeef5; font-size: 13px; color: #606266;">
+            <div style="padding: 12px; background: #f5f7fa; border-bottom: 1px solid #ebeef5; font-size: 13px; color: var(--el-text-color-regular);">
               <div>
                 <strong>{{ $t('stream.webrtcAddress') }}</strong> 
                 <span 
@@ -72,11 +72,11 @@
                 </thead>
                 <tbody>
                   <tr v-if="activeStreams.length === 0">
-                    <td colspan="5" style="text-align: center; color: #909399; padding: 20px;">{{ $t('stream.noStreamInfo') }}</td>
+                    <td colspan="5" style="text-align: center; color: var(--el-text-color-secondary); padding: 20px;">{{ $t('stream.noStreamInfo') }}</td>
                   </tr>
                   <tr v-for="(stream, index) in activeStreams" :key="index">
                     <td>
-                      <div style="font-size: 13px; color: #303133; font-weight: 500;">{{ stream.streamName }}</div>
+                      <div style="font-size: 13px; color: var(--el-text-color-primary); font-weight: 500;">{{ stream.streamName }}</div>
                     </td>
                     <td>
                       <el-tag size="small" :type="stream.publisherIP ? 'success' : 'info'">
@@ -128,7 +128,7 @@
                 </thead>
                 <tbody>
                   <tr v-if="p2pStreams.length === 0">
-                    <td colspan="5" style="text-align: center; color: #909399; padding: 20px;">暂无P2P流信息，请点击上方添加</td>
+                    <td colspan="5" style="text-align: center; color: var(--el-text-color-secondary); padding: 20px;">暂无P2P流信息，请点击上方添加</td>
                   </tr>
                   <tr v-for="item in p2pStreams" :key="item.id">
                     <td>{{ item.streamName }}</td>
@@ -180,7 +180,7 @@
                 </thead>
                 <tbody>
                   <tr v-if="cameraStreams.length === 0">
-                    <td colspan="6" style="text-align: center; color: #909399; padding: 20px;">暂无摄像头推流，请点击上方添加</td>
+                    <td colspan="6" style="text-align: center; color: var(--el-text-color-secondary); padding: 20px;">暂无摄像头推流，请点击上方添加</td>
                   </tr>
                   <tr v-for="item in cameraStreams" :key="item.id"
                       :style="camPreviewActiveId === item.id ? 'background:#ecf5ff;' : ''"
@@ -191,7 +191,7 @@
                         {{ formatInstanceName(item.cloudMachineName || item.cloudMachineId) }}
                       </div>
                     </td>
-                    <td style="font-size:12px; color:#606266;">{{ item.camName || '默认摄像头' }}</td>
+                    <td style="font-size:12px; color:var(--el-text-color-regular);">{{ item.camName || '默认摄像头' }}</td>
                     <td style="font-size:12px;">{{ item.width }}x{{ item.height }}@{{ item.fps }}fps / {{ item.bitrate }}kbps</td>
                     <td>
                       <el-tag size="small" :type="item.status === 'running' ? 'success' : 'info'">
@@ -213,7 +213,7 @@
 
           <!-- 使用说明标签页 -->
           <el-tab-pane :label="$t('common.userGuide')" name="guide" style="height: 100%; display: flex; flex-direction: column; overflow: hidden; min-height: 0;">
-            <div class="guide-container" style="flex:1; min-height:0; overflow-y:auto; padding:16px 20px; font-size:13px; color:#303133; line-height:1.8;">
+            <div class="guide-container" style="flex:1; min-height:0; overflow-y:auto; padding:16px 20px; font-size:13px; color:var(--el-text-color-primary); line-height:1.8;">
               <div v-html="$t('stream.streamGuideHtml')"></div>
             </div>
           </el-tab-pane>
@@ -237,14 +237,14 @@
              style="flex:1; display:flex; flex-direction:column; padding:12px; box-sizing:border-box; overflow:hidden;">
           <!-- 顶部提示行 -->
           <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; flex-shrink:0;">
-            <span style="font-size:12px; color:#909399;">
+            <span style="font-size:12px; color:var(--el-text-color-secondary);">
               <el-icon style="vertical-align:middle; margin-right:2px;"><VideoCamera /></el-icon>
               {{ camPreviewActiveId ? `自动刷新中（每 ${camPreviewInterval}s 抓帧）` : '启动推流后自动预览' }}
             </span>
           </div>
           <!-- 加载中（无旧图时） -->
           <div v-if="camPreviewLoading && !camPreviewDataURL"
-               style="flex:1; display:flex; align-items:center; justify-content:center; background:#f0f0f0; border-radius:6px; color:#909399; font-size:13px;">
+               style="flex:1; display:flex; align-items:center; justify-content:center; background:#f0f0f0; border-radius:6px; color:var(--el-text-color-secondary); font-size:13px;">
             <el-icon class="is-loading" style="margin-right:6px;"><Loading /></el-icon>
             抓取画面中…
           </div>
@@ -262,7 +262,7 @@
           </div>
           <!-- 空状态 -->
           <div v-else
-               style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#f5f7fa; border-radius:6px; color:#c0c4cc; font-size:13px; gap:10px;">
+               style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#f5f7fa; border-radius:6px; color:var(--el-text-color-placeholder); font-size:13px; gap:10px;">
             <el-icon style="font-size:48px;"><VideoCamera /></el-icon>
             <span>在左侧「摄像头模式」启动推流后自动预览</span>
           </div>
@@ -298,7 +298,7 @@
                 </thead>
                 <tbody>
                   <tr v-if="activeDistributions.length === 0">
-                    <td colspan="5" style="text-align: center; color: #909399; padding: 20px;">
+                    <td colspan="5" style="text-align: center; color: var(--el-text-color-secondary); padding: 20px;">
                       {{ refreshingDistributions ? $t('stream.queryingStatus') : $t('stream.noActiveDistribution') }}
                     </td>
                   </tr>
@@ -335,7 +335,7 @@
 
           <!-- 失效分发 -->
           <div style="flex: 1; display: flex; flex-direction: column; min-height: 0; margin-top: 10px;">
-            <div style="font-weight: bold; color: #909399; margin-bottom: 8px;">
+            <div style="font-weight: bold; color: var(--el-text-color-secondary); margin-bottom: 8px;">
               <i class="el-icon-warning"></i> {{ $t('stream.inactiveDistribution') }}
             </div>
             <div class="native-table-container">
@@ -352,17 +352,17 @@
                 </thead>
                 <tbody>
                   <tr v-if="inactiveDistributions.length === 0">
-                    <td colspan="6" style="text-align: center; color: #909399; padding: 20px;">暂无失效分发</td>
+                    <td colspan="6" style="text-align: center; color: var(--el-text-color-secondary); padding: 20px;">暂无失效分发</td>
                   </tr>
                   <tr v-for="item in inactiveDistributions" :key="item.id">
-                    <td style="color: #999;">{{ item.streamName }}</td>
-                    <td style="color: #999;">{{ item.deviceIp }}</td>
-                    <td class="cloud-machine-col" style="color: #999;">
+                    <td style="color: var(--el-text-color-secondary);">{{ item.streamName }}</td>
+                    <td style="color: var(--el-text-color-secondary);">{{ item.deviceIp }}</td>
+                    <td class="cloud-machine-col" style="color: var(--el-text-color-secondary);">
                       <div class="cloud-machine-name" :title="item.cloudMachineName || item.cloudMachineId">
                         {{ formatInstanceName(item.cloudMachineName || item.cloudMachineId) }}
                       </div>
                     </td>
-                    <td style="color: #999;">{{ item.protocol || 'httpflv' }}</td>
+                    <td style="color: var(--el-text-color-secondary);">{{ item.protocol || 'httpflv' }}</td>
                     <td>
                       <div class="inactive-status-scroll">
                         <el-tag size="small" type="info">{{ item.statusReason || '未验证' }}</el-tag>
@@ -529,7 +529,7 @@
             </el-select>
           </el-form-item>
           <el-form-item label="设备端口">
-            <span style="line-height:32px; color:#606266; font-size:13px;">
+            <span style="line-height:32px; color:var(--el-text-color-regular); font-size:13px;">
               {{ camDetectedPort || '—' }}
               <span v-if="!camDetectedPort" style="color:#e6a23c; font-size:12px; margin-left:6px;">（请先选择云机）</span>
             </span>
@@ -564,9 +564,9 @@
           <el-form-item label="帧率/码率">
             <div style="display:flex; gap:8px; align-items:center;">
               <el-input v-model.number="camFps" placeholder="FPS" type="number" style="width:80px;" />
-              <span style="line-height:32px; color:#999; font-size:12px;">fps</span>
+              <span style="line-height:32px; color:var(--el-text-color-secondary); font-size:12px;">fps</span>
               <el-input v-model.number="camBitrate" placeholder="码率" type="number" style="width:90px;" />
-              <span style="line-height:32px; color:#999; font-size:12px;">kbps</span>
+              <span style="line-height:32px; color:var(--el-text-color-secondary); font-size:12px;">kbps</span>
             </div>
           </el-form-item>
         </el-form>
@@ -2046,7 +2046,7 @@ const removeCameraStream = async (item) => {
 .native-table {
   width: 100%;
   border-collapse: collapse;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .native-table th, .native-table td {
@@ -2077,7 +2077,7 @@ const removeCameraStream = async (item) => {
 
 .native-table th {
   background-color: #f5f7fa; /* 浅色表头 */
-  color: #606266;
+  color: var(--el-text-color-regular);
   font-weight: bold;
   position: sticky;
   top: 0;
@@ -2115,7 +2115,7 @@ const removeCameraStream = async (item) => {
 .guide-title {
   font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
   margin-bottom: 10px;
   padding: 6px 10px;
   background: #ecf5ff;
@@ -2130,7 +2130,7 @@ const removeCameraStream = async (item) => {
 .guide-steps {
   margin: 0;
   padding-left: 20px;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .guide-steps li {

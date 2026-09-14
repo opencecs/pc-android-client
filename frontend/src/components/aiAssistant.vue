@@ -534,12 +534,12 @@
             <el-form label-width="120px">
               <el-form-item :label="$t('common.currentDevice')">
                 <el-tag v-if="selectedDevice" type="success">{{ selectedDevice.ip }}</el-tag>
-                <span v-else style="color: #999;">{{ $t('common.noDeviceSelected') }}</span>
+                <span v-else style="color: var(--el-text-color-secondary);">{{ $t('common.noDeviceSelected') }}</span>
               </el-form-item>
               
               <el-form-item :label="$t('common.currentModel')">
                 <el-tag v-if="loadedModel" type="success">{{ loadedModel.name }}</el-tag>
-                <span v-else style="color: #999;">{{ $t('common.noModelLoaded') }}</span>
+                <span v-else style="color: var(--el-text-color-secondary);">{{ $t('common.noModelLoaded') }}</span>
               </el-form-item>
               
               <el-form-item>
@@ -575,7 +575,7 @@
                 >
                   {{ resettingDevice ? $t('common.resettingDevice') : $t('common.resetDevice') }}
                 </el-button>
-                <div style="margin-top: 8px; font-size: 12px; color: #909399;">
+                <div style="margin-top: 8px; font-size: 12px; color: var(--el-text-color-secondary);">
                   ⚠️ {{ $t('common.resetConfirmMessage') }}
                 </div>
               </el-form-item>
@@ -2908,7 +2908,7 @@ defineExpose({
 }
 
 .device-card :deep(.el-card__header .card-header) {
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .device-card :deep(.el-card__body) {
@@ -2994,7 +2994,7 @@ defineExpose({
 .device-ip {
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 /* 中间模型选择区域 */
@@ -3021,7 +3021,7 @@ defineExpose({
 }
 
 .model-card :deep(.el-card__header .card-header) {
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .model-card :deep(.el-card__body) {
@@ -3067,7 +3067,7 @@ defineExpose({
 
 .model-selector :deep(.el-form-item__label) {
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
   margin-bottom: 10px;
   font-size: 14px;
 }
@@ -3128,7 +3128,7 @@ defineExpose({
 }
 
 .chat-card :deep(.el-card__header .card-header) {
-  color: #303133;
+  color: var(--el-text-color-primary);
   font-size: 16px;
 }
 
@@ -3176,7 +3176,7 @@ defineExpose({
 
 .welcome-container {
   text-align: center;
-  color: #606266;
+  color: var(--el-text-color-regular);
   animation: fadeIn 0.6s ease-out;
 }
 
@@ -3195,12 +3195,12 @@ defineExpose({
   margin: 24px 0 12px;
   font-size: 28px;
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .welcome-container p {
   font-size: 15px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .messages-list {
@@ -3414,7 +3414,7 @@ defineExpose({
   /* white-space: pre-wrap; */
   line-height: 1.9;
   font-size: 15px;
-  color: #303133;
+  color: var(--el-text-color-primary);
   font-weight: 400;
   letter-spacing: 0.2px;
 }
@@ -3468,7 +3468,7 @@ defineExpose({
   gap: 16px;
   padding: 0 16px 16px 16px;
   font-size: 11px;
-  color: #999;
+  color: var(--el-text-color-secondary);
   font-family: 'SF Mono', 'Consolas', 'Monaco', 'JetBrains Mono', monospace;
   border-top: 1px solid #f0f0f0;
   padding-top: 12px;
@@ -3711,14 +3711,14 @@ defineExpose({
   background: transparent;
   border-radius: 6px;
   cursor: pointer;
-  color: #606266;
+  color: var(--el-text-color-regular);
   transition: all 0.2s;
   padding: 0;
 }
 
 .toolbar-btn:hover:not(:disabled) {
   background: #e8eaed;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .toolbar-btn:active:not(:disabled) {
@@ -3764,7 +3764,7 @@ defineExpose({
   padding: 14px 56px 14px 16px; /* 右侧留出发送按钮空间 */
   font-size: 15px;
   line-height: 1.6;
-  color: #303133;
+  color: var(--el-text-color-primary);
   outline: none;
   word-wrap: break-word;
   word-break: break-word;
@@ -3956,7 +3956,7 @@ defineExpose({
 
 .file-name {
   font-size: 13px;
-  color: #303133;
+  color: var(--el-text-color-primary);
   font-weight: 500;
   word-break: break-all;
   flex: 1;
@@ -3964,7 +3964,7 @@ defineExpose({
 
 .file-size {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-left: 12px;
   white-space: nowrap;
 }
@@ -3976,7 +3976,7 @@ defineExpose({
 
 .settings-section :deep(.el-form-item__label) {
   font-weight: 500;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .settings-section :deep(.el-textarea__inner) {
