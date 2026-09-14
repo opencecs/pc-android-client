@@ -18899,7 +18899,9 @@ const _parseV3RawContainers = (device, rawContainers) => {
     }
   })
 
+  // 按坑位号升序排列（Map 是插入序，跟随设备接口原始顺序），保证坑位模式批量投屏/批量操作按坑位顺序执行
   const processedContainers = Array.from(containersBySlot.values())
+    .sort((a, b) => (Number(a.indexNum) || 0) - (Number(b.indexNum) || 0))
 
   // 获取之前的缓存，用于保留截图状态
   const previousCache = deviceCloudMachinesCache.value.get(device.ip) || []
@@ -19058,7 +19060,7 @@ const fetchAndroidContainers = async (device, isUserInitiated = false) => {
             portBindings: c.portBindings,
             rawContainer: c
           }
-        })
+        }).sort((a, b) => (Number(a.indexNum) || 0) - (Number(b.indexNum) || 0))
 
       const previousCache = deviceCloudMachinesCache.value.get(device.ip) || []
       const deviceCloudMachines = processedContainers.map(inst => {

@@ -263,27 +263,65 @@ func trimLogBody(body []byte, limit int) string {
 }
 
 // GetLocalIP 获取本机局域网IP
+// 注意：Clash/mihomo 等代理的 TUN 虚拟网卡会劫持默认路由（fake-IP 网段 198.18.0.0/15），
+// UDP 拨号拿到的是虚拟网卡 IP，设备侧无法访问，必须过滤后从物理网卡挑选局域网地址。
 func GetLocalIP() string {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
+	// 1) UDP 拨默认路由取源 IP（无 TUN 劫持时即真实出口 IP）
+	if conn, err := net.Dial("udp", "8.8.8.8:80"); err == nil {
+		localAddr := conn.LocalAddr().(*net.UDPAddr)
+		conn.Close()
+		if ip := localAddr.IP.To4(); ip != nil && isDeviceReachableIP(ip) {
+			return ip.String()
+		}
+	}
+
+	// 2) 出口 IP 不可用（被 TUN 劫持/拨号失败）：遍历网卡，优先私网局域网地址
+	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		// Fallback: 遍历网卡
-		addrs, err := net.InterfaceAddrs()
-		if err != nil {
-			return ""
-		}
-		for _, address := range addrs {
-			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-				if ipnet.IP.To4() != nil {
-					return ipnet.IP.String()
-				}
-			}
-		}
 		return ""
 	}
-	defer conn.Close()
+	fallback := ""
+	for _, address := range addrs {
+		ipnet, ok := address.(*net.IPNet)
+		if !ok || ipnet.IP.IsLoopback() {
+			continue
+		}
+		ip := ipnet.IP.To4()
+		if ip == nil || !isDeviceReachableIP(ip) {
+			continue
+		}
+		if isPrivateLanIP(ip) {
+			return ip.String()
+		}
+		if fallback == "" {
+			fallback = ip.String()
+		}
+	}
+	return fallback
+}
 
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	return localAddr.IP.String()
+// isDeviceReachableIP 过滤设备侧不可达的地址：
+// - 169.254.x.x 链路本地地址（未获取 DHCP 的 APIPA）
+// - 198.18.0.0/15 代理 TUN 网卡的 fake-IP 网段（Clash/mihomo）
+// - 100.64.0.0/10 CGNAT 网段（Tailscale 等 VPN 虚拟网卡）
+func isDeviceReachableIP(ip net.IP) bool {
+	if ip.IsLinkLocalUnicast() {
+		return false
+	}
+	if ip[0] == 198 && (ip[1] == 18 || ip[1] == 19) {
+		return false
+	}
+	if ip[0] == 100 && ip[1] >= 64 && ip[1] <= 127 {
+		return false
+	}
+	return true
+}
+
+// isPrivateLanIP 私网局域网地址段（设备与客户端通常同处这些网段）
+func isPrivateLanIP(ip net.IP) bool {
+	return ip[0] == 10 ||
+		(ip[0] == 172 && ip[1] >= 16 && ip[1] <= 31) ||
+		(ip[0] == 192 && ip[1] == 168)
 }
 
 // StreamInfo 流信息结构

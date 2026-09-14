@@ -782,7 +782,11 @@ async function startProjection(device, containerInfo, customOrient = null) {
       Width: width,
       Height: height,
       ApiPort: resolveApiPort(containerInfo, device.ip),
-      CameraTcpPort: resolveCameraPort(containerInfo, device.ip)
+      CameraTcpPort: resolveCameraPort(containerInfo, device.ip),
+      // APK 安装参数：容器名 + SDK 宿主（端口固定 8000）+ 密码（按设备 ip 原样 key 查）
+      InstallContainer: containerName,
+      SdkHost: resolveSdkHost(containerInfo, device.ip),
+      SdkPwd: getDevicePassword(device.ip) || ''
     }));
 
     if (result.success) {
@@ -895,6 +899,16 @@ function resolveCameraPort(container, baseDeviceIp) {
   return hostPort;
 }
 
+// 计算设备 SDK 宿主 IP（go_legacy -sdkhost：侧边栏 APK 安装用，SDK 端口固定 8000）
+// - SDK 在物理设备上：myt/macvlan 网络下 DeviceIP 是容器 IP 连不上 SDK，须用设备 IP
+// - OpenCecs 公网设备 ip 可能带端口（ip:port），go_legacy 端口固定 8000，剥掉端口传纯 IP
+// 密码不在本函数查：密码表键为设备列表 ip 原样（可能带端口），调用处按原样 key 查
+function resolveSdkHost(container, baseDeviceIp) {
+  const deviceIp = (container && (container.deviceIp || container.deviceIP)) || baseDeviceIp || '';
+  if (deviceIp.includes(':')) return deviceIp.split(':')[0];
+  return deviceIp;
+}
+
 // 批量投屏：多台云机各开一个 go_legacy 窗口并排成网格（后端统一算网格坐标）
 async function startBatchProjection(device, containers, customOrient = null) {
   try {
@@ -962,7 +976,11 @@ async function startBatchProjection(device, containers, customOrient = null) {
         Width: width,
         Height: height,
         ApiPort: resolveApiPort(container, baseDeviceIp),
-        CameraTcpPort: resolveCameraPort(container, baseDeviceIp)
+        CameraTcpPort: resolveCameraPort(container, baseDeviceIp),
+        // APK 安装参数（InstallContainer 独立字段：Go 批量入口会覆写 ContainerName 做窗口标识）
+        InstallContainer: name,
+        SdkHost: resolveSdkHost(container, baseDeviceIp),
+        SdkPwd: getDevicePassword(baseDeviceIp) || ''
       });
     }
 
@@ -1093,7 +1111,11 @@ async function startProjectionBatchControl(device, containers, term = '批量投
       Width: width,
       Height: height,
       ApiPort: resolveApiPort(primaryContainer, baseDeviceIp),
-      CameraTcpPort: resolveCameraPort(primaryContainer, baseDeviceIp)
+      CameraTcpPort: resolveCameraPort(primaryContainer, baseDeviceIp),
+      // APK 安装参数：窗口显示名 resolvedTerm 可能是用户自定义标题，安装须用主控真实容器名
+      InstallContainer: primaryName,
+      SdkHost: resolveSdkHost(primaryContainer, baseDeviceIp),
+      SdkPwd: getDevicePassword(baseDeviceIp) || ''
     }));
 
     if (result.success) {
@@ -1184,7 +1206,11 @@ async function startLegacyMatrixProjection(device, containers, customOrient = nu
         Width: width,
         Height: height,
         ApiPort: resolveApiPort(container, baseDeviceIp),
-        CameraTcpPort: resolveCameraPort(container, baseDeviceIp)
+        CameraTcpPort: resolveCameraPort(container, baseDeviceIp),
+        // APK 安装参数（InstallContainer 独立字段：Go 矩阵入口会覆写 ContainerName 做窗口标识）
+        InstallContainer: name,
+        SdkHost: resolveSdkHost(container, baseDeviceIp),
+        SdkPwd: getDevicePassword(baseDeviceIp) || ''
       });
     }
 

@@ -882,7 +882,7 @@
                                   :disabled="!activeDevice || fetchingImages"
                                   class="refresh-button"
                                 >
-                                  <el-icon :class="{ 'is-rotating': fetchingImages }"><Refresh /></el-icon> $t('common.refreshOnlineImages')
+                                  <el-icon :class="{ 'is-rotating': fetchingImages }"><Refresh /></el-icon> {{ $t('common.refreshOnlineImages') }}
                                 </el-button>
                               </el-col>
                             </el-row>
@@ -961,7 +961,7 @@
                             :disabled="!activeDevice || isLoadingLocalImages"
                             class="refresh-button"
                           >
-                            <el-icon :class="{ 'is-rotating': isLoadingLocalImages }"><Refresh /></el-icon> $t('image.refreshLocalImages')
+                            <el-icon :class="{ 'is-rotating': isLoadingLocalImages }"><Refresh /></el-icon> {{ $t('image.refreshLocalImages') }}
                           </el-button>
                         </div>
                         <div v-if="isLoadingLocalImages" class="image-loading">
@@ -1004,7 +1004,7 @@
                             :disabled="!activeDevice || isLoadingBoxImages"
                             class="refresh-button"
                           >
-                            <el-icon :class="{ 'is-rotating': isLoadingBoxImages }"><Refresh /></el-icon> $t('image.refreshDeviceImages')
+                            <el-icon :class="{ 'is-rotating': isLoadingBoxImages }"><Refresh /></el-icon> {{ $t('image.refreshDeviceImages') }}
                           </el-button>
                         </div>
                         <div v-if="isLoadingBoxImages" class="image-loading">

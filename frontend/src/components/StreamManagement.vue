@@ -793,8 +793,17 @@ const syncDistributionParameters = async (item) => {
     const baseUrl = `http://${controlHost}:${mappedPort}`
     if ((item.protocol || 'httpflv') === 'p2p') {
       const resolution = item.resolution || '1'
-      const setUrl = `${baseUrl}/modifydev?cmd=4&type=camera&resolution=${resolution}`
-      const res = await ProxyHttpGet(setUrl)
+      // 新镜像 modifydev type=camera 必须带 path 才生效（无 path 静默忽略），
+      // 与 startP2PDistribution 一致：带 SRT 监听地址，老镜像退 cmd=14
+      const p2pPort = Number(item.p2pListenPort)
+      const listenUrl = (p2pPort > 0 && localIp.value) ? `srt://${localIp.value}:${p2pPort}` : ''
+      const setUrl = listenUrl
+        ? `${baseUrl}/modifydev?cmd=4&type=camera&path=${encodeURIComponent(listenUrl)}&resolution=${resolution}`
+        : `${baseUrl}/modifydev?cmd=4&type=camera&resolution=${resolution}`
+      let res = await ProxyHttpGet(setUrl)
+      if (res?.code !== 200 && (res?.reason || '').includes('path is empty')) {
+        res = await ProxyHttpGet(`${baseUrl}/modifydev?cmd=14&type=camera`)
+      }
       try {
         const startUrl = `${baseUrl}/camera?cmd=start`
         await ProxyHttpGet(startUrl)
@@ -1614,10 +1623,22 @@ const confirmP2PDistribute = async () => {
 
     const controlHost = getControlHost(device, cloudMachine)
     const baseUrl = `http://${controlHost}:${controlPort}`
-    const setUrl = `${baseUrl}/modifydev?cmd=4&type=camera&resolution=1`
+    // 新镜像 modifydev type=camera 必须带 path 才生效（无 path 静默忽略导致云机
+    // 停留在旧模式无画面），与 startP2PDistribution 一致
+    const listenUrl = `srt://${localIp.value}:${listenPort}`
+    const setUrl = `${baseUrl}/modifydev?cmd=4&type=camera&path=${encodeURIComponent(listenUrl)}&resolution=${p2pResolution.value}`
     const setResData = await ProxyHttpGet(setUrl)
     if (setResData?.code !== 200) {
-      throw new Error(setResData?.reason || '设置推流失败')
+      const reason = setResData?.reason || ''
+      if (reason.includes('path is empty')) {
+        // 老镜像不支持带 path 的设置，退回 cmd=14
+        const fallbackRes = await ProxyHttpGet(`${baseUrl}/modifydev?cmd=14&type=camera`)
+        if (fallbackRes?.code !== 200) {
+          throw new Error('出错了，可能是较老镜像不支持或者网络问题')
+        }
+      } else {
+        throw new Error(reason || '设置推流失败')
+      }
     }
     try {
       const startUrl = `${baseUrl}/camera?cmd=start`

@@ -195,6 +195,11 @@ type ProjectionConfig struct {
 	// 摄像头推流：设备 camera TCP 端口（云机映射 10006；0=不传）
 	// 由前端按 10006 映射端口注入；go_legacy 侧边栏据此控制推流启停
 	CameraTcpPort int
+
+	// APK 安装参数（go_legacy 侧边栏 APK 安装；SDK 在物理设备上，端口固定 8000）
+	InstallContainer string // 目标云机容器名（-container，空=安装禁用；独立字段：批量/矩阵入口会覆写 ContainerName 做窗口标识）
+	SdkHost          string // 设备 SDK 宿主 IP（-sdkhost；myt 网络下 DeviceIP 是容器 IP，须由前端传设备 IP，空=用 DeviceIP）
+	SdkPwd           string // SDK Basic Auth 密码（-sdkpwd，空=无认证）
 }
 
 // CheckPortOpen 检查本地端口是否开放
@@ -14061,6 +14066,20 @@ func (a *App) startWindowsProjectionProcess(config ProjectionConfig, windowID, w
 			log.Printf("[投屏] 摄像头推流参数注入: cam-ffmpeg=%s cam-tcp-port=%d", ffmpegPath, config.CameraTcpPort)
 		} else {
 			log.Printf("[投屏] 摄像头推流未启用：ffmpeg.exe 不存在于 %s（请将 ffmpeg.exe 放入 player_dist/ 与 go_legacy.exe 同目录）", ffmpegPath)
+		}
+	}
+	// APK 安装参数：-container 云机容器名 + -sdkhost 设备 SDK 宿主（端口固定 8000）
+	// + -sdkpwd SDK Basic Auth 密码（没设密码不传）。
+	// myt/macvlan 网络下 DeviceIP 是容器 IP，SDK 在物理设备上，宿主 IP 由前端传；
+	// 前端没传时兜底用 DeviceIP（普通网络两者相同）。容器名空=不传（go_legacy 安装禁用）。
+	if config.InstallContainer != "" {
+		sdkHost := config.SdkHost
+		if sdkHost == "" {
+			sdkHost = config.DeviceIP
+		}
+		args = append(args, "-container", config.InstallContainer, "-sdkhost", sdkHost)
+		if config.SdkPwd != "" {
+			args = append(args, "-sdkpwd", config.SdkPwd)
 		}
 	}
 	if term != "" {
