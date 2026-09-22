@@ -1,12 +1,5 @@
 <script setup>
 
-// 返回设备的 host:port，若 ip 已含端口则直接使用，否则追加默认 8000
-const getDeviceAddr = (ip) => {
-  if (!ip) return ip
-  const lastColon = ip.lastIndexOf(':')
-  if (lastColon === -1) return ip + ':8000'
-  return /^\d+$/.test(ip.slice(lastColon + 1)) ? ip : ip + ':8000'
-}
 
 
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, reactive, getCurrentInstance } from 'vue'
@@ -231,7 +224,14 @@ import CloudManagement from './components/CloudManagement.vue'
 import BatchUploadDialog from './components/BatchUploadDialog.vue'
 
 // 导入语言切换组件
-import LanguageSwitcher from './components/LanguageSwitcher.vue'
+import LanguageSwitcher from './components/LanguageSwitcher.vue'
+
+// 纯工具函数（阶段 2 从本文件迁出，见 src/utils/）
+import { getDeviceAddr, FORBIDDEN_ADB_PORTS, getInstanceAdbPort, extractPort, extractPort9082, getSDKPort, getPortMappings, getDeviceTypeName, getDeviceTypeColor, parseContainerSlot } from './utils/device.js'
+import { formatSize, calculateIpRange, extractNodeDisplayName, naturalSortKey, extractShortName, arrayBufferToBase64, generateTaskId, formatInstanceName, formatInstanceModel } from './utils/format.js'
+import { getDeviceProgress, getDeviceProgressStatus, getDeviceProgressText, getTaskTargetDisplay } from './utils/taskDisplay.js'
+import { toggleNodeExpanded, collectSharedFilePaths } from './utils/fileTree.js'
+import { copyToClipboard } from './utils/clipboard.js'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -1452,15 +1452,7 @@ const v3DeviceUptimeMinutes = computed(() => {
   return `${minutes}分钟${remainingSeconds}秒`
 })
 
-const formatSize = (mbValue) => {
-  if (!mbValue || mbValue === '加载中...') return '加载中...'
-  const value = parseFloat(mbValue)
-  if (isNaN(value)) return mbValue
-  if (value >= 1024) {
-    return `${(value / 1024).toFixed(2)} GB`
-  }
-  return `${value} MB`
-}
+
 // Docker网络信息
 const dockerNetworks = ref([]) // 存储docker网络列表
 const dockerNetworksLoading = ref(false) // 标记是否正在加载网络信息
@@ -2681,40 +2673,6 @@ const formatFileSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-// 计算MacVlan IP范围
-const calculateIpRange = (startIp, count) => {
-  if (!startIp || count <= 0) return ''
-  
-  try {
-    const parts = startIp.split('.').map(Number)
-    if (parts.length !== 4 || parts.some(isNaN)) return '无效的IP地址'
-    
-    // 计算结束IP
-    let [a, b, c, d] = parts
-    d += count - 1
-    
-    // 处理进位
-    while (d > 255) {
-      d -= 256
-      c += 1
-    }
-    while (c > 255) {
-      c -= 256
-      b += 1
-    }
-    while (b > 255) {
-      b -= 256
-      a += 1
-    }
-    
-    if (a > 255) return '超出IP范围'
-    
-    const endIp = `${a}.${b}.${c}.${d}`
-    return `${startIp} - ${endIp}`
-  } catch (error) {
-    return '计算失败'
-  }
-}
 
 // 获取MacVlan IP输入框的placeholder
 const getMacVlanIpPlaceholder = () => {
@@ -4293,12 +4251,6 @@ const getRandomVpcNodeId = () => {
   return vpcNodeList.value[randomIndex].id
 }
 
-// 提取节点显示名称
-const extractNodeDisplayName = (remarks) => {
-  if (!remarks) return ''
-  const parts = remarks.split('_')
-  return parts.length > 0 ? parts[parts.length - 1] : remarks
-}
 
 // 从本地存储读取镜像列表
 const getImageListFromLocal = () => {
@@ -11405,25 +11357,7 @@ const handleNodeDrop = (draggingNode, dropNode, dropType) => {
   }
 }
 
-// 自然排序辅助函数：将字符串拆分为 [文本, 数字, 文本, 数字, ...] 段，用于自然排序
-const naturalSortKey = (str) => {
-  if (!str) return []
-  const parts = []
-  const regex = /(\D+|\d+)/g
-  let match
-  while ((match = regex.exec(str)) !== null) {
-    // 数字段转为数值，文本段保持原样并转小写用于大小写不敏感排序
-    parts.push(/^\d+$/.test(match[1]) ? Number(match[1]) : match[1].toLowerCase())
-  }
-  return parts
-}
 
-// 提取名称最后一段（如 1778046657165_6_0_copy_A1 -> A1）
-const extractShortName = (name) => {
-  if (!name) return ''
-  const parts = name.split('_')
-  return parts.length > 0 ? parts[parts.length - 1] : name
-}
 
 // 计算排序后的备份列表
 const sortedBackupList = computed(() => {
@@ -14529,34 +14463,7 @@ const handleNodeSelectionChange = (node, isDirectoryClick = false) => {
   // 文件的选择由v-model自动处理
 }
 
-// 处理目录节点展开/折叠
-const toggleNodeExpanded = (node) => {
-  if (node.isDir) {
-    if (node.expanded === undefined) {
-      node.expanded = true
-    } else {
-      node.expanded = !node.expanded
-    }
-  }
-}
 
-// 收集目录下所有文件路径
-const collectSharedFilePaths = (node) => {
-  const filePaths = []
-  const collect = (n) => {
-    if (n.children) {
-      n.children.forEach(child => {
-        if (!child.isDir) {
-          filePaths.push(child.path)
-        } else {
-          collect(child)
-        }
-      })
-    }
-  }
-  collect(node)
-  return filePaths
-}
 
 // 判断共享目录是否全选
 const isSharedDirectoryFullySelected = (node) => {
@@ -15402,7 +15309,7 @@ const refreshData = async () => {
 
 
 // ADB端口禁用列表（这些端口已被其他服务占用）
-const FORBIDDEN_ADB_PORTS = new Set([9082, 9083, 10000, 10001, 10006, 10007, 10008])
+
 
 // 校验 ADB 端口
 const validateAdbPort = (value) => {
@@ -15428,113 +15335,8 @@ const validateAdbPort = (value) => {
   }
 }
 
-// 从容器实例中动态获取 ADB 端口
-// 优先读取实例的 adbPort 字段，否则从 portBindings 中排除已知端口后推断
-const getInstanceAdbPort = (instance) => {
-  if (!instance) return 5555
-  // 优先使用实例中保存的 adbPort 字段
-  if (instance.adbPort && instance.adbPort !== 0) {
-    return Number(instance.adbPort)
-  }
-  // 从 portBindings 中推断：排除已知端口后，剩余的可能是 ADB 端口
-  const knownPorts = new Set([8000, 9082, 9083, 10000, 10001, 10006, 10007, 10008])
-  const bindings = instance.portBindings || instance.PortBindings
-  if (bindings) {
-    for (const [key] of Object.entries(bindings)) {
-      const portNum = parseInt(key.split('/')[0])
-      if (!isNaN(portNum) && !knownPorts.has(portNum)) {
-        // 找到一个非已知端口，可能就是 ADB 端口
-        return portNum
-      }
-    }
-  }
-  // 默认回退到 5555
-  return 5555
-}
 
-// 从容器信息中提取端口映射
-const extractPort = (container, portNumber) => {
-  // 优先从容器的缓存中获取端口映射，避免重复计算
-  // 注意：OpenCecs 公网设备不缓存，因为端口映射表可能在首次调用后才填充
-  const isPublicDevice = container.deviceIp && container.deviceIp.includes(':')
-  const cacheKey = `_cachedPort${portNumber}`
-  if (!isPublicDevice && container[cacheKey]) {
-    return container[cacheKey]
-  }
-  
-  let mappedPort = null
-  const portKeyTcp = `${portNumber}/tcp`
-  const portKeyUdp = `${portNumber}/udp`
-  
-  // 支持V3 API格式: container.portBindings['port/tcp'][0].HostPort
-  if (container.portBindings) {
-    const portBinding = container.portBindings[portKeyTcp] || container.portBindings[portKeyUdp]
-    if (portBinding && portBinding.length > 0) {
-      mappedPort = portBinding[0].HostPort
-    }
-  }
-  
-  // 支持Docker API原生格式: container.Ports数组
-  if (!mappedPort && container.Ports && Array.isArray(container.Ports)) {
-    // 查找PrivatePort为指定端口的端口映射（先TCP后UDP）
-    const port = container.Ports.find(p => p.PrivatePort === portNumber && p.Type === 'tcp')
-      || container.Ports.find(p => p.PrivatePort === portNumber && p.Type === 'udp')
-    if (port && port.PublicPort) {
-      mappedPort = port.PublicPort
-    }
-  }
-  
-  // 兼容旧版Docker API格式（通过端口名查找）
-  if (!mappedPort && container.NetworkSettings && container.NetworkSettings.Ports) {
-    const portBinding = container.NetworkSettings.Ports[portKeyTcp] || container.NetworkSettings.Ports[portKeyUdp]
-    if (portBinding && portBinding.length > 0) {
-      mappedPort = portBinding[0].HostPort
-    }
-  }
-  
-  // 兼容V3 API的另一种格式
-  if (!mappedPort && container.PortBindings) {
-    const portBinding = container.PortBindings[portKeyTcp] || container.PortBindings[portKeyUdp]
-    if (portBinding && portBinding.length > 0) {
-      mappedPort = portBinding[0].HostPort
-    }
-  }
 
-  // OpenCecs 公网设备：将 HostPort（局域网端口）转换为公网端口映射
-  // 当 deviceIp 包含 ":"（格式为 publicIp:publicPort）时，说明是公网设备
-  if (mappedPort && container.deviceIp && container.deviceIp.includes(':')) {
-    // 先精确匹配 deviceIp，如果找不到则按公网 IP 前缀模糊匹配
-    // （因为每次创建 8000 端口映射可能得到不同的公网端口，旧容器的 deviceIp 可能过时）
-    let portMap = window.openCecsPortMap?.get(container.deviceIp)
-    if (!portMap && window.openCecsPortMap) {
-      const ipPrefix = container.deviceIp.split(':')[0] + ':'
-      for (const [key, map] of window.openCecsPortMap) {
-        if (key.startsWith(ipPrefix)) {
-          portMap = map
-          break
-        }
-      }
-    }
-    if (portMap) {
-      const publicPort = portMap.get(Number(mappedPort))
-      if (publicPort) {
-        mappedPort = publicPort
-      }
-    }
-  }
-  
-  // 缓存端口映射结果，避免重复计算
-  container[cacheKey] = mappedPort
-  return mappedPort
-}
-
-// 从容器信息中提取9082端口的映射端口
-const extractPort9082 = (container) => {
-  if (container && (container.networkName === 'myt' || container.networkMode === 'myt' || container.network === 'myt')) {
-    return 9082
-  }
-  return extractPort(container, 9082)
-};
 
 // 全局辅助函数：为公网设备解析端口映射
 // 返回 { ip, port } 对象，公网设备返回 publicIp + publicPort，局域网设备返回原始值
@@ -15553,124 +15355,8 @@ window.resolveOpenCecsAddress = (deviceIp, hostPort) => {
   return { ip: deviceIp, port: hostPort }
 };
 
-// 获取SDK端口
-const getSDKPort = (version, sys_ver) => {
-  // v3设备且系统版本为5时使用8000端口，否则使用81端口
-  if (version === 'v3' && sys_ver === '5') {
-    return '8000'
-  }
-  return '81'
-}
 
-// 获取端口映射信息
-const getPortMappings = (instance, device) => {
-  console.log('getPortMappings', device)
-  // 保留原始 device 用于查 openCecsPortMap
-  const originalDevice = device
-  const isPublicDevice = device && device.includes(':')
-  // OpenCecs 公网设备：device 可能是 publicIp:publicPort，提取纯 IP
-  if (isPublicDevice) device = device.split(':')[0]
 
-  // 查找 OpenCecs 端口映射表
-  let portMap = null
-  if (isPublicDevice && window.openCecsPortMap) {
-    portMap = window.openCecsPortMap.get(originalDevice)
-    if (!portMap) {
-      const ipPrefix = device + ':'
-      for (const [key, map] of window.openCecsPortMap) {
-        if (key.startsWith(ipPrefix)) { portMap = map; break }
-      }
-    }
-  }
-
-  // Docker 8000 端口：公网设备用映射端口，局域网设备用 8000
-  const dockerPort = portMap ? (portMap.get(8000) || 8000) : 8000
-  const dockerUrl = isPublicDevice ? `http://${device}:${dockerPort}/docker` : `http://${getDeviceAddr(device)}/docker`
-
-  // 如果没有实例（空坑位），则显示原始端口
-  if (!instance) {
-    return {
-      androidApi: {
-        originalPort: 9082,
-        mappedPort: portMap ? (portMap.get(9082) || 9082) : 9082,
-        description: '安卓设备管理API',
-        url: `${device}:${portMap ? (portMap.get(9082) || 9082) : 9082}`,
-        isMapped: !!(portMap && portMap.get(9082))
-      },
-      controlApi: {
-        originalPort: 9083,
-        mappedPort: portMap ? (portMap.get(9083) || 9083) : 9083,
-        description: 'RPA自动化API',
-        url: `${device}:${portMap ? (portMap.get(9083) || 9083) : 9083}`,
-        isMapped: !!(portMap && portMap.get(9083))
-      },
-      adb: {
-        originalPort: 5555,
-        mappedPort: portMap ? (portMap.get(5555) || 5555) : 5555,
-        description: 'AndroidADB(默认)',
-        url: `${device}:${portMap ? (portMap.get(5555) || 5555) : 5555}`,
-        isMapped: !!(portMap && portMap.get(5555))
-      },
-      dockerApi: {
-        originalPort: 8000,
-        mappedPort: dockerPort,
-        description: 'Docker管理接口',
-        url: dockerUrl,
-        isMapped: dockerPort !== 8000
-      }
-    }
-  }
-  
-  // 从容器实例中提取真实端口映射
-  // myt 网络模式：容器有独立IP，直接用原始端口，不存在端口映射
-  const isMytNetwork = instance && (instance.networkName === 'myt' || instance.networkMode === 'myt')
-  const androidApiPort = isMytNetwork ? 9082 : (extractPort(instance, 9082) || 9082)
-  const controlApiPort = isMytNetwork ? 9083 : (extractPort(instance, 9083) || 9083)
-  // 从容器实例中动态获取 ADB 端口（优先从 adbPort 字段读取，否则从 portBindings 中推断）
-  const instanceAdbPort = getInstanceAdbPort(instance)
-  const adbPort = isMytNetwork ? instanceAdbPort : (extractPort(instance, instanceAdbPort) || instanceAdbPort)
-  
-  return {
-    androidApi: {
-      originalPort: 9082,
-      mappedPort: androidApiPort,
-      description: '安卓设备管理API',
-      url: `${device}:${androidApiPort}`,
-      isMapped: androidApiPort !== 9082
-    },
-    controlApi: {
-      originalPort: 9083,
-      mappedPort: controlApiPort,
-      description: 'RPA自动化API',
-      url: `${device}:${controlApiPort}`,
-      isMapped: controlApiPort !== 9083
-    },
-    adb: {
-      originalPort: instanceAdbPort,
-      mappedPort: adbPort,
-      description: 'AndroidADB',
-      url: `${device}:${adbPort}`,
-      isMapped: adbPort !== instanceAdbPort
-    },
-    dockerApi: {
-      originalPort: 8000,
-      mappedPort: dockerPort,
-      description: 'Docker管理接口',
-      url: dockerUrl,
-      isMapped: dockerPort !== 8000
-    }
-  }
-}
-
-// 复制到剪贴板
-const copyToClipboard = (text) => {
-  navigator.clipboard.writeText(text).then(() => {
-    ElMessage.success('已复制到剪贴板')
-  }).catch(err => {
-    console.error('复制失败:', err)
-    ElMessage.error('复制失败')
-  })
-}
 
 // 显示API详情
 const showApiDetails = () => {
@@ -15981,15 +15667,7 @@ watch(cloudManageMode, () => {
 
 
 // 将ArrayBuffer转换为base64
-const arrayBufferToBase64 = (buffer) => {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return window.btoa(binary);
-};
+
 
 // 获取容器列表
 
@@ -16022,134 +15700,11 @@ const handleTreeCheck = (data, checkedInfo) => {
 // 任务队列核心逻辑
 
 // 生成唯一任务ID
-const generateTaskId = () => {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2, 9)
-}
 
-// 获取指定设备IP的进度百分比
-const getDeviceProgress = (task, deviceIP) => {
-  if (!task.deviceProgress) return 0
-  
-  const deviceData = task.deviceProgress[deviceIP]
-  if (!deviceData) return 0
-  
-  // 如果有实时进度数据且任务正在进行中，使用实时进度
-  if (deviceData.currentProgress !== undefined && task.status === 'running') {
-    return deviceData.currentProgress
-  }
-  
-  // 否则使用完成/总数的百分比
-  return Math.round((deviceData.completed / deviceData.total) * 100)
-}
 
-// 获取指定设备IP的进度状态
-const getDeviceProgressStatus = (task, deviceIP) => {
-  if (!task.deviceProgress) return ''
-  
-  const deviceData = task.deviceProgress[deviceIP]
-  if (!deviceData) return ''
-  
-  if (deviceData.completed === deviceData.total) return 'success'
-  if (deviceData.failed > 0 && deviceData.completed + deviceData.failed === deviceData.total) return 'exception'
-  return ''
-}
 
-// 获取指定设备IP的进度状态文字
-const getDeviceProgressText = (task, deviceIP) => {
-  if (!task.deviceProgress) return { text: '等待中', icon: 'Timer' }
-  
-  const deviceData = task.deviceProgress[deviceIP]
-  if (!deviceData) return { text: '等待中', icon: 'Timer' }
-  
-  // 针对批量任务，优先根据设备自身的进度判断状态，避免被全局任务状态覆盖
-  if ((task.type === 'uploadFile' || task.type === 'uploadImage')) {
-    if (deviceData.total > 0) {
-      if (deviceData.completed === deviceData.total) {
-        return { text: '完成', icon: 'CircleCheck' }
-      }
-      if (deviceData.failed > 0 && deviceData.completed + deviceData.failed >= deviceData.total) {
-        return { text: '失败', icon: 'CircleClose' }
-      }
-    }
-  }
-  
-  // 任务状态映射
-  const statusMap = {
-    'pending': { text: '等待中', icon: 'Timer' },
-    'running': { text: '上传中', icon: 'Loading' },
-    'completed': { text: '完成', icon: 'CircleCheck' },
-    'failed': { text: '失败', icon: 'CircleClose' },
-    'canceled': { text: '已取消', icon: 'Close' }
-  }
-  
-  // 如果任务已完成或失败，显示最终状态
-  if (task.status === 'completed' || task.status === 'failed' || task.status === 'canceled') {
-    return statusMap[task.status] || { text: '未知', icon: 'QuestionFilled' }
-  }
-  
-  // 任务进行中，根据设备状态显示
-  if (deviceData.completed > 0) {
-    return { text: '完成', icon: 'CircleCheck' }
-  }
-  if (deviceData.failed > 0) {
-    return { text: '失败', icon: 'CircleClose' }
-  }
-  if (deviceData.currentProgress > 0) {
-    return { text: '上传中', icon: 'Loading' }
-  }
-  
-  // 检查该设备是否在当前批次中（对于分批上传任务）
-  if (task.deviceIps && task.type === 'uploadImage') {
-    // 如果进度刚开始，显示等待中
-    return { text: '等待中', icon: 'Timer' }
-  }
-  
-  return { text: '等待中', icon: 'Timer' }
-}
 
-// 获取任务的目标设备/云机名称显示
-const getTaskTargetDisplay = (task) => {
-  if (!task) return { short: '', full: [] }
-  
-  // 对于上传文件任务，从targets中获取云机名称
-  if (task.type === 'uploadFile' && task.targets && task.targets.length > 0) {
-    const names = []
-    task.targets.forEach(target => {
-      if (target.machines && target.machines.length > 0) {
-        target.machines.forEach(machine => {
-          if (machine.name) names.push(formatInstanceName(machine.name))
-        })
-      }
-    })
-    // 去重
-    const uniqueNames = [...new Set(names)]
-    if (uniqueNames.length > 0) {
-      return {
-        short: uniqueNames.length > 1 ? `${uniqueNames[0]}...` : uniqueNames[0],
-        full: uniqueNames
-      }
-    }
-  }
-  
-  // 对于其他任务，使用deviceIps
-  if (task.deviceIps && task.deviceIps.length > 0) {
-    return {
-      short: task.deviceIps.length > 1 ? `${task.deviceIps[0]}...` : task.deviceIps[0],
-      full: task.deviceIps
-    }
-  }
-  
-  // 对于创建任务，从targets中获取槽位信息
-  if (task.type === 'create' && task.targets && task.targets.length > 0) {
-    const slots = task.targets.map(t => `坑位${t.slot}`)
-    return {
-      short: slots.length > 1 ? `${slots[0]}...` : slots[0],
-      full: slots
-    }
-  }
-  
-  return { short: '', full: [] }
-}
+
 
 // 添加任务到队列
 const addTaskToQueue = (taskType, targets, metadata = {}) => {
@@ -17664,49 +17219,12 @@ const isModelSlotsValid = computed(() => {
 
 
 // 从设备名称中提取设备型号
-const getDeviceTypeName = (deviceName) => {
-  if (!deviceName) return 'unknown'
-  // 从设备名称中提取型号，例如q1_v2 -> q1, p1_v3 -> p1
-  const parts = deviceName.split('_')
-  return parts[0] || 'unknown'
-}
 
-// 格式化实例名称，隐藏特定格式的前缀
-const formatInstanceName = (name) => {
-  if (!name) return name
-  
-  // 匹配格式：[任意字符]_数字_名称
-  // 例如：p1e847b84af914895b56a14557d1813d_2_T00022222222 -> T00022222222
-  // 例如：p1e847b84af914895b56a14557d1813d_4_sjz_cs -> sjz_cs
-  const match = name.match(/^.+_\d+_(.+)$/)
-  if (match && match.length > 1) {
-    return match[1] // 只返回最后一个下划线后的名称部分
-  }
-  
-  return name // 返回原始名称
-}
+
 
 
 // 格式化实例机型名称
-const formatInstanceModel = (path) => {
-  if (!path) return ''
-  
-  // 匹配格式：[任意字符]_数字_名称
-  // 例如：p1e847b84af914895b56a14557d1813d_2_T00022222222 -> T00022222222
-  // 例如：p1e847b84af914895b56a14557d1813d_4_sjz_cs -> sjz_cs
-  // 例如：/mmc/data/.../22111317PG -> 22111317PG
-  
-  // 尝试从路径中提取最后一部分作为机型
-  const pathParts = path.split('/')
-  const lastPart = pathParts[pathParts.length - 1]
-  
-  // 检查是否是有效的机型名称（非空且不包含路径分隔符）
-  if (lastPart && !lastPart.includes('/')) {
-    return lastPart
-  }
-  
-  return path // 无法提取时返回原始名称
-}
+
 
 // 获取镜像显示名称 - 优化版
 const getImageDisplayName = (imageUrl) => {
@@ -17787,91 +17305,7 @@ const getImageDisplayName = (imageUrl) => {
   return imageUrl
 }
 
-// 获取设备类型颜色
-const getDeviceTypeColor = (deviceName) => {
-  const deviceType = getDeviceTypeName(deviceName)
-  const colorMap = {
-    'q1': '#409EFF', // 蓝色
-    'p1': '#67C23A', // 绿色
-    'm48': '#E6A23C', // 黄色
-    'c1': '#F56C6C', // 红色
-    'a1': '#909399', // 灰色
-    'r1p': '#67C23A' // 归入 P 类，使用绿色
-  }
-  return colorMap[deviceType] || '#909399' // 默认灰色
-}
 
-// 解析容器坑位编号
-const parseContainerSlot = (container, device) => {
-  console.log('parseContainerSlot called with container:', container?.name, 'device:', device?.ip, 'version:', device?.version);
-  
-  // 1. 识别系统插件容器，直接返回null
-  const image = container.Image || container.image;
-  const name = container.Name || container.Names?.[0];
-  const isSystemContainer = image?.includes('myt_sdk') || 
-                           image?.includes('myt_vpc_plugin') ||
-                           name?.includes('myt_sdk') ||
-                           name?.includes('myt_vpc_plugin');
-  
-  if (isSystemContainer) {
-    console.log('System container detected, returning null');
-    return null;
-  }
-  
-  // 2. 优先从容器的indexNum字段获取
-  if (container.indexNum) {
-    console.log('Found slot from indexNum:', container.indexNum);
-    return container.indexNum;
-  }
-  
-  // 对于Docker API返回的容器，尝试从Labels获取idx
-  if (container.Config && container.Config.Labels && container.Config.Labels.idx) {
-    const slot = parseInt(container.Config.Labels.idx);
-    console.log('Found slot from Config.Labels.idx:', slot);
-    return slot;
-  }
-  
-  // 尝试从docker inspect的Labels直接获取idx（不同Docker API版本可能有不同的字段）
-  if (container.Labels && container.Labels.idx) {
-    const slot = parseInt(container.Labels.idx);
-    console.log('Found slot from Labels.idx:', slot);
-    return slot;
-  }
-  
-  // 从设备路径推断idx（参考api/main.go的逻辑）
-  if (container.HostConfig && container.HostConfig.Devices) {
-    for (const dev of container.HostConfig.Devices) {
-      if (dev.PathInContainer && dev.PathInContainer.includes('/dev/vndbinder')) {
-        const parts = dev.PathOnHost.split('binder')
-        if (parts.length > 1) {
-          const num = parseInt(parts[1])
-          if (!isNaN(num)) {
-            const slot = Math.floor(num / 3);
-            console.log('Found slot from device path:', slot);
-            return slot;
-          }
-        }
-      }
-    }
-  }
-  
-  // 从容器名称中提取坑位编号，例如 "android-1" -> 1
-  if (container.Name || container.Names) {
-    const name = container.Name || container.Names[0];
-    if (name) {
-      const match = name.match(/-(\d+)/);
-      if (match && match[1]) {
-        const slot = parseInt(match[1]);
-        console.log('Found slot from container name:', slot);
-        return slot;
-      }
-    }
-  }
-  
-  // 默认返回null
-  console.log('No slot found, returning null');
-  return null;
-}
 
 // 处理主机管理设备选择变化
 
