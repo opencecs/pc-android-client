@@ -288,6 +288,7 @@ import RegisterDialog from './components/dialogs/RegisterDialog.vue'
 import ForgotPasswordDialog from './components/dialogs/ForgotPasswordDialog.vue'
 import BatchAuthDialog from './components/dialogs/BatchAuthDialog.vue'
 import FileManagerDialog from './components/dialogs/FileManagerDialog.vue'
+import DeviceSelectionDialog from './components/dialogs/DeviceSelectionDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -3852,6 +3853,9 @@ const uploadImageToDevice = async (image) => {
 
 // 设备选择表格的引用
 const deviceSelectionTableRef = ref(null)
+// 表格实例回写：表格已随弹窗迁进 DeviceSelectionDialog，
+// handleDeviceSelectionDialogClose 要靠它 clearSelection() 清掉勾选。
+const setDeviceSelectionTableRef = (el) => { deviceSelectionTableRef.value = el }
 
 // 刷新上传设备列表的状态
 const refreshingDevicesForUpload = ref(false)
@@ -9206,102 +9210,23 @@ const handleBindsTest = async () => {
     </el-main>
   </el-container>
   
-  <!-- 设备选择对话框 -->
-  <el-dialog
-    v-model="showDeviceSelectionDialog"
-    :title="t('dialog.addDeviceTitle')"
-    width="600px"
-    :close-on-click-modal="false"
+  <!-- 设备选择对话框（阶段 4 迁出到 components/dialogs/DeviceSelectionDialog.vue） -->
+  <DeviceSelectionDialog
+    v-model:visible="showDeviceSelectionDialog"
+    :devices="sortedCompatibleDevicesList"
+    :devices-status-cache="devicesStatusCache"
+    :refreshing-devices-for-upload="refreshingDevicesForUpload"
+    :uploading="isUploadingToMultipleDevices"
+    :get-device-storage-info="getDeviceStorageInfo"
+    :get-device-row-class-name="getDeviceRowClassName"
+    :check-device-selectable="checkDeviceSelectable"
+    :table-ref-setter="setDeviceSelectionTableRef"
     @close="handleDeviceSelectionDialogClose"
-  >
-    <!-- 上传进度已整合到任务列表 -->
-    
-    <div class="device-selection-container">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h4 style="margin: 0;">
-          {{ $t('common.pleaseSelectDeviceForUpload') }}
-          <span style="color: #409eff; font-weight: 500; margin-left: 8px;">
-            ({{ $t('model.onlineDeviceCount', { count: sortedCompatibleDevicesList.length }) }})
-          </span>
-        </h4>
-        <el-button 
-          type="primary" 
-          size="small" 
-          :icon="Refresh" 
-          @click="refreshDeviceListForUpload"
-          :loading="refreshingDevicesForUpload"
-        >
-          刷新列表
-        </el-button>
-      </div>
-      
-      <!-- 空状态提示 -->
-      <div v-if="sortedCompatibleDevicesList.length === 0" class="empty-devices">
-        <el-empty :description="$t('common.noCompatibleDevices')" :image-size="100"></el-empty>
-      </div>
-      
-      <!-- 设备列表 -->
-      <el-table 
-        v-else
-        ref="deviceSelectionTableRef"
-        :data="sortedCompatibleDevicesList" 
-        stripe 
-        size="small" 
-        max-height="400"
-        class="device-selection-table"
-        @selection-change="handleUploadDeviceSelectionChange"
-        :row-class-name="getDeviceRowClassName"
-      >
-        <el-table-column 
-          type="selection" 
-          width="55"
-          :selectable="checkDeviceSelectable"
-        ></el-table-column>
-        <el-table-column prop="name" :label="$t('image.deviceModel')" width="120"></el-table-column>
-        <el-table-column prop="ip" :label="$t('model.deviceIP')" width="150" sortable></el-table-column>
-        <el-table-column :label="$t('common.status')" width="80" align="center">
-          <template #default="scope">
-            <el-tag 
-              :type="devicesStatusCache.get(scope.row.id) === 'online' ? 'success' : 'danger'" 
-              size="small"
-            >
-              {{ devicesStatusCache.get(scope.row.id) === 'online' ? $t('common.online') : $t('common.offline') }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('image.availableSpace')" width="140" align="center">
-          <template #default="scope">
-            <span v-if="devicesStatusCache.get(scope.row.id) !== 'online'" style="color: var(--el-text-color-secondary);">
-              未知
-            </span>
-            <span v-else-if="getDeviceStorageInfo(scope.row.id)">
-              {{ getDeviceStorageInfo(scope.row.id).freeText }}
-              <span 
-                v-if="getDeviceStorageInfo(scope.row.id).isLow" 
-                style="color: #F56C6C; font-size: 12px;"
-              >
-                {{ $t('image.insufficient') }}
-              </span>
-            </span>
-            <span v-else style="color: var(--el-text-color-secondary);">{{ $t('common.loading') }}</span>
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
-    
-    <template #footer>
-      <div class="dialog-footer">
-        <el-button @click="showDeviceSelectionDialog = false">{{ t('common.cancel') }}</el-button>
-        <el-button 
-          type="primary" 
-          @click="handleUploadAfterDeviceSelection"
-          :loading="isUploadingToMultipleDevices"
-        >
-          {{ t('common.upload') }}
-        </el-button>
-      </div>
-    </template>
-  </el-dialog>
+    @refresh="refreshDeviceListForUpload"
+    @selection-change="handleUploadDeviceSelectionChange"
+    @upload="handleUploadAfterDeviceSelection"
+  />
+
 
   <!-- 云机重命名弹窗 -->
   <!-- 云机重命名弹窗（阶段 4 迁出到 components/dialogs/RenameDialog.vue） -->
