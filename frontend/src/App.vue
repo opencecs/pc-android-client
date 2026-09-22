@@ -276,6 +276,8 @@ import PasswordDialog from './components/dialogs/PasswordDialog.vue'
 import BatchSwitchBackupProgressDialog from './components/dialogs/BatchSwitchBackupProgressDialog.vue'
 import RenameDialog from './components/dialogs/RenameDialog.vue'
 import AnnouncementDialog from './components/dialogs/AnnouncementDialog.vue'
+import ApiDetailsDialog from './components/dialogs/ApiDetailsDialog.vue'
+import S5ProxyDialog from './components/dialogs/S5ProxyDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -10574,125 +10576,21 @@ const handleBindsTest = async () => {
   />
 
   <!-- API详情对话框 -->
-  <el-dialog 
-    v-model="apiDetailsVisible" 
-    :title="$t('common.apiDetails')" 
-    width="600px"
-    :close-on-click-modal="false"
-    style="max-height: 600px;"
-  >
-    <div v-if="apiDetailsData" class="api-details-content">
-      <div class="api-details-header">
-        <p><strong>{{ $t('common.slot') }}:</strong> {{ apiDetailsData.slotNum }}</p>
-        <p><strong>{{ $t('common.instanceName') }}:</strong> {{ apiDetailsData.instanceName }}</p>
-        <p><strong>{{ $t('common.deviceIP') }}:</strong> {{ apiDetailsData.deviceIp }}</p>
-        <p><strong>{{ $t('common.deviceVersion') }}:</strong> {{ apiDetailsData.deviceVersion }}</p>
-      </div>
-      
-      <div class="api-details-table">
-        <h4>{{ $t('common.portMappingInfo') }}</h4>
-        <el-table :data="Object.values(apiDetailsData.portMappings)" size="small" class="port-mapping-table">
-          <el-table-column prop="description" :label="$t('common.service')" width="150"></el-table-column>
-          <el-table-column :label="$t('common.portMapping')" width="120">
-            <template #default="{ row }">
-              {{ row.originalPort }} → {{ row.mappedPort }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="url" :label="$t('common.accessAddress')" min-width="200">
-            <template #default="{ row }">
-              <span style="cursor: pointer; color: #409EFF;" @click="copyToClipboard(row.url)">
-                {{ row.url }}
-              </span>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-      
-      <div class="api-details-footer">
-        <p style="color: var(--el-text-color-secondary); font-size: 12px; margin-top: 10px;">
-          {{ $t('common.clickToCopy') }}
-        </p>
-      </div>
-    </div>
-    
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="apiDetailsVisible = false">{{ $t('common.close') }}</el-button>
-      </span>
-    </template>
-  </el-dialog>
+  <!-- API详情对话框（阶段 4 迁出到 components/dialogs/ApiDetailsDialog.vue） -->
+  <ApiDetailsDialog
+    v-model:visible="apiDetailsVisible"
+    :data="apiDetailsData"
+  />
 
   <!-- S5代理设置弹窗 -->
-  <el-dialog
-    v-model="s5ProxyDialogVisible"
-    :title="$t('common.setS5Proxy')"
-    width="550px"
-  >
-    <el-form :model="s5ProxyForm" label-width="120px">
-      <el-form-item :label="$t('common.cloudMachineName')">
-        <el-input
-          v-model="s5ProxyForm.cloudMachineName"
-          :placeholder="$t('common.cloudMachineName')"
-          readonly
-        ></el-input>
-      </el-form-item>
-      <el-form-item :label="$t('common.s5Info')">
-        <el-input
-          v-model="s5ProxyForm.vpcInfo"
-          :placeholder="$t('common.s5InfoFormat')"
-          @blur="parseVpcInfo"
-          clearable
-        >
-          <template #append>
-            <el-button @click="parseVpcInfo">{{ $t('common.parseAndFill') }}</el-button>
-          </template>
-        </el-input>
-        <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px;">
-          {{ $t('common.s5InfoExample') }}
-        </div>
-      </el-form-item>
-      <el-form-item :label="$t('common.s5ServerAddress')" required>
-        <el-input
-          v-model="s5ProxyForm.s5ServerAddress"
-          :placeholder="$t('common.enterS5ServerAddress')"
-        ></el-input>
-      </el-form-item>
-      <el-form-item :label="$t('common.s5Port')" required>
-        <el-input
-          v-model="s5ProxyForm.s5Port"
-          :placeholder="$t('common.enterS5Port')"
-        ></el-input>
-      </el-form-item>
-      <el-form-item :label="$t('common.username')">
-        <el-input
-          v-model="s5ProxyForm.username"
-          :placeholder="$t('common.enterUsername')"
-        ></el-input>
-      </el-form-item>
-      <el-form-item :label="$t('common.password')">
-        <el-input
-          v-model="s5ProxyForm.password"
-          :placeholder="$t('common.enterPassword')"
-          type="password"
-          show-password
-        ></el-input>
-      </el-form-item>
-      <el-form-item :label="$t('common.dnsMode')">
-        <el-radio-group v-model="s5ProxyForm.dnsMode">
-          <el-radio label="local">{{ $t('common.localDNS') }}</el-radio>
-          <el-radio label="server">{{ $t('common.serverDNS') }}</el-radio>
-        </el-radio-group>
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="s5ProxyDialogVisible = false">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="handleS5ProxySubmit" :loading="s5ProxyLoading">
-          {{ s5ProxyLoading ? $t('common.submitting') : $t('common.submitNow') }}
-        </el-button>
-      </span>
-    </template>
-  </el-dialog>
+  <!-- S5代理设置弹窗（阶段 4 迁出到 components/dialogs/S5ProxyDialog.vue） -->
+  <S5ProxyDialog
+    v-model:visible="s5ProxyDialogVisible"
+    :form="s5ProxyForm"
+    :loading="s5ProxyLoading"
+    @parse="parseVpcInfo"
+    @confirm="handleS5ProxySubmit"
+  />
 
   <!-- 设置VPC对话框 -->
   <!-- 设置VPC弹窗（阶段 4 迁出到 components/dialogs/VpcSetDialog.vue） -->
