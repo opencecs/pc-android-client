@@ -283,6 +283,9 @@ import SwitchModelDialog from './components/dialogs/SwitchModelDialog.vue'
 import SharedFilesDialog from './components/dialogs/SharedFilesDialog.vue'
 import UpdateImageDialog from './components/dialogs/UpdateImageDialog.vue'
 import BatchUpdateImageDialog from './components/dialogs/BatchUpdateImageDialog.vue'
+import SyncAuthDialog from './components/dialogs/SyncAuthDialog.vue'
+import RegisterDialog from './components/dialogs/RegisterDialog.vue'
+import ForgotPasswordDialog from './components/dialogs/ForgotPasswordDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -10328,183 +10331,46 @@ const handleBindsTest = async () => {
   />
 
 
-  <!-- 授权同步对话框 -->
-  <el-dialog
-    v-model="syncAuthDialogVisible"
-    :title="$t('common.syncAuthLogin')"
-    width="400px"
-  >
-    <el-form :model="syncAuthForm" label-width="80px">
-      <el-form-item :label="$t('common.username')" required>
-        <el-input
-          v-model="syncAuthForm.username"
-          :placeholder="$t('common.enterUsername')"
-          autocomplete="off"
-        ></el-input>
-      </el-form-item>
-      <el-form-item :label="$t('common.password')" required>
-        <el-input
-          v-model="syncAuthForm.password"
-          type="password"
-          :placeholder="$t('common.enterPassword')"
-          show-password
-        ></el-input>
-      </el-form-item>
-      <el-form-item>
-        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-          <el-checkbox v-model="syncAuthForm.saveCredentials">{{ $t('common.rememberCredentials') }}</el-checkbox>
-          <el-link type="primary" :underline="false" @click="openForgotPasswordDialog" style="font-size: 13px;">忘记密码</el-link>
-        </div>
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="handleSyncAuthCancel">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="handleSyncAuthSubmit" :loading="syncAuthLoading">
-          {{ syncAuthLoading ? $t('common.loggingIn') : $t('common.login') }}
-        </el-button>
-        <el-button type="success" @click="openRegisterDialog">{{ $t('common.register') }}</el-button>
-      </span>
-    </template>
-  </el-dialog>
+  <!-- 同步授权对话框（阶段 4 迁出到 components/dialogs/SyncAuthDialog.vue） -->
+  <SyncAuthDialog
+    v-model:visible="syncAuthDialogVisible"
+    :form="syncAuthForm"
+    :loading="syncAuthLoading"
+    @cancel="handleSyncAuthCancel"
+    @submit="handleSyncAuthSubmit"
+    @open-forgot-password="openForgotPasswordDialog"
+    @open-register="openRegisterDialog"
+  />
 
-  <!-- 注册对话框 -->
-  <el-dialog
-    v-model="registerDialogVisible"
-    :title="$t('common.userRegistration')"
-    width="400px"
-  >
-    <el-form :model="registerForm" label-width="100px">
-      <el-form-item :label="$t('common.phoneNumber')" required>
-        <el-input
-          v-model="registerForm.phone"
-          :placeholder="$t('common.enterPhoneNumber')"
-          autocomplete="off"
-        ></el-input>
-      </el-form-item>
-      <el-form-item :label="$t('common.loginPassword')" required>
-        <el-input
-          v-model="registerForm.password"
-          type="password"
-          :placeholder="$t('common.enterLoginPassword')"
-          show-password
-        ></el-input>
-      </el-form-item>
-      <el-form-item :label="$t('common.confirmPassword')" required>
-        <el-input
-          v-model="registerForm.confirmPassword"
-          type="password"
-          :placeholder="$t('common.enterPasswordAgain')"
-          show-password
-        ></el-input>
-      </el-form-item>
-      <el-form-item :label="$t('common.phoneVerificationCode')" required>
-        <div style="display: flex; gap: 10px;">
-          <el-input
-            v-model="registerForm.vcode"
-            :placeholder="$t('common.enterVerificationCode')"
-            style="flex: 1;"
-          ></el-input>
-          <el-button 
-            @click="sendVcode" 
-            :loading="sendVcodeLoading"
-            :disabled="vcodeCountdown > 0"
-            style="width: 120px;"
-          >
-            {{ vcodeCountdown > 0 ? `${vcodeCountdown}${$t('common.retryAfterSeconds')}` : $t('common.getVerificationCode') }}
-          </el-button>
-        </div>
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="handleRegisterCancel">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="handleRegisterSubmit" :loading="registerLoading">
-          {{ registerLoading ? $t('common.registering') : $t('common.register') }}
-        </el-button>
-      </span>
-    </template>
-  </el-dialog>
 
-  <!-- 忘记密码对话框 -->
-  <el-dialog
-    v-model="forgotPasswordDialogVisible"
-    title="忘记密码"
-    width="400px"
+  <!-- 注册对话框（阶段 4 迁出到 components/dialogs/RegisterDialog.vue） -->
+  <RegisterDialog
+    v-model:visible="registerDialogVisible"
+    :form="registerForm"
+    :loading="registerLoading"
+    :vcode-loading="sendVcodeLoading"
+    :countdown="vcodeCountdown"
+    @cancel="handleRegisterCancel"
+    @submit="handleRegisterSubmit"
+    @send-vcode="sendVcode"
+  />
+
+
+  <!-- 忘记密码对话框（阶段 4 迁出到 components/dialogs/ForgotPasswordDialog.vue） -->
+  <ForgotPasswordDialog
+    v-model:visible="forgotPasswordDialogVisible"
+    :form="forgotPasswordForm"
+    :errors="forgotPasswordErrors"
+    :loading="forgotPasswordLoading"
+    :vcode-loading="fpVcodeLoading"
+    :is-counting-down="fpIsCountingDown"
+    :vcode-button-text="fpVcodeButtonText"
     @close="handleForgotPasswordClose"
-  >
-    <el-form :model="forgotPasswordForm" label-width="0">
-      <el-form-item>
-        <el-input
-          v-model="forgotPasswordForm.phone"
-          placeholder="手机号码"
-          autocomplete="off"
-          clearable
-        ></el-input>
-        <div v-if="forgotPasswordErrors.phone" class="fp-error-app">
-          <el-icon style="margin-right:3px;"><WarningFilled /></el-icon>{{ forgotPasswordErrors.phone }}
-        </div>
-      </el-form-item>
-      <el-form-item>
-        <el-input
-          v-model="forgotPasswordForm.newPassword"
-          type="password"
-          placeholder="新密码"
-          show-password
-          clearable
-        ></el-input>
-        <div v-if="forgotPasswordErrors.newPassword" class="fp-error-app">
-          <el-icon style="margin-right:3px;"><WarningFilled /></el-icon>{{ forgotPasswordErrors.newPassword }}
-        </div>
-      </el-form-item>
-      <el-form-item>
-        <el-input
-          v-model="forgotPasswordForm.confirmPassword"
-          type="password"
-          placeholder="确认新密码"
-          show-password
-          clearable
-        ></el-input>
-        <div v-if="forgotPasswordErrors.confirmPassword" class="fp-error-app">
-          <el-icon style="margin-right:3px;"><WarningFilled /></el-icon>{{ forgotPasswordErrors.confirmPassword }}
-        </div>
-      </el-form-item>
-      <el-form-item>
-        <div style="display: flex; gap: 10px; width: 100%;">
-          <el-input
-            v-model="forgotPasswordForm.vcode"
-            placeholder="手机验证码"
-            style="flex: 1;"
-            clearable
-          ></el-input>
-          <el-button
-            type="primary"
-            @click="sendForgotPasswordVcode"
-            :loading="fpVcodeLoading"
-            :disabled="fpIsCountingDown"
-            style="white-space: nowrap;"
-          >
-            {{ fpVcodeButtonText }}
-          </el-button>
-        </div>
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <div style="width: 100%; display: flex; flex-direction: column;">
-        <el-button
-          type="primary"
-          style="width: 100%; margin-bottom: 10px;"
-          :loading="forgotPasswordLoading"
-          @click="handleForgotPasswordSubmit"
-        >
-          {{ forgotPasswordLoading ? '重置中...' : '重置密码' }}
-        </el-button>
-        <div style="text-align: center; font-size: 13px; color: #666;">
-          还没有账号？<el-link type="primary" :underline="false" @click="openRegisterFromForgot">立即注册</el-link>
-        </div>
-      </div>
-    </template>
-  </el-dialog>
+    @submit="handleForgotPasswordSubmit"
+    @send-vcode="sendForgotPasswordVcode"
+    @open-register="openRegisterFromForgot"
+  />
+
 
   <!-- 文件管理器对话框 -->
   <el-dialog v-model="fileManagerVisible" :title="$t('cloudMachine.fileManager')" width="80%" top="5vh" :close-on-click-modal="false" destroy-on-close>
