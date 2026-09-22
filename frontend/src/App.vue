@@ -224,15 +224,16 @@ import CloudManagement from './components/CloudManagement.vue'
 import BatchUploadDialog from './components/BatchUploadDialog.vue'
 
 // 导入语言切换组件
-import LanguageSwitcher from './components/LanguageSwitcher.vue'
-
-// 纯工具函数（阶段 2 从本文件迁出，见 src/utils/）
-import { getDeviceAddr, FORBIDDEN_ADB_PORTS, getInstanceAdbPort, extractPort, extractPort9082, getSDKPort, getPortMappings, getDeviceTypeName, getDeviceTypeColor, parseContainerSlot } from './utils/device.js'
-import { formatSize, calculateIpRange, extractNodeDisplayName, naturalSortKey, extractShortName, arrayBufferToBase64, generateTaskId, formatInstanceName, formatInstanceModel } from './utils/format.js'
-import { getDeviceProgress, getDeviceProgressStatus, getDeviceProgressText, getTaskTargetDisplay } from './utils/taskDisplay.js'
-import { toggleNodeExpanded, collectSharedFilePaths } from './utils/fileTree.js'
+import LanguageSwitcher from './components/LanguageSwitcher.vue'
+
+// 纯工具函数（阶段 2 从本文件迁出，见 src/utils/）
+import { getDeviceAddr, FORBIDDEN_ADB_PORTS, getInstanceAdbPort, extractPort, extractPort9082, getSDKPort, getPortMappings, getDeviceTypeName, getDeviceTypeColor, parseContainerSlot } from './utils/device.js'
+import { formatSize, calculateIpRange, extractNodeDisplayName, naturalSortKey, extractShortName, arrayBufferToBase64, generateTaskId, formatInstanceName, formatInstanceModel } from './utils/format.js'
+import { getDeviceProgress, getDeviceProgressStatus, getDeviceProgressText, getTaskTargetDisplay } from './utils/taskDisplay.js'
+import { toggleNodeExpanded, collectSharedFilePaths } from './utils/fileTree.js'
 import { copyToClipboard } from './utils/clipboard.js'
 import { useTheme } from './composables/useTheme.js'
+import { useScreenshotCache } from './composables/useScreenshotCache.js'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -5576,7 +5577,7 @@ const handleSelectedCloudDeviceChange = (device) => {
   console.log('选中云机设备变化:', device)
   selectedCloudDevice.value = device
   // 切换设备时清空版本快照，强制下次轮询立即拉取新设备截图
-  screenshotLocalVersions = {}
+  resetScreenshotVersions()
 
   // 切换设备时立即清空坑位状态，避免显示上一个设备的已过期/即将过期标签
   setSlotStates({}, '')
@@ -11820,7 +11821,7 @@ const handleCloudDeviceSelect = async (device) => {
 
     // 切换设备时停止当前截图刷新，清空版本快照强制下次立即拉取新设备截图
     stopScreenshotRefresh()
-    screenshotLocalVersions = {}
+    resetScreenshotVersions()
 
     // 切换设备时立即清空坑位状态，避免显示上一个设备的已过期/即将过期标签
     setSlotStates({}, '')
@@ -15468,122 +15469,19 @@ const updateCloudMachines = () => {
   initCloudMachineGroups();
 }
 
-// ========== 安卓容器截图缓存（后端轮询驱动）==========
-// 后端每 800ms 抓一次截图存缓存，前端 300ms 拉版本号，有更新才拉 base64
-// 彻底消除前端对每个坑位独立发 IPC 请求的性能开销
-
-// 截图数据缓存 Map<"ip_containerName", base64DataURL>
-// 每次更新都替换整个 Map 对象，确保 Vue 响应式能检测到变化
-const screenshotDataCache = ref(new Map())
-// 每台设备的本地版本号快照，用于对比后端是否有新截图
-let screenshotLocalVersions = {}
-// 截图版本轮询定时器
-let screenshotCacheTimer = null
-// 防并发标志：避免同一时刻多个轮询 tick 重叠执行
-let screenshotFetching = false
-
-// 300ms 轮询：比较版本号，有变化才拉取该设备的截图数据
-const fetchScreenshotCacheIfUpdated = async () => {
-  if (screenshotFetching) return
-  screenshotFetching = true
-  try {
-    const versions = await getScreenshotVersions()
-    // console.log('[截图轮询] versions:', versions, '| mode:', cloudManageMode.value, '| selectedDevice:', selectedCloudDevice.value?.ip)
-
-    // Wails 会把 Go 空 map 序列化为 null，视为无数据但不阻断逻辑
-    if (!versions || Object.keys(versions).length === 0) {
-      // console.log('[截图轮询] versions 为空（后端尚无截图数据），跳过')
-      return
-    }
-
-    // 找出有版本变化的设备
-    const targetIps = []
-    if (cloudManageMode.value === 'slot' && selectedCloudDevice.value) {
-      const ip = selectedCloudDevice.value.ip
-      // console.log(`[截图轮询] 坑位模式 ip=${ip} 后端版本=${versions[ip]} 本地版本=${screenshotLocalVersions[ip]}`)
-      if (versions[ip] !== undefined && versions[ip] !== screenshotLocalVersions[ip]) {
-        targetIps.push(ip)
-      }
-    } else if (cloudManageMode.value === 'batch') {
-      const ipSet = new Set(selectedCloudMachines.value.map(m => m.deviceIp).filter(Boolean))
-      const ips = ipSet.size > 0 ? ipSet : new Set(Object.keys(versions))
-      for (const ip of ips) {
-        if (versions[ip] !== undefined && versions[ip] !== screenshotLocalVersions[ip]) {
-          targetIps.push(ip)
-        }
-      }
-    } else {
-      // console.log('[截图轮询] 无匹配模式或无选中设备，跳过')
-    }
-
-    // console.log('[截图轮询] targetIps:', targetIps)
-    if (targetIps.length === 0) return
-
-    // 并行拉取有变化的设备截图数据
-    let hasUpdate = false
-    await Promise.all(targetIps.map(async (ip) => {
-      const snapshots = await getScreenshots(ip)
-      // console.log(`[截图轮询] getScreenshots(${ip}) 返回:`, snapshots ? Object.keys(snapshots).length + ' 条' : 'null/undefined')
-      if (!snapshots) return
-      let count = 0
-      for (const [key, dataURL] of Object.entries(snapshots)) {
-        if (dataURL) {
-          screenshotDataCache.value.set(key, dataURL)
-          hasUpdate = true
-          count++
-        }
-      }
-      // console.log(`[截图轮询] 设备 ${ip} 写入缓存 ${count} 张`)
-      screenshotLocalVersions[ip] = versions[ip]
-    }))
-
-    if (hasUpdate) {
-      screenshotDataCache.value = new Map(screenshotDataCache.value)
-      // console.log('[截图轮询] screenshotDataCache 已更新，共', screenshotDataCache.value.size, '条')
-    }
-  } catch (e) {
-    console.error('[截图轮询] 异常:', e)
-  } finally {
-    screenshotFetching = false
-  }
-}
-
-// 启动截图缓存轮询（切换到云机管理页面时调用）
-const startScreenshotRefresh = () => {
-  if (screenshotCacheTimer) {
-    // console.log('[截图轮询] 定时器已存在，不重复启动')
-    return
-  }
-  console.log('[截图轮询] 启动定时器 150ms')
-  screenshotCacheTimer = setInterval(fetchScreenshotCacheIfUpdated, 150)
-  fetchScreenshotCacheIfUpdated()
-}
-
-// 停止截图缓存轮询（离开云机管理页面时调用）
-const stopScreenshotRefresh = () => {
-  if (screenshotCacheTimer) {
-    // console.log('[截图轮询] 停止定时器')
-    clearInterval(screenshotCacheTimer)
-    screenshotCacheTimer = null
-  }
-  screenshotFetching = false
-}
-
-// 获取指定容器的截图数据（供 CloudManagement 透传给 ScreenshotImage）
-const getContainerScreenshotData = (deviceIp, containerName) => {
-  return screenshotDataCache.value.get(`${deviceIp}_${containerName}`) || ''
-}
-
-// 监听云机管理模式变化：清空版本快照，强制立即拉取新模式下的截图
-watch(cloudManageMode, () => {
-  screenshotLocalVersions = {}
-  screenshotFetching = false   // 重置并发锁，防止上一轮请求残留导致下次 tick 被跳过
-  // 切模式时 selectedCloudMachines 清空会触发 watch(selectedCloudMachines) → stopScreenshotRefresh()
-  // 必须在此重新启动定时器，否则后续 300ms 轮询永远不再触发
-  screenshotCacheTimer && clearInterval(screenshotCacheTimer)
-  screenshotCacheTimer = null
-  startScreenshotRefresh()
-  // 不清空 screenshotDataCache，保留已有图片避免闪烁
+// ========== 安卓容器截图缓存（后端轮询驱动）=========
+// 阶段 3 迁出到 composables/useScreenshotCache.js
+const {
+  screenshotDataCache,
+  fetchScreenshotCacheIfUpdated,
+  startScreenshotRefresh,
+  stopScreenshotRefresh,
+  getContainerScreenshotData,
+  resetScreenshotVersions,
+} = useScreenshotCache({
+  cloudManageMode,
+  selectedCloudDevice,
+  selectedCloudMachines,
 })
 
 
