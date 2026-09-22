@@ -287,6 +287,7 @@ import SyncAuthDialog from './components/dialogs/SyncAuthDialog.vue'
 import RegisterDialog from './components/dialogs/RegisterDialog.vue'
 import ForgotPasswordDialog from './components/dialogs/ForgotPasswordDialog.vue'
 import BatchAuthDialog from './components/dialogs/BatchAuthDialog.vue'
+import FileManagerDialog from './components/dialogs/FileManagerDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -10373,74 +10374,26 @@ const handleBindsTest = async () => {
   />
 
 
-  <!-- 文件管理器对话框 -->
-  <el-dialog v-model="fileManagerVisible" :title="$t('cloudMachine.fileManager')" width="80%" top="5vh" :close-on-click-modal="false" destroy-on-close>
-    <div class="file-manager-container">
-      <!-- Android端 -->
-      <div class="file-panel">
-        <div class="file-panel-header">
-          <span style="font-weight: 600;">{{ $t('common.cloudMachine') }}</span>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <el-button size="small" @click="androidGoUp" :disabled="androidCurrentPath === '/'"><el-icon><Back /></el-icon></el-button>
-            <el-input v-model="androidCurrentPath" size="small" readonly style="flex: 1;" />
-            <el-button size="small" @click="fetchAndroidFiles(androidCurrentPath)">
-              <el-icon><Refresh /></el-icon>
-            </el-button>
-          </div>
-        </div>
-        <el-table :data="androidFileList" v-loading="androidFileLoading" size="small" height="400" style="width: 100%;" @row-dblclick="androidNavigate">
-          <el-table-column width="30">
-            <template #default="scope">
-              <el-icon v-if="scope.row.isDir"><FolderOpened /></el-icon>
-              <el-icon v-else><Document /></el-icon>
-            </template>
-          </el-table-column>
-          <el-table-column prop="name" :label="$t('common.name')" show-overflow-tooltip />
-          <el-table-column :label="$t('common.size')" width="100" align="right">
-            <template #default="scope">
-              {{ scope.row.isDir ? '-' : formatFileSize(scope.row.size) }}
-            </template>
-          </el-table-column>
-          <el-table-column :label="$t('common.operation')" width="80" align="center">
-            <template #default="scope">
-              <el-button v-if="!scope.row.isDir" type="primary" size="small" link @click="downloadCloudFile(scope.row)">{{ $t('common.download') }}</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
+  <!-- 文件管理器对话框（阶段 4 迁出到 components/dialogs/FileManagerDialog.vue） -->
+  <FileManagerDialog
+    v-model:visible="fileManagerVisible"
+    v-model:android-current-path="androidCurrentPath"
+    v-model:local-current-path="localCurrentPath"
+    :android-file-list="androidFileList"
+    :android-file-loading="androidFileLoading"
+    :local-file-list="localFileList"
+    :local-file-loading="localFileLoading"
+    :format-file-size="formatFileSize"
+    @android-go-up="androidGoUp"
+    @android-navigate="androidNavigate"
+    @fetch-android-files="fetchAndroidFiles"
+    @local-go-up="localGoUp"
+    @local-navigate="localNavigate"
+    @local-select-directory="localSelectDirectory"
+    @fetch-local-files="fetchLocalFiles"
+    @download-cloud-file="downloadCloudFile"
+  />
 
-      <!-- 本地端 -->
-      <div class="file-panel">
-        <div class="file-panel-header">
-          <span style="font-weight: 600;">Windows</span>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <el-button size="small" @click="localGoUp" :disabled="!localCurrentPath"><el-icon><Back /></el-icon></el-button>
-            <el-input v-model="localCurrentPath" size="small" style="flex: 1;" @keyup.enter="fetchLocalFiles(localCurrentPath)" />
-            <el-button size="small" @click="localSelectDirectory">
-              <el-icon><FolderOpened /></el-icon>
-            </el-button>
-            <el-button size="small" @click="fetchLocalFiles(localCurrentPath)">
-              <el-icon><Refresh /></el-icon>
-            </el-button>
-          </div>
-        </div>
-        <el-table :data="localFileList" v-loading="localFileLoading" size="small" height="400" style="width: 100%;" @row-dblclick="localNavigate">
-          <el-table-column width="30">
-            <template #default="scope">
-              <el-icon v-if="scope.row.isDir"><FolderOpened /></el-icon>
-              <el-icon v-else><Document /></el-icon>
-            </template>
-          </el-table-column>
-          <el-table-column prop="name" :label="$t('common.name')" show-overflow-tooltip />
-          <el-table-column :label="$t('common.size')" width="100" align="right">
-            <template #default="scope">
-              {{ scope.row.isDir ? '-' : formatFileSize(scope.row.size) }}
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-    </div>
-  </el-dialog>
 
   <!-- 下载云机文件对话框 -->
   <!-- 下载云机文件弹窗（阶段 4 迁出到 components/dialogs/DownloadCloudFileDialog.vue） -->
