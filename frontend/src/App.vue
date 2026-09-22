@@ -249,6 +249,7 @@ import { useDeviceOperations } from './composables/useDeviceOperations.js'
 import { useContextMenu } from './composables/useContextMenu.js'
 import { useCreateDialog } from './composables/useCreateDialog.js'
 import { useDeviceListState } from './composables/useDeviceListState.js'
+import { useBatchSwitchModel } from './composables/useBatchSwitchModel.js'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -8691,142 +8692,10 @@ const handleShowUpdateDialog = (info) => {
 }
 
 // 批量切换机型确认函数
-const confirmBatchSwitchModel = async () => {
-  if (!isModelSlotsValid.value) {
-    ElMessage.warning('请确保所有机型都已选择且每个机型至少分配一个坑位')
-    return
-  }
-  
-  if (batchSwitchModelTargets.value.length === 0) {
-    ElMessage.warning('没有要切换的云机')
-    return
-  }
-  
-  try {
-    // 准备确认信息
-    const modelInfo = []
-    modelSlots.value.forEach((modelSlot, index) => {
-      if (modelSlot.assignedSlots.length > 0) {
-        if (modelSlot.modelId === 'random') {
-          modelInfo.push(`随机 (${modelSlot.assignedSlots.length}个坑位)`)
-        } else {
-          let modelName = modelSlot.modelId
-          if (!modelSlot.type || modelSlot.type === 'online') {
-            const model = phoneModels.value.find(m => m.id === modelSlot.modelId)
-            if (model) modelName = model.name
-          }
-          modelInfo.push(`${modelName} (${modelSlot.assignedSlots.length}个坑位)`)
-        }
-      }
-    })
-    
-    // 显示确认对话框
-    await ElMessageBox.confirm(
-      `确定要执行批量新机操作吗？\n分配情况：\n${modelInfo.join('\n')}`, 
-      '批量新机确认', 
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-    
-    // 标记为正在切换机型
-    batchSwitchingModel.value = true
-    
-    // 确定操作类型（如果是通过批量新机按钮触发的，则显示为批量新机）
-    const operationType = batchSwitchModelOperationType.value || 'switchModel'
-    
-    // 为每个机型创建一个任务
-    modelSlots.value.forEach((modelSlot) => {
-      if (modelSlot.assignedSlots.length === 0) {
-        return
-      }
-      
-      let model = null
-      let modelName = ''
-      
-      // 处理随机机型情况
-      if (modelSlot.modelId === 'random') {
-        modelName = '随机'
-      } else {
-        if (!modelSlot.type || modelSlot.type === 'online') {
-          // 优先在按安卓版本过滤的机型列表中查找，避免跨版本同名/同 ID 机型匹配错误
-          const m = filteredPhoneModelsForBatch.value.find(m => m.id === modelSlot.modelId)
-            || phoneModels.value.find(m => m.id === modelSlot.modelId)
-          if (m) {
-            model = { id: m.id, name: m.name }
-            modelName = m.name
-          }
-        } else {
-          // 本地和备份机型直接使用modelId(即name)
-          model = { id: modelSlot.modelId, name: modelSlot.modelId }
-          modelName = modelSlot.modelId
-        }
-        
-        if (!model) {
-          return
-        }
-      }
-      
-      // 将批量切换机型任务添加到任务队列
-      const taskId = addTaskToQueue('switchModel', modelSlot.assignedSlots, {
-        modelId: modelSlot.modelId === 'random' ? 'random' : model.id, 
-        
-        // 这里我们传递 modelInfo 对象，类似于单机切换
-        modelInfo: {
-          value: modelSlot.modelId === 'random' ? 'random' : modelSlot.modelId,
-          type: modelSlot.type || 'online'
-        },
-        modelName: modelName,
-        operation: operationType,
-        timeout: 30000 // 30秒超时
-      })
-      
-      // 执行任务
-      executeTask(taskId)
-    })
-    
-    // 关闭对话框
-    batchSwitchModelDialogVisible.value = false
-    
-    ElMessage.success(`批量新机任务已添加到队列并开始执行`)
-
-    // 重置状态
-    batchSwitchingModel.value = false
-    selectedBatchModelId.value = ''
-    selectedBatchModelName.value = ''
-    batchSwitchModelTargets.value = []
-    batchSwitchModelOperationType.value = 'switchModel' // 重置为默认操作类型
-    modelSlots.value = [] // 清空机型分配槽
-    draggingSlot.value = null // 重置拖拽状态
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('批量切换机型失败:', error)
-      ElMessage.error(`批量切换机型失败: ${error.message || '未知错误'}`)
-      batchSwitchingModel.value = false
-    }
-  }
-}
-
-// 处理批量切换机型取消操作
-const handleBatchSwitchModelCancel = () => {
-  // 关闭对话框
-  batchSwitchModelDialogVisible.value = false
-  
-  // 重置相关状态
-  setTimeout(() => {
-    selectedBatchModelId.value = ''
-    selectedBatchModelName.value = ''
-    batchSwitchModelTargets.value = []
-    batchSwitchModelOperationType.value = 'switchModel'
-    modelSlots.value = [] // 清空机型分配槽
-    draggingSlot.value = null // 重置拖拽状态
-  }, 100)
-}
-
-// 批量新机 - 机型槽（阶段 3 迁出到 composables/useModelSlots.js）
+// 批量切换机型确认 / 取消 + 机型槽（阶段 3 迁出到 composables/useBatchSwitchModel.js）
 const {
+  confirmBatchSwitchModel,
+  handleBatchSwitchModelCancel,
   filteredPhoneModelsForBatch,
   addNewModelSlot,
   removeModelSlot,
@@ -8845,16 +8714,17 @@ const {
   modelSlots,
   draggingSlot,
   isModelSlotsValid,
-} = useModelSlots({
-  taskQueue,
+} = useBatchSwitchModel({
   phoneModels,
+  addTaskToQueue,
+  executeTask,
+  taskQueue,
   localPhoneModels,
   backupPhoneModels,
   fetchBackupModels,
   imageList,
   getV3PhoneModels,
   getLocalPhoneModels,
-  executeTask,
 })
 
 // 批量操作处理
