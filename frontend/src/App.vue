@@ -281,6 +281,7 @@ import S5ProxyDialog from './components/dialogs/S5ProxyDialog.vue'
 import SetStreamDialog from './components/dialogs/SetStreamDialog.vue'
 import SwitchModelDialog from './components/dialogs/SwitchModelDialog.vue'
 import SharedFilesDialog from './components/dialogs/SharedFilesDialog.vue'
+import UpdateImageDialog from './components/dialogs/UpdateImageDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -10113,355 +10114,32 @@ const handleBindsTest = async () => {
   </div>
   
   <!-- 更新镜像弹窗 -->
-  <el-dialog
-    v-model="updateImageDialogVisible"
-    :title="$t('common.updateImage')"
-    width="900px"
-    :before-close="handleUpdateImageCancel"
-  >
-    <!-- 弹窗内容 -->
-    <div class="create-dialog-content">
-      <!-- 容器模式 (V2) -->
-      <div v-if="updateImageContainer && updateImageContainer.androidType === 'V2'" class="create-dialog-container-mode" style="padding: 0 20px;">
-        <div class="create-dialog-container-mode-title">{{ $t('common.updateImageWarning') }}</div>
-        <el-form :model="updateImageForm" label-width="100px">
-          <el-form-item :label="$t('common.imageAddress')">
-             <el-select v-model="updateImageForm.imageSelect" :placeholder="$t('common.pleaseSelect')" style="width: 100%;">
-              <el-option :label="$t('common.customImage')" value="custom"></el-option>
-                <el-option 
-                  v-for="image in filteredContainerImagesForUpdate" 
-                  :key="image.url" 
-                  :label="image.name" 
-                  :value="image.url"
-                ></el-option>
-             </el-select>
-             
-             <!-- 自定义镜像URL输入框 -->
-             <div v-if="updateImageForm.imageSelect === 'custom'" style="margin-top: 10px;width: 100%;">
-               <el-input 
-                 v-model="updateImageForm.customImageUrl" 
-                 :placeholder="$t('common.enterCustomImageAddress')"
-                 clearable
-               ></el-input>
-             </div>
-          </el-form-item>
-
-          <div style="display: flex; gap: 20px;">
-            <el-form-item label="名称" style="flex: 1;">
-              <el-input :value="updateImageContainer ? (() => {
-                const nameParts = updateImageContainer.name.split('_');
-                return nameParts[nameParts.length - 1] || updateImageContainer.name;
-              })() : ''" disabled></el-input>
-            </el-form-item>
-            <!-- <el-form-item label="云机数量" style="flex: 1;">
-              <el-input-number :model-value="1" disabled style="width: 100%;"></el-input-number>
-            </el-form-item> -->
-          </div>
-
-          <el-form-item label="分辨率">
-             <el-select v-model="updateImageForm.resolution" placeholder="请选择" style="width: 100%;">
-                <el-option label="720 X 1280" value="720x1280x320"></el-option>
-                <el-option label="1080 X 1920" value="1080x1920x420"></el-option>
-                <el-option label="自定义分辨率" value="custom"></el-option>
-             </el-select>
-             
-             <!-- 自定义分辨率输入框 -->
-             <div v-if="updateImageForm.resolution === 'custom'" class="custom-resolution-container" style="margin-top: 15px;">
-                <div style="display: flex; gap: 20px; margin-bottom: 15px;">
-                  <div style="flex: 1; display: flex; align-items: center;">
-                    <label style="width: 60px; color: var(--el-text-color-regular);">设备宽</label>
-                    <el-input v-model="updateImageForm.customResolution.width" style="flex: 1;"></el-input>
-                  </div>
-                  <div style="flex: 1; display: flex; align-items: center;">
-                    <label style="width: 60px; color: var(--el-text-color-regular);">设备长</label>
-                    <el-input v-model="updateImageForm.customResolution.height" style="flex: 1;"></el-input>
-                  </div>
-                </div>
-                <div style="display: flex; gap: 20px; align-items: center;">
-                  <div style="flex: 1; display: flex; align-items: center;">
-                    <label style="width: 60px; color: var(--el-text-color-regular);">DPI</label>
-                    <el-input v-model="updateImageForm.customResolution.dpi" style="flex: 1;"></el-input>
-                  </div>
-                  <div style="flex: 1; color: #f56c6c; font-size: 12px;">
-                    请注意，自定义分辨率可能引发样式适配异常
-                  </div>
-                </div>
-             </div>
-          </el-form-item>
-
-          <div style="display: flex; gap: 20px;">
-            <el-form-item label="DNS 类型" style="flex: 1;">
-              <el-select v-model="updateImageForm.dns" placeholder="请选择" style="width: 100%;">
-                <el-option label="阿里DNS(223.5.5.5)" value="223.5.5.5"></el-option>
-                <el-option label="Google(8.8.8.8)" value="8.8.8.8"></el-option>
-                <el-option label="自定义" value="custom"></el-option>
-              </el-select>
-            </el-form-item>
-            <el-form-item label="DNS 地址" style="flex: 1;">
-              <el-input v-if="updateImageForm.dns === 'custom'" v-model="updateImageForm.customDns" placeholder="223.5.5.5"></el-input>
-              <el-input v-else :value="updateImageForm.dns" disabled></el-input>
-            </el-form-item>
-          </div>
-          
-          <div style="display: flex; gap: 20px; align-items: center;">
-            <el-form-item label="网络管理" style="flex: 1;">
-              <el-select v-model="updateImageForm.vpcGroupId" placeholder="选择分组" clearable @change="handleVpcGroupChange" style="width: 130px;" :disabled="updateImageForm.networkCardType === 'public' && updateImageForm.macVlanIp">
-                <el-option v-for="group in vpcGroupList" :key="group.id" :label="group.alias" :value="group.id" />
-              </el-select>
-              <el-select v-if="updateImageForm.vpcGroupId && updateImageForm.vpcSelectMode === 'specified'" v-model="updateImageForm.vpcNodeId" placeholder="选择节点" style="width: 130px; margin-left: 10px;">
-                <el-option v-for="node in vpcNodeList" :key="node.id" :label="extractNodeDisplayName(node.remarks)" :value="node.id" />
-              </el-select>
-              <el-radio-group v-if="updateImageForm.vpcGroupId" v-model="updateImageForm.vpcSelectMode" style="margin-left: 10px;">
-                <el-radio label="specified">指定节点</el-radio>
-                <el-radio label="random">随机节点</el-radio>
-              </el-radio-group>
-            </el-form-item>
-          </div>
-
-          <el-form-item label="网卡类型">
-            <el-radio-group v-model="updateImageForm.networkCardType" @change="handleUpdateNetworkCardTypeChange">
-              <el-radio label="private">{{ $t('common.privateNetworkCard') }}({{ $t('common.sharedIP') }})</el-radio>
-              <el-radio label="public" :disabled="isActiveDevicePublic">{{ $t('common.publicNetworkCard') }}({{ $t('common.independentIP') }})</el-radio>
-            </el-radio-group>
-            
-            <!-- 网卡类型功能说明 -->
-            <!-- <div style="margin-top: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 4px; font-size: 12px; line-height: 1.6; color: var(--el-text-color-regular);">
-              <div style="margin-bottom: 6px;">
-                <span style="font-weight: bold; color: #409EFF;">私有网卡：</span>
-                在设备内创建独立的网关和掩码，为每个容器分配该网关下的IP地址。可实现容器间网络隔离，仍可使用网络管理的IP代理功能。
-              </div>
-              <div>
-                <span style="font-weight: bold; color: #67C23A;">公有网卡：</span>
-                容器直接使用设备所在局域网的网关和掩码，与设备处于同一网段。容器间无法实现网络隔离，且设置后将无法使用网络管理的IP代理功能。
-              </div>
-            </div> -->
-            
-            <div v-if="updateImageForm.networkCardType === 'public' && !hasMacVlan && !fetchingNetworkCards" style="margin-top: 5px; font-size: 12px; line-height: 1.2;">
-              <span style="color: #F56C6C;">未检测到MacVlan配置，请前往网络管理-公有网卡创建</span>
-            </div>
-          </el-form-item>
-
-          <el-form-item v-if="updateImageForm.networkCardType === 'private'" label="网卡选择">
-            <el-select
-              v-model="updateImageForm.mytBridgeName"
-              placeholder="请选择网卡"
-              :loading="fetchingNetworkCards"
-              clearable
-              filterable
-              style="width: 100%;"
-            >
-              <el-option
-                v-for="item in networkCardList"
-                :key="item.value"
-                :label="item.label"
-                :value="item.value"
-              />
-            </el-select>
-          </el-form-item>
-
-          <el-form-item v-if="updateImageForm.networkCardType === 'public' && hasMacVlan" label="MacVlan IP">
-            <el-input v-model="updateImageForm.macVlanIp" :placeholder="getMacVlanIpPlaceholder()"></el-input>
-            
-            <!-- MacVlan网络信息和注意事项 -->
-            <div style="margin-top: 8px;">
-              <div v-if="currentDeviceMacVlanInfo.subnet || currentDeviceMacVlanInfo.gw" style="font-size: 12px; color: var(--el-text-color-regular); margin-bottom: 5px;">
-                <span v-if="currentDeviceMacVlanInfo.subnet">子网: {{ currentDeviceMacVlanInfo.subnet }}</span>
-                <span v-if="currentDeviceMacVlanInfo.gw" style="margin-left: 10px;">网关: {{ currentDeviceMacVlanInfo.gw }}</span>
-              </div>
-              <el-alert 
-                type="warning" 
-                :closable="false"
-                style="padding: 8px 12px;"
-              >
-                <template #title>
-                  <div style="font-size: 12px; line-height: 1.6;">
-                    <div style="font-weight: bold; margin-bottom: 4px;">⚠️ 重要提示</div>
-                    <div>1. 请确保IP在子网范围内</div>
-                    <div>2. <span style="color: #F56C6C; font-weight: bold;">请务必确认IP地址未被占用</span>,否则会造成IP冲突导致无法访问</div>
-                  </div>
-                </template>
-              </el-alert>
-            </div>
-          </el-form-item>
-
-          <el-form-item :label="$t('common.secureMode')">
-            <el-switch v-model="updateImageForm.enforce" :active-text="$t('common.enable')" :inactive-text="$t('common.disable')" inline-prompt></el-switch>
-          </el-form-item>
-        </el-form>
-      </div>
-
-      <!-- 模拟器模式 (V0/V1/V3) -->
-      <div v-else class="create-dialog-left-right">
-        <!-- 左侧内容 -->
-        <div class="create-dialog-left">
-          <el-form :model="updateImageForm" label-width="100px">
-            <el-form-item label="设备IP">
-              <el-input :value="activeDevice ? activeDevice.ip : ''" disabled></el-input>
-            </el-form-item>
-            <el-form-item label="容器名称">
-              <el-input :value="updateImageContainer ? (() => {
-                const nameParts = updateImageContainer.name.split('_');
-                return nameParts[nameParts.length - 1] || updateImageContainer.name;
-              })() : ''" disabled></el-input>
-            </el-form-item>
-            <el-form-item label="当前镜像">
-              <el-input :value="updateImageContainer ? getImageDisplayName(updateImageContainer.image) : ''" disabled></el-input>
-            </el-form-item>
-            <!-- V3设备显示型号选择 -->
-            <!-- <el-form-item v-if="activeDevice && activeDevice.version === 'v3'" label="手机型号">
-              <el-select v-model="updateImageForm.modelName" placeholder="请选择手机型号" :loading="fetchingModels" filterable>
-                <el-option 
-                  v-for="model in phoneModels" 
-                  :key="model.id" 
-                  :label="model.name" 
-                  :value="model.name"
-                ></el-option>
-              </el-select>
-            </el-form-item> -->
-            <el-form-item :label="$t('common.imageSelection')">
-              <el-select v-model="updateImageForm.imageSelect" @change="handleImageSelectChange" :loading="fetchingImages" style="width: 100%;" filterable>
-                <el-option :label="$t('common.customImage')" value="custom"></el-option>
-                <!-- 使用从API获取的镜像列表（按 os_ver 过滤） -->
-                <el-option 
-                  v-for="image in filteredImageListForUpdate" 
-                  :key="image.url" 
-                  :label="image.name" 
-                  :value="image.url"
-                ></el-option>
-              </el-select>
-            </el-form-item>
-            <el-form-item v-if="updateImageForm.imageSelect === 'custom'" :label="$t('common.customImageAddress')">
-              <el-input v-model="updateImageForm.customImageUrl" :placeholder="$t('common.enterImageAddress')"></el-input>
-            </el-form-item>
-            <el-form-item label="DNS地址">
-              <el-select v-model="updateImageForm.dns" placeholder="请选择DNS地址">
-                <el-option label="223.5.5.5 (阿里云)" value="223.5.5.5"></el-option>
-                <el-option label="8.8.8.8 (Google)" value="8.8.8.8"></el-option>
-                <el-option label="自定义" value="custom"></el-option>
-              </el-select>
-              <el-input v-if="updateImageForm.dns === 'custom'" v-model="updateImageForm.customDns" placeholder="输入自定义DNS地址" style="margin-top: 10px;"></el-input>
-            </el-form-item>
-            
-            <el-form-item label="网络管理">
-              <el-select v-model="updateImageForm.vpcGroupId" placeholder="选择分组" clearable @change="handleVpcGroupChange" :disabled="updateImageForm.networkCardType === 'public' && updateImageForm.macVlanIp" style="width: 130px;">
-                <el-option v-for="group in vpcGroupList" :key="group.id" :label="group.alias" :value="group.id" />
-              </el-select>
-              <el-select v-if="updateImageForm.vpcGroupId && updateImageForm.vpcSelectMode === 'specified'" v-model="updateImageForm.vpcNodeId" placeholder="选择节点" style="width: 130px; margin-left: 10px;">
-                <el-option v-for="node in vpcNodeList" :key="node.id" :label="extractNodeDisplayName(node.remarks)" :value="node.id" />
-              </el-select>
-              <el-radio-group v-if="updateImageForm.vpcGroupId" v-model="updateImageForm.vpcSelectMode">
-                <el-radio label="specified">指定节点</el-radio>
-                <el-radio label="random">随机节点</el-radio>
-              </el-radio-group>
-            </el-form-item>
-            
-            <el-form-item label="随机系统文件">
-              <el-switch v-model="updateImageForm.randomFile"></el-switch>
-            </el-form-item>
-
-            <el-form-item :label="$t('common.secureMode')">
-              <el-switch v-model="updateImageForm.enforce" :active-text="$t('common.enable')" :inactive-text="$t('common.disable')" inline-prompt></el-switch>
-            </el-form-item>
-          </el-form>
-        </div>
-        
-        <!-- 右侧内容 -->
-        <div class="create-dialog-right">
-          <el-form :model="updateImageForm" label-width="100px">
-            <!-- V3设备显示高级选项 -->
-            <el-form-item v-if="activeDevice && activeDevice.version === 'v3'" label="高级选项">
-              <el-checkbox v-model="updateImageForm.enableMagisk">启用Magisk</el-checkbox>
-              <el-checkbox v-model="updateImageForm.enableGMS" style="margin-left: 20px;">启用GMS</el-checkbox>
-            </el-form-item>
-            <!-- V3设备网卡选择 -->
-            <template v-if="activeDevice && activeDevice.version === 'v3'">
-              <el-form-item label="网卡类型">
-                <el-radio-group v-model="updateImageForm.networkCardType" @change="handleUpdateNetworkCardTypeChange">
-                  <el-radio label="private">{{ $t('common.privateNetworkCard') }}({{ $t('common.sharedIP') }})</el-radio>
-                  <el-radio label="public" :disabled="isActiveDevicePublic">{{ $t('common.publicNetworkCard') }}({{ $t('common.independentIP') }})</el-radio>
-                </el-radio-group>
-                
-                <!-- 网卡类型功能说明 -->
-                <!-- <div style="margin-top: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 4px; font-size: 12px; line-height: 1.6; color: var(--el-text-color-regular);">
-                  <div style="margin-bottom: 6px;">
-                    <span style="font-weight: bold; color: #409EFF;">私有网卡：</span>
-                    在设备内创建独立的网关和掩码，为每个虚拟机分配该网关下的IP地址。可实现虚拟机间网络隔离，仍可使用网络管理的IP代理功能。
-                  </div>
-                  <div>
-                    <span style="font-weight: bold; color: #67C23A;">公有网卡：</span>
-                    虚拟机直接使用设备所在局域网的网关和掩码，与设备处于同一网段。虚拟机间无法实现网络隔离，且设置后将无法使用网络管理的IP代理功能。
-                  </div>
-                </div> -->
-                
-                <!-- 公有网卡 macVlan 提示 -->
-                <div v-if="updateImageForm.networkCardType === 'public' && !hasMacVlan && !fetchingNetworkCards" style="margin-top: 5px; font-size: 12px; line-height: 1.2;">
-                  <span style="color: #F56C6C;">
-                    未检测到MacVlan配置，请前往<span style="color: #409EFF; cursor: pointer; text-decoration: underline;" @click="activeTab = 'network'; activeNetworkTab = 'public-nic'">网络管理-公有网卡</span>创建
-                  </span>
-                </div>
-              </el-form-item>
-              
-              
-              <el-form-item label="网卡选择" v-if="updateImageForm.networkCardType === 'private'" key="update-nic-select">
-                <el-select 
-                  v-model="updateImageForm.mytBridgeName" 
-                  placeholder="请选择网卡" 
-                  :loading="fetchingNetworkCards"
-                  clearable
-                  filterable
-                >
-                  <el-option
-                    v-for="item in networkCardList"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                  />
-                </el-select>
-              </el-form-item>
-              
-              
-              <!-- MacVlan IP 输入框 -->
-              <el-form-item 
-                v-if="updateImageForm.networkCardType === 'public' && hasMacVlan" 
-                label="MacVlan IP"
-              >
-                 <el-input v-model="updateImageForm.macVlanIp" :placeholder="getMacVlanIpPlaceholder()"></el-input>
-                 
-                 <!-- MacVlan网络信息和注意事项 -->
-                 <div style="margin-top: 8px;">
-                   <div v-if="currentDeviceMacVlanInfo.subnet || currentDeviceMacVlanInfo.gw" style="font-size: 12px; color: var(--el-text-color-regular); margin-bottom: 5px;">
-                     <span v-if="currentDeviceMacVlanInfo.subnet">子网: {{ currentDeviceMacVlanInfo.subnet }}</span>
-                     <span v-if="currentDeviceMacVlanInfo.gw" style="margin-left: 10px;">网关: {{ currentDeviceMacVlanInfo.gw }}</span>
-                   </div>
-                   <el-alert 
-                     type="warning" 
-                     :closable="false"
-                     style="padding: 8px 12px;"
-                   >
-                     <template #title>
-                         <div style="font-size: 12px; line-height: 1.6;">
-                         <div style="font-weight: bold; margin-bottom: 4px;">{{ $t('common.importantTip') }}</div>
-                         <div>1. {{ $t('common.ensureIPInSubnet') }}</div>
-                         <div>2. <span style="color: #F56C6C; font-weight: bold;">{{ $t('common.ensureIPNotUsed') }}</span>,{{ $t('common.ipConflictWarning') }}</div>
-                       </div>
-                     </template>
-                   </el-alert>
-                 </div>
-              </el-form-item>
-            </template>
-          </el-form>
-        </div>
-      </div>
-    </div>
-    
-    <!-- 弹窗底部 -->
-    <template #footer>
-      <div class="create-dialog-footer">
-        <el-button @click="handleUpdateImageCancel">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="handleUpdateImageSubmit" :loading="updateImageLoading">{{ $t('common.confirm') }}</el-button>
-      </div>
-    </template>
-  </el-dialog>
+  <!-- 更新镜像对话框（阶段 4 迁出到 components/dialogs/UpdateImageDialog.vue） -->
+  <UpdateImageDialog
+    v-model:visible="updateImageDialogVisible"
+    :loading="updateImageLoading"
+    :container="updateImageContainer"
+    :form="updateImageForm"
+    :filtered-container-images="filteredContainerImagesForUpdate"
+    :filtered-image-list="filteredImageListForUpdate"
+    :vpc-group-list="vpcGroupList"
+    :vpc-node-list="vpcNodeList"
+    :network-card-list="networkCardList"
+    :is-active-device-public="isActiveDevicePublic"
+    :has-mac-vlan="hasMacVlan"
+    :fetching-network-cards="fetchingNetworkCards"
+    :fetching-images="fetchingImages"
+    :current-device-mac-vlan-info="currentDeviceMacVlanInfo"
+    :active-device="activeDevice"
+    :get-image-display-name="getImageDisplayName"
+    :get-mac-vlan-ip-placeholder="getMacVlanIpPlaceholder"
+    @vpc-group-change="handleVpcGroupChange"
+    @network-card-type-change="handleUpdateNetworkCardTypeChange"
+    @image-select-change="handleImageSelectChange"
+    @goto-public-nic="() => { activeTab = 'network'; activeNetworkTab = 'public-nic' }"
+    @cancel="handleUpdateImageCancel"
+    @submit="handleUpdateImageSubmit"
+  />
 
   <!-- 批量更新镜像对话框 -->
   <el-dialog
