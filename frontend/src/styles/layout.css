@@ -1,0 +1,364 @@
+/* 创建云机弹窗左右分栏布局 */
+.create-dialog-left-right {
+  display: flex;
+  gap: 20px;
+}
+
+.create-dialog-left {
+  flex: 1;
+}
+
+.create-dialog-right {
+  flex: 1;
+}
+
+/* 增加标题和内容之间的间距 */
+.create-dialog-content {
+  /* margin-top: 40px !important; */
+  position: relative;
+}
+
+/* 增加表单项之间的间距 */
+.create-dialog-content .el-form-item {
+  margin-bottom: 30px !important;
+}
+
+/* 增加左右栏内部的间距 */
+.create-dialog-left, .create-dialog-right {
+  padding: 10px;
+}
+
+/* 增加单选按钮组之间的间距 */
+
+
+/* 增加高级选项的间距 */
+.create-dialog-content .el-checkbox {
+  margin-right: 20px;
+ 
+}
+
+.create-type-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.create-type-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  position: relative;
+}
+
+.create-type-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.create-type-left {
+  margin-right: 6px;
+}
+
+.create-type-right {
+  margin-left: 6px;
+}
+
+.create-type-tag {
+  border: 1px solid;
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.create-type-tag-success {
+  color: #67c23a;
+  border-color: #67c23a;
+  background: transparent;
+}
+
+.create-type-tag-muted {
+  color: var(--el-text-color-secondary);
+  border-color: #dcdfe6;
+  background: transparent;
+}
+
+/* 确保坑位和数量在一行显示 */
+.batch-slot-config {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.batch-slot-config span {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* 设备创建按钮样式 */
+.device-create-btn {
+  color: #000000 !important;
+  background-color: transparent !important;
+  border-color: #000000 !important;
+}
+
+.device-create-btn:hover {
+  color: #333333 !important;
+  background-color: rgba(0, 0, 0, 0.1) !important;
+  border-color: #333333 !important;
+}
+
+/* 小加号按钮样式 */
+.small-plus-btn {
+  width: 28px !important;
+  height: 28px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  color: #000000 !important;
+  font-size: 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.small-plus-btn:hover {
+  background: rgba(0, 0, 0, 0.1) !important;
+  border-radius: 4px !important;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #f5f7fa;
+  color: var(--el-text-color-primary);
+  font-size: 14px;
+}
+
+#app {
+  width: 100%;
+  height: 100vh;
+}
+
+/* 主容器布局 */
+.app-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #f8f9fa;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 主要内容区域 */
+.app-main {
+  padding: 0;
+  background: #f8f9fa;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* 固定标签栏样式 */
+.fixed-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: #ffffff;
+  border-radius: 0;
+  width: 100%;
+}
+
+/* 标签页内容区域 */
+.el-tabs__content {
+  height: calc(100vh - 100px);
+  overflow: auto;
+  padding: 20px;
+  background: #ffffff;
+  border-radius: 0;
+  box-shadow: none;
+  border: 1px solid #e9ecef;
+  border-top: none;
+  width: 100%;
+}
+
+/* 确保整个页面填充窗口 */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+}
+
+/* 修复卡片边框问题 */
+.el-card {
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border: 1px solid #e9ecef;
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+/* 修复表格滚动问题 */
+.el-table__body-wrapper {
+  overflow: auto;
+  height: auto;
+  max-height: 600px;
+}
+
+/* 镜像管理卡片内的表格不限制高度，由外层容器控制滚动 */
+.image-management-card .el-table__body-wrapper {
+  overflow: visible;
+  height: auto;
+  max-height: none;
+}
+
+/* 修复左侧设备列表滚动 */
+.device-card {
+  height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 确保所有设备菜单都能正常滚动 */
+.device-menu {
+  flex: 1;
+  overflow: auto;
+  max-height: calc(100vh - 300px);
+  border: none;
+  background-color: transparent;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 设备列表容器样式 */
+.device-list-container {
+  flex: 1;
+  overflow: auto;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 0;
+}
+
+/* 批量模式容器样式 */
+.batch-mode-container {
+  flex: 1;
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* 设备列表滚动样式 */
+.device-list-scroll {
+  flex: 1;
+  overflow-y: auto !important;
+  height: 100% !important;
+  position: relative;
+}
+
+/* 强制修复el-scrollbar样式 */
+.batch-mode-container :deep(.el-scrollbar) {
+  height: 100% !important;
+  width: 100% !important;
+  overflow: auto !important;
+  position: relative;
+}
+
+.batch-mode-container :deep(.el-scrollbar__wrap) {
+  overflow-y: scroll !important;
+  height: 100% !important;
+  width: 100% !important;
+  margin-right: -17px; /* 为滚动条预留空间 */
+}
+
+.batch-mode-container :deep(.el-scrollbar__view) {
+  height: auto !important;
+  overflow: visible !important;
+  width: 100% !important;
+}
+
+/* 树形结构样式修复 */
+.batch-mode-container :deep(.el-tree) {
+  height: auto !important;
+  width: 100% !important;
+  overflow: visible !important;
+  min-height: 100%;
+}
+
+/* 确保树形节点能正确显示 */
+.batch-mode-container :deep(.el-tree-node) {
+  height: auto !important;
+  overflow: visible !important;
+}
+
+.batch-mode-container :deep(.el-tree-node__children) {
+  height: auto !important;
+  overflow: visible !important;
+}
+
+/* 强制显示滚动条 */
+.batch-mode-container :deep(.el-scrollbar__bar) {
+  opacity: 1 !important;
+}
+
+/* 原生滚动容器样式 */
+.native-scroll-container {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 8px;
+  box-sizing: border-box;
+}
+
+/* 确保滚动条始终可见 */
+.native-scroll-container::-webkit-scrollbar {
+  width: 17px;
+}
+
+.native-scroll-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.native-scroll-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.native-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 修复表格容器滚动 */
+.el-table-container {
+  overflow: auto;
+  max-height: calc(100vh - 220px);
+}
+
+/* 确保所有卡片都能正确适应窗口大小 */
+.el-card {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+/* 修复云机管理页面的表格滚动 */
+.cloud-machine-table .el-table__body-wrapper {
+  max-height: calc(100vh - 220px);
+}
+
+/* 确保所有内容区域都能正确滚动 */
+.el-tabs__content {
+  overflow: auto;
+  height: calc(100vh - 100px);
+  box-sizing: border-box;
+}
+

@@ -1,0 +1,331 @@
+/* 扫描设备样式 */
+.scanning-devices {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  font-size: 16px;
+  color: var(--el-text-color-regular);
+}
+
+.scanning-devices .el-icon {
+  margin-right: 10px;
+  font-size: 20px;
+}
+
+.no-devices {
+  padding: 40px 0;
+  text-align: center;
+}
+
+.no-devices .tip {
+  margin-top: 10px;
+  color: var(--el-text-color-secondary);
+  font-size: 14px;
+}
+
+.scanned-devices-list {
+  height: 400px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.scanned-devices-list .search-box {
+  flex-shrink: 0;
+}
+
+.scanned-devices-list .el-table {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.scanned-devices-list .selected-info {
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+.selected-info {
+  color: var(--el-text-color-regular);
+  margin-top: 10px;
+}
+
+/* 右侧栏样式 */
+.device-right-col {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.device-right-col .table-container {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* 镜像管理样式 */
+.image-info-container {
+  padding: 0;
+  height: calc(100% - 60px);
+  min-height: 340px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+}
+
+/* 右侧内容区域样式 */
+.el-col:nth-child(2) {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 500px;
+}
+
+/* 悬浮工具栏样式 */
+.floating-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: white;
+  padding: 10px 0;
+  border-bottom: 1px solid #e4e7ed;
+  flex-shrink: 0;
+}
+
+/* 镜像分类标签样式 */
+.image-category-tabs {
+  padding: 0;
+  border-bottom: 1px solid #e4e7ed;
+  flex-shrink: 0;
+}
+
+.image-category-tabs > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.online-images-container,
+.local-images-container,
+.box-images-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.online-images-list,
+.local-image-items,
+.box-image-items {
+  flex: 1;
+  overflow: hidden;
+  border: none;
+  border-radius: 0;
+  margin: 0;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 筛选条件样式 */
+.image-filters {
+  padding: 15px;
+  border-bottom: 1px solid #e4e7ed;
+  flex-shrink: 0;
+}
+
+.image-table .cell {
+  display: block !important;
+}
+
+/* 表格容器样式 */
+.image-table-wrapper {
+  flex: 1;
+  overflow: auto;
+  max-height: calc(100vh - 400px);
+}
+
+/* 表格样式 */
+.image-table-wrapper .el-table {
+  width: 100%;
+  margin-bottom: 0;
+  table-layout: auto !important;
+}
+
+/* 确保表格列可以自适应 */
+.image-table-wrapper .el-table th {
+  white-space: nowrap;
+}
+
+/* 确保表格内容可以换行 */
+.image-table-wrapper .el-table td {
+  word-break: break-all;
+}
+
+/* 确保表格不溢出容器 */
+.el-table {
+  width: 100%;
+  overflow: hidden;
+}
+
+/* 确保卡片容器适应内容窗口 */
+.el-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.el-card__body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 确保标签页内容适应容器 */
+.el-tabs__content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 确保标签页面板适应容器 */
+.el-tab-pane {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.image-loading {
+  padding: 20px 0;
+}
+
+.no-images {
+  padding: 50px 0;
+  text-align: center;
+}
+
+.online-images-by-model {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.model-images-section {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 15px;
+  background-color: #fafafa;
+}
+
+.model-title {
+  font-size: 18px;
+  margin-bottom: 15px;
+  color: var(--el-text-color-primary);
+  font-weight: bold;
+}
+
+.image-items {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.image-item {
+  width: 100%;
+  background-color: white;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.image-item:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.image-item-header {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.image-name {
+  font-weight: bold;
+  color: var(--el-text-color-primary);
+  font-size: 16px;
+}
+
+.image-item-body {
+  margin-bottom: 15px;
+}
+
+.image-detail {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.image-detail .label {
+  color: var(--el-text-color-secondary);
+  margin-right: 8px;
+}
+
+.image-detail .value {
+  color: var(--el-text-color-primary);
+  word-break: break-all;
+}
+
+.image-item-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 镜像卡片头部样式 */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 删除按钮样式 */
+.delete-button {
+  margin-left: auto;
+}
+
+.download-progress-container {
+  margin-top: 20px;
+  padding: 20px;
+  background-color: #f0f9eb;
+  border: 1px solid #e1f3d8;
+  border-radius: 8px;
+}
+
+.download-progress-text {
+  margin-top: 10px;
+  text-align: center;
+  color: #67c23a;
+  font-size: 14px;
+}
+
+.no-device {
+  padding: 50px 0;
+  text-align: center;
+}
+
+.no-device-selected {
+  padding: 50px 0;
+  text-align: center;
+}
+

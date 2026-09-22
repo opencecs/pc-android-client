@@ -1,0 +1,1031 @@
+/* 确保设备列表滚动正常 */
+.device-menu {
+  overflow: auto;
+  max-height: calc(100vh - 250px);
+}
+
+/* 修复窗口拉大后的对齐问题 */
+.el-row {
+  width: 100%;
+}
+
+.el-col {
+  padding: 0;
+}
+
+/* 修复标签栏和表格的偏移问题 */
+.modern-tabs .el-tabs__content {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 修复云机卡片高度问题 */
+.cloud-machine-card {
+  height: auto;
+}
+
+/* 标签页样式 */
+.modern-tabs {
+  background-color: transparent;
+  --el-tabs-header-height: 48px;
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.modern-tabs .el-tabs__header {
+  margin-bottom: 0;
+  background: #ffffff;
+  border-radius: 8px 8px 0 0;
+  padding: 0 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid #e9ecef;
+  overflow: visible;
+}
+
+.modern-tabs .el-tabs__nav {
+  height: 48px;
+}
+
+.modern-tabs .el-tabs__item {
+  height: 48px;
+  line-height: 48px;
+  /* font-size: 13px; */
+  font-weight: 500;
+  color: #6c757d;
+  /* margin: 0 4px; */
+  padding: 0 20px;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.modern-tabs .el-tabs__item:hover {
+  color: #409EFF;
+}
+
+.modern-tabs .el-tabs__item.is-active {
+  color: #409EFF;
+  font-weight: 600;
+}
+
+.modern-tabs .el-tabs__active-bar {
+  background: #409EFF;
+  height: 2px;
+  border-radius: 2px;
+}
+
+.modern-tabs .el-tabs__content {
+  background: #ffffff;
+  border-radius: 0 0 8px 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e9ecef;
+  border-top: none;
+}
+
+/* 卡片样式 */
+.el-card {
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border: 1px solid #e9ecef;
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.el-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 0;
+}
+
+.card-header span {
+  color: #495057;
+  font-weight: 600;
+}
+
+/* 设备卡片 */
+.device-card {
+  height: calc(100vh - 120px);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 设备列表头部 */
+.device-list-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e9ecef;
+  margin-bottom: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 设备列表标签页 */
+.device-list-tabs {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.device-tab {
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  color: #6c757d;
+  transition: all 0.3s ease;
+}
+
+.device-tab:hover {
+  color: #409EFF;
+}
+
+.device-tab.active {
+  color: #409EFF;
+  background-color: #e7f3ff;
+  font-weight: 500;
+}
+
+/* 设备菜单 */
+.device-menu {
+  border: none;
+  background-color: transparent;
+  padding: 4px 0;
+  overflow: auto;
+  flex: 1;
+  max-height: calc(100vh - 300px);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.device-menu-item {
+  border-radius: 6px;
+  margin: 2px 8px;
+  height: auto;
+  padding: 8px 12px;
+  transition: all 0.3s ease;
+}
+
+.device-menu-item:hover {
+  background: #e7f3ff;
+  color: #409EFF;
+}
+
+.device-menu-item.is-active {
+  background: #e7f3ff;
+  color: #409EFF;
+  border-right: none;
+  border-left: 3px solid #409EFF;
+}
+
+/* 设备菜单项内容 */
+.device-menu-item-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+/* 状态标签 - 圆形图标样式 */
+.status-tag {
+  border-radius: 50%;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  min-width: 10px;
+  margin-right: 8px;
+  transition: all 0.3s ease;
+}
+
+.device-menu-item.is-active .status-tag,
+.device-menu-item:hover .status-tag {
+  background-color: #409EFF;
+  color: #ffffff;
+  border-color: transparent;
+}
+
+/* IP地址样式 */
+.device-ip {
+  font-size: 14px;
+  color: #495057;
+  transition: color 0.3s ease;
+  font-family: 'Courier New', monospace;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+.device-menu-item:hover .device-ip {
+  color: #409EFF;
+}
+
+/* 创建按钮样式 */
+.create-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  min-width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: #409EFF;
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.create-button:hover {
+  background-color: #66b1ff;
+  transform: scale(1.1);
+}
+
+.create-button .el-icon {
+  font-size: 14px;
+  margin-right: 0;
+}
+
+/* 悬浮功能栏样式 */
+.floating-toolbar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* 设备信息部分 */
+.device-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 设备IP文本 */
+.device-ip-text {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  color: #409EFF;
+  font-size: 14px;
+}
+
+/* 分隔符 */
+.divider {
+  color: var(--el-text-color-secondary);
+  font-weight: 300;
+}
+
+/* 工具栏按钮 */
+.toolbar-button {
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  margin: 0;
+}
+
+.toolbar-button.active {
+  background-color: #409EFF;
+  color: #ffffff;
+  border: none;
+}
+
+.toolbar-button:not(.active):hover {
+  color: #409EFF;
+  background-color: #e7f3ff;
+}
+
+/* 批量操作按钮组 */
+.batch-actions {
+  margin-bottom: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  gap: 8px;
+}
+
+/* 状态标签 - 正常宽度样式 */
+.status-tag-normal {
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+/* 确保表格内容对齐 */
+.el-table {
+  margin-top: 0;
+}
+
+/* 修复标题栏偏移 */
+.modern-tabs .el-tabs__header {
+  padding: 0 8px;
+}
+
+/* 修复表格行高 */
+.el-table__row {
+  height: 40px;
+}
+
+/* 修复表格单元格内边距 */
+.el-table__cell {
+  padding: 8px 12px;
+}
+
+/* 坑位表格样式 */
+.slot-table {
+  margin-top: 16px;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  width: 100% !important;
+  box-sizing: border-box;
+}
+
+.slot-table .el-table__header-wrapper {
+  background: #f8f9fa;
+  width: 100% !important;
+}
+
+.slot-table .el-table__header-wrapper th {
+  background: transparent;
+  color: #495057;
+  font-weight: 600;
+  border-bottom: 1px solid #dee2e6;
+  padding: 10px 0;
+  min-width: 0;
+}
+
+.slot-table .el-table__body-wrapper {
+  background-color: #ffffff;
+  width: 100% !important;
+  overflow-y: auto;
+  max-height: 600px;
+  margin-bottom: 0;
+}
+
+.slot-table .el-table__body {
+  width: 100% !important;
+}
+
+.slot-table .el-table__row {
+  transition: all 0.3s ease;
+  width: 100% !important;
+}
+
+.slot-table .el-table__row:hover {
+  background-color: #f8f9fa;
+}
+
+.slot-table .el-table__cell {
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f3f5;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.slot-table .el-table--striped .el-table__body tr.el-table__row--striped {
+  background-color: #f8f9fa;
+}
+
+.slot-table .el-table__row:last-child .el-table__cell {
+  border-bottom: none;
+}
+
+/* 确保表格容器和表格能正确对齐 */
+.el-table {
+  width: 100% !important;
+  box-sizing: border-box;
+  margin: 0;
+}
+
+.el-table__header {
+  width: 100% !important;
+}
+
+.el-table__body {
+  width: 100% !important;
+}
+
+/* 修复表格容器和工具栏的对齐问题 */
+.cloud-machine-slots {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 修复云机管理坑位模式的布局问题 */
+.cloud-machine-slots .cloud-machine-grid {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 云机管理样式 */
+.device-list-card {
+  margin-bottom: 20px;
+  border-radius: 8px;
+}
+
+.device-list-scroll {
+  max-height: 140px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.device-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px;
+}
+
+.device-checkbox {
+  margin: 0;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.device-checkbox:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.device-checkbox .el-checkbox__label {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* 云机网格样式 */
+.cloud-machine-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.cloud-machine-card {
+  margin-bottom: 0;
+  height: auto;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  position: relative;
+  padding: 0;
+  /* 移除卡片的默认内边距 */
+  --el-card-padding: 0;
+}
+
+/* 云机卡片内容容器 - 移除 min-height 限制 */
+.cloud-machine-card .el-card__body {
+  padding: 0;
+  height: auto;
+  min-height: 0; /* 移除最小高度限制，让 aspect-ratio 正常工作 */
+}
+
+/* 云机卡片内容 */
+.cloud-machine-card .el-card__body > * {
+  width: 100%;
+  height: auto;
+}
+
+/* 云机信息和按钮部分 */
+.cloud-machine-info-small {
+  padding: 10px;
+  background: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+}
+
+/* 云机操作按钮 */
+.cloud-machine-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+/* 云机截图样式 */
+.cloud-machine-screenshot-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+/* 云机截图容器 - 移除 min-height，让 aspect-ratio 控制高度 */
+.cloud-machine-screenshot-large {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #f0f2f5;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 云机截图容器中的图片 */
+.cloud-machine-screenshot-large img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.cloud-machine-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.cloud-machine-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 16px;
+  background: #409EFF;
+  color: #ffffff;
+  margin: 0;
+}
+
+.cloud-machine-card-header span {
+  color: #ffffff;
+}
+
+.cloud-machine-screenshot {
+  width: 100%;
+  height: 120px;
+  background: #f8f9fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  border-radius: 0;
+  margin: 0;
+  font-weight: 500;
+}
+
+.cloud-machine-screenshot-small {
+  width: 100%;
+  height: 60px;
+  background: #f8f9fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.screenshot-loading-small,
+.screenshot-error-small,
+.screenshot-empty-small {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.screenshot-loading-small {
+  color: var(--el-text-color-secondary);
+}
+
+.screenshot-error-small {
+  color: #f56c6c;
+}
+
+.screenshot-empty-small {
+  color: var(--el-text-color-placeholder);
+}
+
+.cloud-machine-info {
+  padding: 16px;
+  background-color: #ffffff;
+}
+
+.cloud-machine-actions {
+  width: 100%;
+  justify-content: center;
+  gap: 8px;
+}
+
+.cloud-machine-actions .el-button {
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.cloud-machine-actions .el-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.connect-button {
+  margin-top: 8px;
+  border-radius: 6px;
+  background: #409EFF;
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.connect-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(64, 158, 255, 0.4);
+}
+
+/* VPC管理样式 */
+.vpc-proxy-card, .vpc-host-card {
+  height: 100%;
+  border-radius: 8px;
+}
+
+.ip-test-card {
+  margin-top: 20px;
+  border-radius: 8px;
+  background: #f8f9fa;
+}
+
+.ip-test-card .el-space {
+  width: 100%;
+  padding: 12px;
+}
+
+
+
+/* 功能占位符 */
+.feature-card {
+  height: 350px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.feature-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(100% - 60px);
+  flex-direction: column;
+  gap: 16px;
+}
+
+.feature-placeholder .el-empty {
+  --el-empty-description-font-size: 16px;
+  --el-empty-description-color: #606266;
+}
+
+.feature-placeholder .el-empty__image {
+  margin-bottom: 16px;
+}
+
+/* 按钮样式优化 */
+.el-button {
+  border-radius: 6px;
+  transition: all 0.3s ease;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0.3px;
+}
+
+.el-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.el-button--primary {
+  background: #409EFF;
+  border: none;
+}
+
+.el-button--primary:hover {
+  background: #66b1ff;
+  box-shadow: 0 6px 20px rgba(64, 158, 255, 0.4);
+}
+
+.el-button--danger {
+  background: #F56C6C;
+  border: none;
+}
+
+.el-button--danger:hover {
+  background: #f78989;
+  box-shadow: 0 6px 20px rgba(245, 108, 108, 0.4);
+}
+
+/* 输入框样式优化 */
+.el-input {
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.el-input__wrapper {
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.el-input__wrapper:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 选择器样式优化 */
+.el-select {
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.el-select .el-input__wrapper {
+  border-radius: 6px;
+}
+
+/* 标签样式优化 */
+.el-tag {
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+/* 状态标签样式优化，确保文字清晰可见 */
+.status-tag {
+  color: #ffffff !important;
+  font-weight: 600;
+  background-color: #67C23A !important;
+}
+
+.status-tag.warning {
+  background-color: #E6A23C !important;
+}
+
+.status-tag.info {
+  background-color: #909399 !important;
+}
+
+/* 修复云机卡片头状态标签颜色 */
+.cloud-machine-card-header .el-tag {
+  color: #ffffff !important;
+}
+
+/* 菜单按钮样式 */
+.menu-button {
+  margin: 0;
+  padding: 0 16px;
+  color: #6c757d;
+  transition: all 0.3s ease;
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menu-button:hover {
+  color: #409EFF;
+  background-color: #f8f9fa;
+}
+
+.menu-button .el-icon {
+  font-size: 20px;
+  margin-right: 0;
+}
+
+/* 修复标签栏右侧按钮区域 */
+.el-tabs__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 确保标签栏和按钮区域对齐，允许溢出时滚动 */
+.modern-tabs .el-tabs__nav-wrap {
+  flex: 1;
+  overflow: hidden;
+  min-width: 0;
+  position: relative;
+}
+
+/* 标签过多时滚动箭头样式 */
+.modern-tabs .el-tabs__nav-prev,
+.modern-tabs .el-tabs__nav-next {
+  line-height: 48px;
+  height: 48px;
+  width: 32px;
+  text-align: center;
+  cursor: pointer;
+  color: #6c757d;
+  font-size: 16px;
+  background: #ffffff;
+  position: absolute;
+  top: 0;
+  z-index: 10;
+}
+
+.modern-tabs .el-tabs__nav-prev {
+  left: 0;
+}
+
+.modern-tabs .el-tabs__nav-next {
+  right: 0;
+}
+
+.modern-tabs .el-tabs__nav-prev:hover,
+.modern-tabs .el-tabs__nav-next:hover {
+  color: #409EFF;
+}
+
+/* 标签容器可滚动时的内边距 */
+.modern-tabs .el-tabs__nav-wrap.is-scrollable {
+  padding: 0 32px;
+}
+
+/* 标签内容区域滚动时不显示滚动条 */
+.modern-tabs .el-tabs__nav-scroll {
+  overflow: hidden;
+  position: relative;
+}
+
+/* 修复下拉菜单显示 */
+.el-dropdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+}
+
+/* 分隔线样式 */
+.el-divider {
+  background: #e9ecef;
+  margin: 16px 0;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: #f1f1f1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #a8a8a8;
+}
+
+/* 切换云机时的覆盖层样式 */
+.switching-backup-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+  color: white;
+  font-size: 14px;
+  border-radius: 8px;
+}
+
+/* 切换云机弹窗的覆盖层样式 */
+.switching-backup-overlay-dialog {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  color: var(--el-text-color-primary);
+  font-size: 16px;
+  border-radius: 8px;
+}
+
+.switching-backup-overlay .is-loading,
+.switching-backup-overlay-dialog .is-loading {
+  font-size: 24px;
+  margin-bottom: 8px;
+  color: #409EFF;
+}
+
+.switching-backup-overlay .is-loading svg,
+.switching-backup-overlay-dialog .is-loading svg,
+.is-rotating svg {
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 坑位单元格样式 */
+.slot-cell-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.slot-cell-content .create-button {
+  margin-left: 8px;
+  padding: 4px 8px;
+  width: auto;
+  height: auto;
+  display: inline-block;
+}
+
+.slot-cell-content .fold-button {
+  font-size: 14px;
+  font-weight: bold;
+  padding: 4px 8px;
+  margin-right: 4px;
+}
+
+.slot-cell-content .slot-number {
+  font-size: 14px;
+  font-weight: bold;
+  padding: 4px 8px;
+  margin-right: 4px;
+  color: var(--el-text-color-regular);
+}
+
+/* 刷新按钮样式 */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header .refresh-button {
+  margin-left: 10px;
+}
+
+/* 批量创建按钮样式 */
+.batch-create-btn {
+  margin-left: 5px;
+  padding: 0;
+  color: var(--el-text-color-regular);
+}
+
+.device-menu-item-content {
+  display: flex;
+  align-items: center;
+}
+
+.switching-backup-overlay span {
+  color: white;
+  font-weight: 600;
+}
+
+.switching-backup-overlay-dialog span {
+  color: var(--el-text-color-primary);
+  font-weight: 600;
+}
+

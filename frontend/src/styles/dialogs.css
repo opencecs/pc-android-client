@@ -1,0 +1,456 @@
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .cloud-machine-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}
+
+@media (max-width: 992px) {
+  .app-main {
+    padding: 12px;
+  }
+  
+  .el-col {
+    margin-bottom: 16px;
+  }
+  
+  .cloud-machine-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    padding: 0 12px;
+  }
+  
+  .header-title {
+    font-size: 16px;
+  }
+  
+  .el-tabs--border-card > .el-tabs__content {
+    padding: 12px;
+  }
+  
+  .cloud-machine-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px;
+  }
+}
+
+/* 主机信息容器样式 */
+.host-info-container {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  padding: 10px 0;
+}
+
+/* 主机信息卡片样式 */
+.host-info-card {
+  height: auto;
+  min-height: 300px;
+}
+
+/* 确保主机信息卡片内容可以滚动 */
+.host-info-content {
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
+  padding: 0 10px;
+}
+
+/* 美化滚动条 */
+.host-info-container::-webkit-scrollbar,
+.host-info-content::-webkit-scrollbar,
+.network-info-container::-webkit-scrollbar,
+.network-info-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.host-info-container::-webkit-scrollbar-track,
+.host-info-content::-webkit-scrollbar-track,
+.network-info-container::-webkit-scrollbar-track,
+.network-info-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.host-info-container::-webkit-scrollbar-thumb,
+.host-info-content::-webkit-scrollbar-thumb,
+.network-info-container::-webkit-scrollbar-thumb,
+.network-info-content::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.host-info-container::-webkit-scrollbar-thumb:hover,
+.host-info-content::-webkit-scrollbar-thumb:hover,
+.network-info-container::-webkit-scrollbar-thumb:hover,
+.network-info-content::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 网络信息容器样式 */
+.network-info-container {
+  padding: 0;
+}
+
+/* 网络信息卡片样式 */
+.network-info-card {
+  height: auto;
+  min-height: 300px;
+}
+
+/* 确保网络信息卡片内容可以滚动 */
+.network-info-content {
+  padding: 0;
+}
+
+/* 网络列表表格样式 */
+.network-table {
+  width: 100%;
+}
+
+/* 网络加载状态样式 */
+.network-loading {
+  padding: 20px 0;
+}
+
+/* 网络错误信息样式 */
+.network-error {
+  margin-bottom: 20px;
+}
+
+/* 网络空状态样式 */
+.network-empty {
+  padding: 50px 0;
+  text-align: center;
+}
+
+/* 升级进度对话框样式 */
+.upgrade-info {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.progress-container {
+  margin-top: 20px;
+}
+
+.progress-details {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+
+/* 文件管理器 */
+.file-manager-container {
+  display: flex;
+  gap: 16px;
+  min-height: 460px;
+}
+
+.file-panel {
+  flex: 1;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.file-panel-header {
+  padding: 10px 12px;
+  border-bottom: 1px solid #ebeef5;
+  background: #f5f7fa;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 右键菜单样式（用 Element Plus CSS 变量适配深色模式：
+   深色下 fixDarkBackgrounds 会把白色背景刷黑，写死浅色会导致黑底黑字） */
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 4px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  min-width: 150px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: background-color 0.3s;
+}
+
+.context-menu-item:hover {
+  background-color: var(--el-fill-color-light);
+}
+
+.context-menu-item .el-icon {
+  margin-right: 8px;
+  font-size: 14px;
+}
+
+.context-menu-item span {
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+}
+
+/* 文件项样式 */
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 4px 0;
+}
+
+.file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 16px;
+}
+
+.file-size {
+  width: 100px;
+  text-align: right;
+  margin-right: 16px;
+  color: var(--el-text-color-secondary);
+}
+
+.file-date {
+  width: 180px;
+  text-align: right;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.no-files {
+  padding: 40px 0;
+  text-align: center;
+}
+
+/* 设备选择对话框样式 */
+.device-selection-table {
+  width: 100%;
+}
+
+/* 离线设备行样式 */
+.device-selection-table :deep(.device-offline-row) {
+  background-color: #f5f7fa !important;
+  color: var(--el-text-color-secondary) !important;
+  opacity: 0.6;
+}
+
+.device-selection-table :deep(.device-offline-row:hover) {
+  background-color: #f0f2f5 !important;
+}
+
+.device-selection-table :deep(.device-offline-row .el-checkbox__input) {
+  cursor: not-allowed;
+}
+
+/* 上传进度覆盖层 */
+.upload-progress-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.upload-progress-dialog {
+  background-color: #fff;
+  padding: 30px;
+  border-radius: 10px;
+  text-align: center;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.upload-progress-text {
+  margin-top: 15px;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+
+.xterm .xterm-viewport {
+  overflow: hidden;
+}
+
+.el-table .cell {
+  display: flex;
+  align-items: center;
+}
+
+.create-dialog-container-mode-title {
+  text-align: center;
+  color: red;
+  padding-bottom: 15px;
+  font-size: 18px;
+}
+
+.el-radio-group {
+  display: block !important;
+}
+
+.batch-slot-checkbox-group .el-checkbox-button__inner {
+  width: 100%;
+  padding: 8px 0;
+  border-radius: 4px !important;
+  border: 2px solid #dcdfe6;
+}
+
+.batch-slot-checkbox-group .slot-blue .el-checkbox-button__inner {
+  border-color: #409EFF;
+  color: #409EFF;
+}
+
+.batch-slot-checkbox-group .slot-yellow .el-checkbox-button__inner {
+  border-color: #E6A23C;
+  color: #E6A23C;
+}
+
+.batch-slot-checkbox-group .slot-red .el-checkbox-button__inner {
+  border-color: #F56C6C;
+  color: #F56C6C;
+}
+
+.batch-slot-checkbox-group .slot-gray .el-checkbox-button__inner {
+  border-color: #909399;
+  color: var(--el-text-color-secondary);
+}
+
+.batch-slot-checkbox-group .el-checkbox-button.is-checked .el-checkbox-button__inner {
+  background-color: #409EFF;
+  border-color: #409EFF;
+  color: #fff;
+  box-shadow: none;
+}
+
+/* 公告弹窗样式 */
+.announcement-dialog .el-dialog__header {
+  /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
+  /* padding: 20px; */
+  /* margin: 0; */
+  /* border-radius: 8px 8px 0 0; */
+  text-align: center;
+}
+
+.announcement-dialog :deep(.el-dialog__title) {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  width: 100%;
+  display: block;
+  text-align: center;
+}
+
+.announcement-dialog :deep(.el-dialog__headerbtn) {
+  display: none;
+}
+
+.announcement-dialog :deep(.el-dialog__body) {
+  padding: 30px 20px;
+}
+
+.announcement-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.announcement-icon {
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-10px);
+  }
+  60% {
+    transform: translateY(-5px);
+  }
+}
+
+.announcement-text {
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--el-text-color-regular);
+  white-space: pre-wrap;
+  text-align: center;
+  padding: 0 10px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.announcement-footer {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+}
+
+.announcement-footer .el-button {
+  min-width: 140px;
+  position: relative;
+  font-size: 16px;
+  padding: 12px 30px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.announcement-footer .el-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.countdown-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 24px;
+  margin-left: 8px;
+  padding: 0 8px;
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+  animation: pulse 1s infinite;
+}
+
+.el-badge__content.is-fixed {
+  top: 10px !important;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
