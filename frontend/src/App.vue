@@ -262,6 +262,7 @@ import { useDialogForms } from './composables/useDialogForms.js'
 
 // 阶段 4：独立弹窗拆成子组件（见 src/components/dialogs/）
 import MacVlanDialog from './components/dialogs/MacVlanDialog.vue'
+import GpsDialog from './components/dialogs/GpsDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -12654,40 +12655,13 @@ const handleBindsTest = async () => {
     @confirm="confirmSetMacVlanIP"
   />
 
-  <!-- GPS定位设置弹窗 -->
-  <el-dialog
-    v-model="gpsDialogVisible"
-    :title="$t('common.setIPLocation')"
-    width="400px"
-    :close-on-click-modal="false"
-  >
-    <el-form :model="gpsForm" label-width="80px">
-      <el-form-item :label="$t('common.locationIP')">
-        <el-input v-model="gpsForm.ip" :placeholder="$t('common.leaveEmptyForCurrentIP')"></el-input>
-      </el-form-item>
-      <el-form-item :label="$t('common.countryRegion')">
-        <el-select v-model="gpsForm.country" :placeholder="$t('common.pleaseSelectCountryRegion')" filterable>
-          <el-option
-            v-for="(info, code) in countryMap"
-            :key="code"
-            :label="`${info.name} (${info.en})`"
-            :value="code"
-          >
-            <span style="float: left">{{ info.name }} ({{ info.en }})</span>
-            <span style="float: right; color: #8492a6; font-size: 13px">{{ code }}</span>
-          </el-option>
-        </el-select>
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="gpsDialogVisible = false">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="submitGPS" :loading="gpsLoading">
-          {{ $t('common.confirm') }}
-        </el-button>
-      </span>
-    </template>
-  </el-dialog>
+  <!-- GPS定位设置弹窗（阶段 4 迁出到 components/dialogs/GpsDialog.vue） -->
+  <GpsDialog
+    v-model:visible="gpsDialogVisible"
+    :form="gpsForm"
+    :loading="gpsLoading"
+    @confirm="submitGPS"
+  />
 
   <!-- 上传 Google 证书弹窗 -->
   <el-dialog
