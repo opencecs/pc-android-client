@@ -232,6 +232,7 @@ import { formatSize, calculateIpRange, extractNodeDisplayName, naturalSortKey, e
 import { getDeviceProgress, getDeviceProgressStatus, getDeviceProgressText, getTaskTargetDisplay } from './utils/taskDisplay.js'
 import { toggleNodeExpanded, collectSharedFilePaths } from './utils/fileTree.js'
 import { copyToClipboard } from './utils/clipboard.js'
+import { useTheme } from './composables/useTheme.js'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -243,97 +244,18 @@ const runningTasksCount = computed(() => {
 const settingsDialogVisible = ref(false)
 const storagePathInfo = ref({ path: '', isDefault: true, defaultPath: '' })
 const settingsLoading = ref(false)
-const isDarkTheme = ref(localStorage.getItem('theme-mode') === 'dark')
-
-// 安装APK自动授权开关
-const autoGrantApkPermission = ref(false)
-try {
-  const saved = localStorage.getItem('autoGrantApkPermission')
-  if (saved !== null) autoGrantApkPermission.value = saved === 'true'
-} catch (e) {
-  console.warn('读取autoGrantApkPermission失败:', e)
-}
-
-// 跟随 Element Plus 官方做法：切换 html.dark class
-const applyThemeMode = () => {
-  const html = document.documentElement
-  html.classList.toggle('dark', isDarkTheme.value)
-  html.style.colorScheme = isDarkTheme.value ? 'dark' : 'light'
-}
-
-// 批量查找并替换 DOM 中计算后仍为白色/浅灰的背景色
-const fixDarkBackgrounds = () => {
-  if (!isDarkTheme.value) return
-  const lightBgs = {
-    'rgb(255, 255, 255)': 'rgb(0, 0, 0)',
-    'rgba(255, 255, 255, 1)': 'rgb(0, 0, 0)',
-    'rgb(245, 247, 250)': 'rgb(0, 0, 0)',
-    'rgb(240, 242, 245)': 'rgb(0, 0, 0)',
-    'rgb(250, 250, 250)': 'rgb(0, 0, 0)',
-    'rgb(245, 245, 245)': 'rgb(0, 0, 0)',
-    'rgb(255, 247, 230)': 'rgb(0, 0, 0)',
-  }
-  const all = document.querySelectorAll('*')
-  for (const el of all) {
-    const bg = getComputedStyle(el).backgroundColor
-    const replacement = lightBgs[bg]
-    if (replacement) {
-      el.style.setProperty('background-color', replacement, 'important')
-      el.dataset.darkBg = '1'
-    }
-  }
-}
-
-// 清除 fixDarkBackgrounds 注入的内联背景色，恢复组件原始样式
-const clearDarkOverrides = () => {
-  document.querySelectorAll('[data-dark-bg]').forEach(el => {
-    el.style.removeProperty('background-color')
-    delete el.dataset.darkBg
-  })
-}
-
-// MutationObserver: 深色模式下持续修复新增 DOM 节点的白色背景
-let darkObserver = null
-const startDarkObserver = () => {
-  if (darkObserver) return
-  darkObserver = new MutationObserver(() => {
-    if (isDarkTheme.value) fixDarkBackgrounds()
-  })
-  darkObserver.observe(document.body, { childList: true, subtree: true })
-}
-const stopDarkObserver = () => {
-  if (darkObserver) { darkObserver.disconnect(); darkObserver = null }
-}
-
-const toggleThemeMode = () => {
-  isDarkTheme.value = !isDarkTheme.value
-  localStorage.setItem('theme-mode', isDarkTheme.value ? 'dark' : 'light')
-  applyThemeMode()
-  if (isDarkTheme.value) {
-    requestAnimationFrame(fixDarkBackgrounds)
-    startDarkObserver()
-  } else {
-    stopDarkObserver()
-    clearDarkOverrides()
-  }
-  cleanupThemeResidue()
-  ElMessage.success(isDarkTheme.value ? '已切换为夜间模式' : '已切换为日间模式')
-}
-
-const cleanupThemeResidue = () => {
-  document.querySelectorAll('.dark').forEach(el => {
-    if (el !== document.documentElement) {
-      el.classList.remove('dark')
-    }
-  })
-}
-
-applyThemeMode()
-cleanupThemeResidue()
-if (isDarkTheme.value) {
-  requestAnimationFrame(fixDarkBackgrounds)
-  startDarkObserver()
-}
+// 主题模式 + APK 自动授权开关（阶段 3 迁出到 composables/useTheme.js）
+const {
+  isDarkTheme,
+  autoGrantApkPermission,
+  applyThemeMode,
+  fixDarkBackgrounds,
+  clearDarkOverrides,
+  startDarkObserver,
+  stopDarkObserver,
+  toggleThemeMode,
+  cleanupThemeResidue,
+} = useTheme()
 
 const openSettingsDialog = async () => {
   settingsDialogVisible.value = true
