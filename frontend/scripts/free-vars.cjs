@@ -70,6 +70,18 @@ function analyze(file) {
         if (node.local) { bindingNodes.add(node.local); boundNames.add(node.local.name); }
         break;
       case 'CatchClause': markPattern(node.param); break;
+      // 对象字面量里的 getter/setter：set value(v) { ... } 的 v 是绑定，不是引用
+      case 'ObjectMethod':
+      case 'ClassMethod':
+      case 'ClassPrivateMethod':
+        (node.params || []).forEach(markPattern);
+        break;
+      // { foo: function (a) {} } / { foo: (a) => {} } 也要算上形参
+      case 'ObjectProperty':
+      case 'Property':
+      case 'ClassProperty':
+        if (node.value && /Function/.test(node.value.type)) (node.value.params || []).forEach(markPattern);
+        break;
       default: break;
     }
     for (const k of Object.keys(node)) {
