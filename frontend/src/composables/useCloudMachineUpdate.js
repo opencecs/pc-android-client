@@ -7,6 +7,8 @@
  * ElMessage 与 wails binding CloseProjectionWindow 由本模块自己 import。
  */
 import { ElMessage } from 'element-plus'
+import axios from 'axios'
+import { getDeviceAddr } from '../utils/device.js'
 import { CloseProjectionWindow } from '../../bindings/edgeclient/app'
 
 export function useCloudMachineUpdate({

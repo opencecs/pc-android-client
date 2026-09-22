@@ -12,6 +12,8 @@
  */
 import { ElMessage } from 'element-plus'
 import CryptoJS from 'crypto-js'
+import { computed } from 'vue'
+import { getContainers, saveDevicePassword } from '../services/api.js'
 import { GetPhoneVCode, Register } from '../../bindings/edgeclient/app'
 
 export function useAuthForms({
@@ -50,6 +52,7 @@ export function useAuthForms({
   fetchDeviceBindStatus,
   updateCloudMachines,
   startSyncAuthTimer,
+  proxy,
 }) {
   // 显示认证对话框（批量模式）
   const showAuthDialog = (device, callback) => {

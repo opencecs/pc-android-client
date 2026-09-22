@@ -9,6 +9,10 @@
  * `t` 是 App.vue 里的本地 i18n 包装，通过依赖对象传入。
  */
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { nextTick } from 'vue'
+import axios from 'axios'
+import { getDevicePassword, saveDevicePassword } from '../services/api.js'
+import { getDeviceAddr } from '../utils/device.js'
 import { GetImages, LoadImageToDevice } from '../../bindings/edgeclient/app'
 
 export function useCloudMachineCreate({
@@ -42,7 +46,10 @@ export function useCloudMachineCreate({
   instancesOf,
   getRandomVpcNodeId,
   isSlotOccupied,
-}) {
+  showAuthDialog,
+}, lazyDeps = {}) {
+  // 任务队列在 App.vue 下方才创建，用惰性依赖避免 TDZ
+  const { addTaskToQueue, executeTask } = lazyDeps
   // 创建V3云机，参考api/main.go中的handleCreateTask和createV3Container实现
   const createV3CloudMachine = async (device, slot, modelName, cancelCheck = null, options = {}) => {
     const isCanceled = () => (typeof cancelCheck === 'function' && cancelCheck()) || createCancelled.value

@@ -13,7 +13,11 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
 import CryptoJS from 'crypto-js'
 import QRCode from 'qrcode'
-import { HttpRequest } from '../../bindings/edgeclient/app'
+import { ref, computed, watch } from 'vue'
+import { getDevicePassword, resetAndroidContainer } from '../services/api.js'
+import { getDeviceAddr, extractPort, extractPort9082 } from '../utils/device.js'
+import { formatInstanceName } from '../utils/format.js'
+import { HttpRequest, SelectImageFile, SelectVideoFile, UploadFileToCloudMachine } from '../../bindings/edgeclient/app'
 
 export function useContainerActions({
   t,
@@ -38,6 +42,7 @@ export function useContainerActions({
   getCurrentContextMenuContainer,
   clearContainerScreenshotCache,
   fetchAndroidContainers,
+  showUpdateImageDialog,
 }) {
   const handleUpdateImage = () => {
     const container = getCurrentContextMenuContainer()
