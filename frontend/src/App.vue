@@ -178,6 +178,19 @@ const t = (key, params) => {
   return text
 }
 
+// 惰性 ref 壳：有些 ref 由 App.vue 下方的 composable 创建，而更靠上的 composable
+// 在调用时就会解构 deps（setup 期立即求值），直接写名字会撞 TDZ
+// （Cannot access 'x' before initialization）导致整页白屏。包一层转发壳后，
+// 只有真正读写 .value 时才去解析目标 ref，那时目标早已初始化。
+// __v_isRef 让 Vue 的 isRef / watch / unref 仍按 ref 处理。
+function lazyRef(get) {
+  return {
+    __v_isRef: true,
+    get value() { return get().value },
+    set value(v) { get().value = v },
+  }
+}
+
 // 响应式数据
 const devices = ref([])
 const activeDevice = ref(null)
@@ -882,7 +895,7 @@ const {
   devicesStatusCache,
   deviceVersionInfo,
   deviceFirmwareInfo,
-  extensionServiceDevices,
+  extensionServiceDevices,
   // 以下名字由 useDialogForms 内部的 useDeviceListState 解构而来
   currentRightTab,
   loadDevicesFromLocalStorage,
@@ -4383,21 +4396,21 @@ const {
   showDeviceSelectionDialog,
   selectedDevicesForUpload,
   currentUploadingImage,
-  authRetry,
-  treeSelectedKeys,
-  batchSwitchBackupProgressVisible,
-  batchSwitchBackupProgressList,
-  batchSwitchBackupTotal,
-  batchSwitchBackupDone,
-  computeCloudMachineGroups,
-  initCloudMachineGroups,
-  handleBatchUpload,
-  updateCloudMachines,
-  initModelSlots,
-  batchSwitchModelDialogVisible,
-  batchSwitchModelTargets,
-  batchSwitchModelOperationType,
-  fetchAndroidContainers,
+  authRetry: (...a) => authRetry(...a),   // 声明在下方，惰性依赖避免 TDZ
+  treeSelectedKeys: lazyRef(() => treeSelectedKeys),   // 声明在下方，惰性 ref 避免 TDZ
+  batchSwitchBackupProgressVisible: lazyRef(() => batchSwitchBackupProgressVisible),   // 声明在下方，惰性 ref 避免 TDZ
+  batchSwitchBackupProgressList: lazyRef(() => batchSwitchBackupProgressList),   // 声明在下方，惰性 ref 避免 TDZ
+  batchSwitchBackupTotal: lazyRef(() => batchSwitchBackupTotal),   // 声明在下方，惰性 ref 避免 TDZ
+  batchSwitchBackupDone: lazyRef(() => batchSwitchBackupDone),   // 声明在下方，惰性 ref 避免 TDZ
+  computeCloudMachineGroups: (...a) => computeCloudMachineGroups(...a),   // 声明在下方，惰性依赖避免 TDZ
+  initCloudMachineGroups: (...a) => initCloudMachineGroups(...a),   // 声明在下方，惰性依赖避免 TDZ
+  handleBatchUpload: (...a) => handleBatchUpload(...a),   // 声明在下方，惰性依赖避免 TDZ
+  updateCloudMachines: (...a) => updateCloudMachines(...a),   // 声明在下方，惰性依赖避免 TDZ
+  initModelSlots: (...a) => initModelSlots(...a),   // 声明在下方，惰性依赖避免 TDZ
+  batchSwitchModelDialogVisible: lazyRef(() => batchSwitchModelDialogVisible),   // 声明在下方，惰性 ref 避免 TDZ
+  batchSwitchModelTargets: lazyRef(() => batchSwitchModelTargets),   // 声明在下方，惰性 ref 避免 TDZ
+  batchSwitchModelOperationType: lazyRef(() => batchSwitchModelOperationType),   // 声明在下方，惰性 ref 避免 TDZ
+  fetchAndroidContainers: (...a) => fetchAndroidContainers(...a),   // 声明在下方，惰性依赖避免 TDZ
 }, {
   // 以下三个在下方才创建（截图缓存 / 任务队列），用惰性依赖避免 TDZ
   resetScreenshotVersions: () => resetScreenshotVersions(),
@@ -4485,9 +4498,9 @@ const {
   devicesStatusCache,
   deviceVersionInfo,
   deviceFirmwareInfo,
-  fetchDeviceBindStatus,
-  updateCloudMachines,
-  startSyncAuthTimer,
+  fetchDeviceBindStatus: (...a) => fetchDeviceBindStatus(...a),   // 声明在下方，惰性依赖避免 TDZ
+  updateCloudMachines: (...a) => updateCloudMachines(...a),   // 声明在下方，惰性依赖避免 TDZ
+  startSyncAuthTimer: (...a) => startSyncAuthTimer(...a),   // 声明在下方，惰性依赖避免 TDZ
   proxy,
 })
 
@@ -5065,7 +5078,7 @@ const {
   getRandomVpcNodeId,
   fetchImageList,
   authRetry,
-  fetchAndroidContainers,
+  fetchAndroidContainers: (...a) => fetchAndroidContainers(...a),   // 声明在下方，惰性依赖避免 TDZ
 })
 
 // 批量更新镜像 - 等待下载完成（轮询 isDownloadingImage）
@@ -6395,6 +6408,8 @@ useAppBootstrap({
   instances,
   allInstances,
   saveDevicesToLocalStorage,
+}, {
+  // 以下函数 / 模块级 let 在 App.vue 下方才声明，用惰性依赖避免 TDZ
   discoverAndLoadDevices: (...a) => discoverAndLoadDevices(...a),
   refreshDevicesContainersOneByOne: (...a) => refreshDevicesContainersOneByOne(...a),
   initVersionCheckQueue: (...a) => initVersionCheckQueue(...a),
@@ -6488,8 +6503,8 @@ const {
   handleContainerAction,
   closeContextMenu,
   getCurrentContextMenuContainer,
-  clearContainerScreenshotCache,
-  fetchAndroidContainers,
+  clearContainerScreenshotCache: (...a) => clearContainerScreenshotCache(...a),   // 声明在下方，惰性依赖避免 TDZ
+  fetchAndroidContainers: (...a) => fetchAndroidContainers(...a),   // 声明在下方，惰性依赖避免 TDZ
   showUpdateImageDialog,
 })
 
@@ -7326,8 +7341,8 @@ const {
   initBackupList,
   createCloudMachine,
   clearContainerScreenshotCache,
-  batchSwitchCountryCode,
-  fetchAndroidContainers,
+  batchSwitchCountryCode: lazyRef(() => batchSwitchCountryCode),   // 声明在下方，惰性 ref 避免 TDZ
+  fetchAndroidContainers: (...a) => fetchAndroidContainers(...a),   // 声明在下方，惰性依赖避免 TDZ
 })
 
 // 显示更新提示弹窗
