@@ -263,6 +263,7 @@ import { useDialogForms } from './composables/useDialogForms.js'
 // 阶段 4：独立弹窗拆成子组件（见 src/components/dialogs/）
 import MacVlanDialog from './components/dialogs/MacVlanDialog.vue'
 import GpsDialog from './components/dialogs/GpsDialog.vue'
+import GoogleCertDialog from './components/dialogs/GoogleCertDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -566,8 +567,6 @@ const googleCertContainer = ref(null)
 const googleCertFile = ref(null)       // File 对象
 const googleCertFileName = ref('')     // 显示用文件名
 const googleCertLoading = ref(false)
-const googleCertInputRef = ref(null)   // 隐藏的 input[file] ref
-
 const handleUploadGoogleCert = () => {
   const container = getCurrentContextMenuContainer()
   if (!container) return
@@ -578,19 +577,11 @@ const handleUploadGoogleCert = () => {
   closeContextMenu()
 }
 
-// 点击"选择文件"按钮触发隐藏 input
-const triggerGoogleCertInput = () => {
-  googleCertInputRef.value && googleCertInputRef.value.click()
-}
-
-// 文件选择后记录
-const onGoogleCertFileChange = (e) => {
-  const file = e.target.files[0]
+// 文件选择后记录（File 对象由 GoogleCertDialog 子组件上抛）
+const onGoogleCertFileChange = (file) => {
   if (!file) return
   googleCertFile.value = file
   googleCertFileName.value = file.name
-  // 重置 input 值，允许重复选同一文件也能触发 change
-  e.target.value = ''
 }
 
 // 确认上传
@@ -12663,72 +12654,14 @@ const handleBindsTest = async () => {
     @confirm="submitGPS"
   />
 
-  <!-- 上传 Google 证书弹窗 -->
-  <el-dialog
-    v-model="googleCertDialogVisible"
-    :title="$t('common.uploadGoogleCert')"
-    width="460px"
-    :close-on-click-modal="false"
-  >
-    <!-- 隐藏的文件选择 input，仅接受 pem / xml -->
-    <input
-      ref="googleCertInputRef"
-      type="file"
-      accept=".pem,.xml"
-      style="display: none"
-      @change="onGoogleCertFileChange"
-    />
-
-    <div style="padding: 8px 0;">
-      <div style="margin-bottom: 12px; color: var(--el-text-color-regular); font-size: 13px;">
-        {{ $t('common.supportedFormats') }}：<strong>.pem</strong>、<strong>.xml</strong>
-      </div>
-
-      <!-- 文件选择区 -->
-      <div
-        style="
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 14px 16px;
-          border: 1px dashed #d9d9d9;
-          border-radius: 6px;
-          background: #fafafa;
-          cursor: pointer;
-        "
-        @click="triggerGoogleCertInput"
-      >
-        <el-icon :size="22" style="color: #409eff; flex-shrink: 0;"><Upload /></el-icon>
-        <span
-          v-if="googleCertFileName"
-          style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--el-text-color-primary); font-size: 14px;"
-        >{{ googleCertFileName }}</span>
-        <span v-else style="flex: 1; color: #aaa; font-size: 14px;">{{ $t('common.clickToSelectCert') }}</span>
-        <el-button
-          v-if="googleCertFileName"
-          type="primary"
-          link
-          size="small"
-          style="flex-shrink: 0;"
-          @click.stop="triggerGoogleCertInput"
-        >{{ $t('common.reselect') }}</el-button>
-      </div>
-    </div>
-
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="googleCertDialogVisible = false">{{ $t('common.cancel') }}</el-button>
-        <el-button
-          type="primary"
-          @click="submitGoogleCert"
-          :loading="googleCertLoading"
-          :disabled="!googleCertFileName"
-        >
-          {{ googleCertLoading ? $t('common.uploading') : $t('common.confirmUpload') }}
-        </el-button>
-      </span>
-    </template>
-  </el-dialog>
+  <!-- 上传 Google 证书弹窗（阶段 4 迁出到 components/dialogs/GoogleCertDialog.vue） -->
+  <GoogleCertDialog
+    v-model:visible="googleCertDialogVisible"
+    :file-name="googleCertFileName"
+    :loading="googleCertLoading"
+    @file-change="onGoogleCertFileChange"
+    @confirm="submitGoogleCert"
+  />
 
   <!-- ===== 设置弹窗 ===== -->
   <el-dialog
