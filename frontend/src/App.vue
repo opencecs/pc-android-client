@@ -266,6 +266,9 @@ import GpsDialog from './components/dialogs/GpsDialog.vue'
 import GoogleCertDialog from './components/dialogs/GoogleCertDialog.vue'
 import SettingsDialog from './components/dialogs/SettingsDialog.vue'
 import MoveInstanceDialog from './components/dialogs/MoveInstanceDialog.vue'
+import IpTestDialog from './components/dialogs/IpTestDialog.vue'
+import AddMacvlanDialog from './components/dialogs/AddMacvlanDialog.vue'
+import EditNetworkDialog from './components/dialogs/EditNetworkDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -10773,102 +10776,29 @@ const handleBindsTest = async () => {
     </template>
   </el-dialog>
   
-  <!-- IP连接测试弹窗 -->
-  <el-dialog
-    v-model="ipTestVisible"
-    :title="$t('common.ipTestTitle')"
-    width="500px"
-    center
-  >
-    <div class="ip-test-container">
-      <el-form label-width="80px">
-        <el-form-item :label="$t('common.ipAddress')">
-          <el-input v-model="testIp" :placeholder="$t('common.enterIP')" size="small"></el-input>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" size="small" style="margin-right: 10px;" @click="ElMessage.info('功能正在开发中')">{{ $t('common.startTest') }}</el-button>
-          <el-button size="small" @click="ipTestVisible = false">{{ $t('common.cancel') }}</el-button>
-        </el-form-item>
-      </el-form>
-    </div>
-  </el-dialog>
+  <!-- IP连接测试弹窗（阶段 4 迁出到 components/dialogs/IpTestDialog.vue） -->
+  <IpTestDialog
+    v-model:visible="ipTestVisible"
+    v-model:test-ip="testIp"
+  />
   
-  <!-- 添加macvlan网络弹窗 -->
-  <el-dialog
-    v-model="addMacvlanDialogVisible"
-    :title="$t('common.addMacvlanNetwork')"
-    width="600px"
-    :before-close="handleAddMacvlanCancel"
-  >
-    <div class="add-macvlan-content">
-      <el-form :model="addMacvlanForm" label-width="120px">
-        <el-form-item :label="$t('common.networkName')" required>
-          <el-input v-model="addMacvlanForm.networkName" :placeholder="$t('common.enterNetworkName')"></el-input>
-        </el-form-item>
-        <el-form-item :label="$t('common.physicalInterface')" required>
-          <el-input v-model="addMacvlanForm.parentInterface" :placeholder="$t('common.enterPhysicalInterface')"></el-input>
-        </el-form-item>
-        <el-form-item :label="$t('common.subnet')" required>
-          <el-input v-model="addMacvlanForm.subnet" :placeholder="$t('common.enterSubnet')"></el-input>
-        </el-form-item>
-        <el-form-item :label="$t('common.gateway')" required>
-          <el-input v-model="addMacvlanForm.gateway" :placeholder="$t('common.enterGateway')"></el-input>
-        </el-form-item>
-        <el-form-item :label="$t('common.ipRange')">
-          <el-input v-model="addMacvlanForm.ipRange" :placeholder="$t('common.enterIPRange')"></el-input>
-        </el-form-item>
-        <el-form-item :label="$t('common.isolationMode')">
-          <el-checkbox v-model="addMacvlanForm.isPrivate">{{ $t('common.enablePrivateIsolation') }}</el-checkbox>
-          <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-top: 5px;">
-            {{ $t('common.isolationTip') }}
-          </div>
-        </el-form-item>
-      </el-form>
-    </div>
-    <template #footer>
-      <div class="dialog-footer">
-        <el-button @click="handleAddMacvlanCancel">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="handleAddMacvlanSubmit" :loading="addMacvlanLoading">{{ $t('common.confirm') }}</el-button>
-      </div>
-    </template>
-  </el-dialog>
+  <!-- 添加macvlan网络弹窗（阶段 4 迁出到 components/dialogs/AddMacvlanDialog.vue） -->
+  <AddMacvlanDialog
+    v-model:visible="addMacvlanDialogVisible"
+    :form="addMacvlanForm"
+    :loading="addMacvlanLoading"
+    @before-close="handleAddMacvlanCancel"
+    @confirm="handleAddMacvlanSubmit"
+  />
 
-  <!-- 修改网络弹窗 -->
-  <el-dialog
-    v-model="editNetworkDialogVisible"
-    :title="$t('common.editNetwork')"
-    width="600px"
-    :before-close="handleEditNetworkCancel"
-  >
-    <div class="edit-network-content">
-      <el-form :model="editNetworkForm" label-width="120px">
-        <el-form-item :label="$t('common.networkName')" required>
-          <el-input v-model="editNetworkForm.networkName" :placeholder="$t('common.enterNetworkName')" disabled></el-input>
-        </el-form-item>
-        <el-form-item :label="$t('common.subnet')" required>
-          <el-input v-model="editNetworkForm.subnet" :placeholder="$t('common.enterSubnet')"></el-input>
-        </el-form-item>
-        <el-form-item :label="$t('common.gateway')" required>
-          <el-input v-model="editNetworkForm.gateway" :placeholder="$t('common.enterGateway')"></el-input>
-        </el-form-item>
-        <el-form-item :label="$t('common.ipRange')">
-          <el-input v-model="editNetworkForm.ipRange" :placeholder="$t('common.enterIPRange')"></el-input>
-        </el-form-item>
-        <el-form-item :label="$t('common.isolationMode')">
-          <el-checkbox v-model="editNetworkForm.isPrivate">{{ $t('common.enablePrivateIsolation') }}</el-checkbox>
-          <div style="font-size: 12px; color: var(--el-text-color-secondary); margin-top: 5px;">
-            {{ $t('common.isolationTip') }}
-          </div>
-        </el-form-item>
-      </el-form>
-    </div>
-    <template #footer>
-      <div class="dialog-footer">
-        <el-button @click="handleEditNetworkCancel">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="handleEditNetworkSubmit" :loading="editNetworkLoading">{{ $t('common.confirm') }}</el-button>
-      </div>
-    </template>
-  </el-dialog>
+  <!-- 修改网络弹窗（阶段 4 迁出到 components/dialogs/EditNetworkDialog.vue） -->
+  <EditNetworkDialog
+    v-model:visible="editNetworkDialogVisible"
+    :form="editNetworkForm"
+    :loading="editNetworkLoading"
+    @before-close="handleEditNetworkCancel"
+    @confirm="handleEditNetworkSubmit"
+  />
 
   <!-- API详情对话框 -->
   <el-dialog 
