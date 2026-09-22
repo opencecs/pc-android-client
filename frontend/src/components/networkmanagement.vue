@@ -191,9 +191,11 @@
                                 <!-- <el-table-column prop="sourceIp" label="源IP" align="center" min-width="150" /> -->
                                 <el-table-column prop="groupName" :label="$t('network.sourceGroup')" align="center" min-width="180" />
                                 <el-table-column prop="vpcRemarks" :label="$t('network.nodeName')" align="center" min-width="220" />
-                                <el-table-column :label="$t('common.operation')" min-width="260" align="center" fixed="right">
+                                <el-table-column :label="$t('common.operation')" min-width="340" align="center" fixed="right">
                                     <template #default="scope">
                                         <!-- <el-button type="danger" @click="deleteContainerRule(scope.row)">{{ $t('network.deleteGroupNode') }}</el-button> -->
+                                        <el-button :type="scope.row.enabled === false ? 'success' : 'info'" @click="toggleContainerVpcEnabled(scope.row)"
+                                            style="margin-top: 10px;">{{ $t(scope.row.enabled === false ? 'network.enableVpcBinding' : 'network.disableVpcBinding') }}</el-button>
                                         <el-button type="warning" @click="clearContainerVpc(scope.row)"
                                             style="margin-top: 10px;">{{ $t('network.clearVpc') }}</el-button>
                                         <el-button type="primary" @click="enableContainerDnsWhitelist(scope.row)"
@@ -1350,6 +1352,7 @@
                                                 </div>
                                             </li>
                                             <li style="margin-bottom: 8px;"><strong>清除VPC节点：</strong>可单独清除某台云机的节点，或勾选多台后批量清除</li>
+                                            <li style="margin-bottom: 8px;"><strong>启用/停用绑定：</strong>点击"停用绑定"临时停用该云机的VPC绑定（保留分配配置，云机不再走绑定的代理节点），点击"启用绑定"恢复</li>
                                             <li><strong>DNS白名单：</strong>点击"开启DNS"可为该云机启用DNS白名单，再次点击则关闭</li>
                                         </ol>
                                     </div>
@@ -4961,7 +4964,72 @@ const enableContainerDnsWhitelist = async (row) => {
         }
     }
 
-} 
+}
+
+// 启用/停用云机VPC绑定：POST /mytVpc/enableRule { ruleID, enable }
+// 行字段 enabled 为设备端返回的当前绑定状态；row.id 即 ruleID（与 DNS 白名单接口同源）
+const toggleContainerVpcEnabled = async (row) => {
+    const deviceIP = row.deviceIp || selectedDeviceIP.value
+    if (!deviceIP) {
+        ElMessage.warning('无法确定设备IP')
+        return
+    }
+
+    const enable = row.enabled === false
+
+    try {
+        await ElMessageBox.confirm(
+            `确定要${enable ? '启用' : '停用'}云机"${row.containerName}"的VPC绑定吗？${enable ? '' : '（停用后该云机不再走绑定的代理节点）'}`,
+            '操作确认',
+            {
+                confirmButtonText: '确定',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }
+        )
+
+        const response = await fetch(
+            `http://${getDeviceAddr(deviceIP)}/mytVpc/enableRule`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getAuthHeaders(deviceIP)
+                },
+                body: JSON.stringify({
+                    ruleID: row.id,
+                    enable: enable
+                })
+            }
+        )
+
+        if (response.ok) {
+            const data = await response.json()
+            if (data.code === 0) {
+                ElMessage.success(enable ? '启用VPC绑定成功' : '停用VPC绑定成功')
+                fetchContainerRule()
+            } else {
+                ElMessage.error(data.message || '操作失败')
+            }
+        } else if (response.status === 401) {
+            console.error('VPC绑定开关认证失败 (401):', {
+                deviceIP: deviceIP,
+                hasPassword: !!getAuthHeaders(deviceIP).Authorization
+            })
+            ElMessage.error('认证失败，请确认设备已授权')
+        } else if (response.status === 404) {
+            await checkAndWarnSDKVersion(deviceIP, selectedDeviceVersion.value)
+        } else {
+            console.error('VPC绑定开关请求失败:', response.status)
+            ElMessage.error(`接口请求失败 (${response.status})`)
+        }
+    } catch (error) {
+        if (error !== 'cancel') {
+            console.error('VPC绑定开关失败:', error)
+            ElMessage.error('操作失败，请检查网络连接')
+        }
+    }
+}
 
 const handleVpcRowClick = (row) => {
     selectedVpcNode.value = row.id
