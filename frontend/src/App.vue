@@ -278,6 +278,7 @@ import RenameDialog from './components/dialogs/RenameDialog.vue'
 import AnnouncementDialog from './components/dialogs/AnnouncementDialog.vue'
 import ApiDetailsDialog from './components/dialogs/ApiDetailsDialog.vue'
 import S5ProxyDialog from './components/dialogs/S5ProxyDialog.vue'
+import SetStreamDialog from './components/dialogs/SetStreamDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -11391,72 +11392,19 @@ const handleBindsTest = async () => {
   </el-dialog>
 
   <!-- 设置推流弹窗 -->
-  <el-dialog
-    v-model="setStreamDialogVisible"
-    title="设置推流"
-    width="50%"
-    :close-on-click-modal="false"
-  >
-    <el-form >
-      <el-form-item label="推流类型">
-        <el-select v-model="streamType" style="width: 100%;" placeholder="请选择推流类型">
-          <el-option label="图片" value="image"></el-option>
-          <el-option label="视频" value="video"></el-option>
-          <el-option label="APP" value="app"></el-option>
-          <!-- <el-option label="RTMP" value="rtmp"></el-option> -->
-        </el-select>
-      </el-form-item>
-      
-      <el-form-item v-if="streamType === 'image' || streamType === 'video'" label="文件路径">
-        <el-input v-model="streamFilePath" placeholder="请选择文件" readonly>
-          <template #append>
-            <el-button @click="selectStreamFolder">选择文件</el-button>
-          </template>
-        </el-input>
-        <p style="margin-top: 20px;color: red;">选择图片或视频会自动推送到设备内</p>
-      </el-form-item>
-      
-      <el-form-item v-if="streamType === 'app'">
-        <div class="qrcode-container" v-loading="qrCodeLoading" style="display: flex; flex-direction: column; align-items: center; width: 100%;">
-          <h4>扫码连接</h4>
-          <img v-if="qrCodeUrl" :src="qrCodeUrl" alt="连接二维码" style="width: 200px; height: 200px;" />
-          <div v-else-if="!qrCodeLoading">二维码生成失败</div>
-          
-          <div style="margin-top: 10px;">
-            <el-popover
-              placement="bottom"
-              :width="200"
-              trigger="hover"
-            >
-              <template #reference>
-                <el-button link type="primary">APP下载地址</el-button>
-              </template>
-              <div style="text-align: center;">
-                <img v-if="appDownloadQrCodeUrl" :src="appDownloadQrCodeUrl" style="width: 150px; height: 150px;" />
-                <div v-else>生成中...</div>
-                <div style="font-size: 12px; margin-top: 5px;">扫码下载APP</div>
-              </div>
-            </el-popover>
-          </div>
-          <div style="margin-top: 10px;color: red;">
-            <p>注意：推流手机必须与设备同在一个局域网内>否则无法连接</p>
-            <p>使用方法：安装APP后扫码增加云机，如出现相机黑屏，请如下操作</p>
-            <p>扩展服务>设置摄像头视频源>手机摄像头映射>保存</p>
-          </div>
-        </div>
-      </el-form-item>
-      
-      <!-- <el-form-item v-if="streamType === 'rtmp'" label="RTMP地址">
-        <el-input v-model="rtmpUrl" placeholder="请输入RTMP推流地址，如 rtmp://example.com/live/stream"></el-input>
-      </el-form-item> -->
-    </el-form>
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="cancelSetStream">取消</el-button>
-        <el-button type="primary" @click="confirmSetStream" :loading="setStreamLoading">确定</el-button>
-      </span>
-    </template>
-  </el-dialog>
+  <!-- 设置推流弹窗（阶段 4 迁出到 components/dialogs/SetStreamDialog.vue） -->
+  <SetStreamDialog
+    v-model:visible="setStreamDialogVisible"
+    v-model:stream-type="streamType"
+    v-model:stream-file-path="streamFilePath"
+    :loading="setStreamLoading"
+    :qr-code-loading="qrCodeLoading"
+    :qr-code-url="qrCodeUrl"
+    :app-download-qr-code-url="appDownloadQrCodeUrl"
+    @select-file="selectStreamFolder"
+    @cancel="cancelSetStream"
+    @confirm="confirmSetStream"
+  />
 
   <!-- 设备详情弹窗 -->
   <el-dialog
