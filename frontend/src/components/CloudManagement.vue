@@ -643,7 +643,7 @@
                     return nameParts[nameParts.length - 1] || machine.name;
                   })() }}</span>
                   <el-tag
-                    v-if="props.slotStates[machine.indexNum] && props.slotStates[machine.indexNum].state === 2"
+                    v-if="slotStateOf(machine) && slotStateOf(machine).state === 2"
                     size="small"
                     type="danger"
                     class="status-tag-normal"
@@ -653,7 +653,7 @@
               </template>
               <div class="cloud-machine-screenshot-large">
                 <!-- 已到期云机：不显示截图（即使有缓存），显示到期提示 -->
-                <template v-if="props.slotStates[machine.indexNum] && props.slotStates[machine.indexNum].state === 2">
+                <template v-if="slotStateOf(machine) && slotStateOf(machine).state === 2">
                   <div class="screenshot-offline">
                     <span>{{ (props.screenshotCache?.get(machine.id))
                       ? `${t('common.shutdownStatus')} | ${t('common.pleaseRenewInstance')}`
@@ -714,7 +714,7 @@
                 <el-table-column prop="status" :label="t('common.statusLabel')" width="140" align="center">
                   <template #default="scope">
                     <el-tag
-                      v-if="props.slotStates[scope.row.slotNum] && props.slotStates[scope.row.slotNum].state === 2"
+                      v-if="slotStateOf(scope.row) && slotStateOf(scope.row).state === 2"
                       type="danger"
                       size="small"
                       class="status-tag-normal"
@@ -728,7 +728,7 @@
                       {{ scope.row.status === 'running' ? t('common.running') : t('common.shutdownStatus') }}
                     </el-tag>
                     <el-tag
-                      v-if="props.slotStates[scope.row.slotNum] && props.slotStates[scope.row.slotNum].state === 1"
+                      v-if="slotStateOf(scope.row) && slotStateOf(scope.row).state === 1"
                       type="warning"
                       size="small"
                       style="margin-left: 4px;"
@@ -2441,8 +2441,22 @@ const props = defineProps({
   slotStates: {
     type: Object,
     default: () => ({})
+  },
+  // 批量模式下取"某台云机自己所属设备的坑位授权状态"。
+  // 批量模式的云机来自多台设备，而 slotStates 是全局单例（只装得下最后加载的那台设备），
+  // 直接拿它查会把设备A 的"已过期"错标到设备B 的云机上，所以按机器查。
+  // 返回 { state, expireTs } 或 null（null = 未知，不显示到期标签）。
+  getSlotState: {
+    type: Function,
+    default: () => null
   }
 })
+
+// 批量模式用：按云机所属设备查它自己的坑位状态
+const slotStateOf = (machine) => {
+  if (typeof props.getSlotState !== 'function') return null
+  return props.getSlotState(machine)
+}
 
 // === 批量模式：自渲染折叠列表的状态管理 ===
 // 展开状态用 Set 保存节点 id，数据刷新不影响（按 id 而非引用判断）

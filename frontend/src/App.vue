@@ -1643,7 +1643,15 @@ const runningSlots = ref(new Set())
 const slotStatesDevice = ref('')   // slotStates 当前归属的设备 device.id
 const runningSlotsDevice = ref('') // runningSlots 当前归属的设备 device.ip
 
+// 按设备 id 各存一份坑位授权状态。批量模式要同时显示多台设备的云机，而上面那个
+// 全局单例只装得下"最后加载的那台"——直接拿它去查别的设备，会把设备1 的"已过期"
+// 错标到设备2 的云机上（设备1 给 1-6 坑位、设备2 给 7-12 坑位时尤其明显）。
+// 所以额外维护一份按设备分开的表，供批量模式按"云机自己所属的那台设备"查。
+// 键是 device.id，值是 { [slot]: { state, expireTs } }，与 slotStates 同构。
+const slotStatesByDevice = ref(new Map())
+
 const setSlotStates = (map, deviceId) => {
+  if (deviceId) slotStatesByDevice.value.set(deviceId, map || {})
   slotStates.value = map || {}
   slotStatesDevice.value = deviceId || ''
 }
@@ -1737,6 +1745,8 @@ const clearSlotCache = (deviceId) => {
   try {
     localStorage.removeItem(getSlotCacheKey(deviceId))
   } catch {}
+  // 内存里那份也一起清，否则批量模式还会拿旧状态标"已过期"
+  slotStatesByDevice.value.delete(deviceId)
 }
 
 // 清除所有设备的坑位状态缓存
@@ -1751,6 +1761,7 @@ const clearAllSlotCache = () => {
     }
     keysToRemove.forEach(k => localStorage.removeItem(k))
   } catch {}
+  slotStatesByDevice.value.clear()
 }
 
 // 判断缓存中是否有某坑位已到期（需要重新查询）
@@ -1762,7 +1773,11 @@ const hasCacheExpiredSlot = (cached, slot) => {
 }
 
 // 拉取并更新 slotStates，同时写缓存
-const fetchAndCacheSlotStates = (deviceId) => {
+// options.asCurrent    —— 是否同时把它设成"当前设备"的 slotStates（默认 true，坑位模式要用）。
+//                         批量模式后台补拉别的设备时传 false，避免把当前设备的指针顶掉。
+// options.applyShutdown —— 是否对"本次新到期"坑位里的运行中云机强制关机（默认 true）。
+//                         批量模式只是拿状态来显示，传 false，不要顺手关别人的机器。
+const fetchAndCacheSlotStates = (deviceId, { asCurrent = true, applyShutdown = true } = {}) => {
   return GetUserRabbetList(deviceId).then(async res => {
     console.log('GetUserRabbetList result:', res)
     if (res.data && res.data.data && res.data.data.length > 0) {
@@ -1770,16 +1785,49 @@ const fetchAndCacheSlotStates = (deviceId) => {
       // 先读取上一次缓存（saveSlotCache 之前的快照），用于判断"本次新进入到期"
       const previousSlotStates = loadSlotCache(deviceId) || {}
       saveSlotCache(deviceId, converted)
-      setSlotStates(converted, deviceId)
+      if (asCurrent) setSlotStates(converted, deviceId)
+      else slotStatesByDevice.value.set(deviceId, converted)
       // 已过期坑位里的运行中云机强制关机
-      await stopExpiredRunningContainers(deviceId, converted, previousSlotStates)
-    } else {
+      if (applyShutdown) await stopExpiredRunningContainers(deviceId, converted, previousSlotStates)
+    } else if (asCurrent) {
       setSlotStates({}, '')
+    } else {
+      // 后台补拉：明确记下"这台设备没有授权数据"，避免每次切批量模式都重问一遍
+      slotStatesByDevice.value.set(deviceId, {})
     }
   }).catch(err => {
     console.error('GetUserRabbetList error:', err)
-    setSlotStates({}, '')
+    if (asCurrent) setSlotStates({}, '')
   })
+}
+
+// 确保内存里有某台设备的坑位授权状态，没有才去拉（已有直接 resolve）。
+// 批量模式进入时对每台在线设备调用一次：切一次模式只补一次，不会反复打请求。
+const ensureSlotStatesLoaded = (deviceId) => {
+  if (!deviceId) return Promise.resolve()
+  if (slotStatesByDevice.value.has(deviceId)) return Promise.resolve()
+  // 本会话没加载过，但 localStorage 里可能还有这台设备的缓存（TTL 内），先拿来用
+  const cached = loadSlotCache(deviceId)
+  if (cached) {
+    slotStatesByDevice.value.set(deviceId, cached)
+    return Promise.resolve()
+  }
+  return fetchAndCacheSlotStates(deviceId, { asCurrent: false, applyShutdown: false })
+}
+
+// 显示用：按"云机所属的那台设备"取它的坑位状态，取不到返回 null（未知 → 不显示到期标签）。
+// 与 slotStatesOf 的区别：那个是给创建流程用的严格归属校验（宁可当作未知也不采信可能过期的数据），
+// 这个只服务于展示，允许退回按设备存的 localStorage 缓存，但绝不跨设备取。
+const getSlotStateForMachine = (machine) => {
+  const slot = machine?.indexNum ?? machine?.slotNum
+  if (slot === undefined || slot === null || slot === '') return null
+  const deviceIp = machine?.deviceIp || machine?.ip
+  if (!deviceIp) return null
+  const owner = devices.value.find(d => d.ip === deviceIp)
+  if (!owner) return null
+  const states = slotStatesByDevice.value.get(owner.id)
+  if (!states) return null
+  return states[String(slot)] || null
 }
 
 // 将已过期坑位（state === 2）中的运行中容器强制关机
@@ -4389,6 +4437,7 @@ const {
   slotStates,
   setSlotStates,
   fetchAndCacheSlotStates,
+  ensureSlotStatesLoaded,
   getV3PhoneModels,
   getCountryList,
   fetchImageList,
@@ -8764,7 +8813,8 @@ const handleBindsTest = async () => {
             @start-copy-task="handleStartCopyTask"
             :screenshot-cache="screenshotDataCache"
             :slot-states="slotStates"
-            
+            :get-slot-state="getSlotStateForMachine"
+
           />
           
           <!-- 批量上传对话框 -->

@@ -55,6 +55,7 @@ export function useCloudMachineManage({
   slotStates,
   setSlotStates,
   fetchAndCacheSlotStates,
+  ensureSlotStatesLoaded,
   getV3PhoneModels,
   getCountryList,
   fetchImageList,
@@ -169,6 +170,29 @@ export function useCloudMachineManage({
         }
 
         loadBatch(0)
+      }
+
+      // 批量模式要把每台设备自己的"已过期 / 即将过期"标到它的云机上，而 slotStates
+      // 全局单例只装得下最后加载的那台设备，所以这里给在线设备补拉各自的坑位授权状态。
+      // ensureSlotStatesLoaded 内部会跳过内存里已有的，切模式不会反复打请求；
+      // 它走的也是"只读"路径（不触发到期强制关机），不会顺手关掉别的设备上的云机。
+      const devicesMissingSlotStates = devices.value.filter(device => {
+        return devicesStatusCache.value.get(device.id) === 'online'
+      })
+
+      if (devicesMissingSlotStates.length > 0) {
+        const batchSize = 5
+        const loadSlotStateBatch = async (index) => {
+          if (index >= devicesMissingSlotStates.length) return
+
+          const batch = devicesMissingSlotStates.slice(index, index + batchSize)
+          await Promise.allSettled(batch.map(device => ensureSlotStatesLoaded(device.id)))
+          initCloudMachineGroups()
+
+          loadSlotStateBatch(index + batchSize)
+        }
+
+        loadSlotStateBatch(0)
       }
     }
   }
