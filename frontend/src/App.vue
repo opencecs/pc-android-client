@@ -265,6 +265,7 @@ import MacVlanDialog from './components/dialogs/MacVlanDialog.vue'
 import GpsDialog from './components/dialogs/GpsDialog.vue'
 import GoogleCertDialog from './components/dialogs/GoogleCertDialog.vue'
 import SettingsDialog from './components/dialogs/SettingsDialog.vue'
+import MoveInstanceDialog from './components/dialogs/MoveInstanceDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -11016,26 +11017,14 @@ const handleBindsTest = async () => {
     </template>
   </el-dialog>
 
-  <!-- 移动实例对话框 -->
-  <el-dialog v-model="moveInstanceDialogVisible" :title="$t('cloudMachine.moveInstance')" width="420px">
-    <el-form :model="moveInstanceForm" label-width="100px">
-      <el-form-item :label="$t('cloudMachine.containerName')">
-        <el-input v-model="moveInstanceForm.name" disabled />
-      </el-form-item>
-      <el-form-item :label="$t('cloudMachine.targetSlot')" required>
-        <el-select v-model="moveInstanceForm.indexNum" :placeholder="$t('cloudMachine.enterTargetSlot')">
-          <el-option v-for="slot in moveInstanceAvailableSlots" :key="slot" :label="slot" :value="slot" />
-        </el-select>
-      </el-form-item>
-      <el-form-item :label="$t('cloudMachine.startAfterMove')">
-        <el-switch v-model="moveInstanceForm.start" />
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <el-button @click="moveInstanceDialogVisible = false">{{ $t('common.cancel') }}</el-button>
-      <el-button type="primary" @click="submitMoveInstance" :loading="moveInstanceLoading">{{ $t('common.confirm') }}</el-button>
-    </template>
-  </el-dialog>
+  <!-- 移动实例对话框（阶段 4 迁出到 components/dialogs/MoveInstanceDialog.vue） -->
+  <MoveInstanceDialog
+    v-model:visible="moveInstanceDialogVisible"
+    :form="moveInstanceForm"
+    :available-slots="moveInstanceAvailableSlots"
+    :loading="moveInstanceLoading"
+    @confirm="submitMoveInstance"
+  />
 
   <!-- 右键菜单 -->
   <div 
