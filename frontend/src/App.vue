@@ -270,6 +270,9 @@ import IpTestDialog from './components/dialogs/IpTestDialog.vue'
 import AddMacvlanDialog from './components/dialogs/AddMacvlanDialog.vue'
 import EditNetworkDialog from './components/dialogs/EditNetworkDialog.vue'
 import BackupListDialog from './components/dialogs/BackupListDialog.vue'
+import VpcSetDialog from './components/dialogs/VpcSetDialog.vue'
+import DownloadCloudFileDialog from './components/dialogs/DownloadCloudFileDialog.vue'
+import PasswordDialog from './components/dialogs/PasswordDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -10801,30 +10804,17 @@ const handleBindsTest = async () => {
   </el-dialog>
 
   <!-- 设置VPC对话框 -->
-  <el-dialog v-model="vpcSetDialogVisible" :title="$t('cloudMachine.setVpc')" width="450px" :close-on-click-modal="false">
-    <div v-loading="vpcSetLoading">
-      <el-form label-width="80px">
-        <el-form-item :label="$t('common.selectGroup')">
-          <el-select v-model="vpcSetGroupId" :placeholder="$t('common.selectGroup')" clearable style="width: 100%">
-            <el-option v-for="group in vpcSetGroupList" :key="group.id" :label="group.alias" :value="group.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="vpcSetGroupId" :label="$t('common.selectNode')">
-          <el-radio-group v-model="vpcSetSelectMode" style="margin-bottom: 8px;">
-            <el-radio value="random">{{ $t('common.randomNode') }}</el-radio>
-            <el-radio value="specified">{{ $t('common.specifiedNode') }}</el-radio>
-          </el-radio-group>
-          <el-select v-if="vpcSetSelectMode === 'specified'" v-model="vpcSetNodeId" :placeholder="$t('common.selectNode')" style="width: 100%">
-            <el-option v-for="node in vpcSetNodeList" :key="node.id" :label="node.remarks || node.id" :value="node.id" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-    </div>
-    <template #footer>
-      <el-button @click="vpcSetDialogVisible = false">{{ $t('common.cancel') }}</el-button>
-      <el-button type="primary" @click="submitVpcSet" :loading="vpcSetLoading">{{ $t('common.confirm') }}</el-button>
-    </template>
-  </el-dialog>
+  <!-- 设置VPC弹窗（阶段 4 迁出到 components/dialogs/VpcSetDialog.vue） -->
+  <VpcSetDialog
+    v-model:visible="vpcSetDialogVisible"
+    v-model:group-id="vpcSetGroupId"
+    v-model:node-id="vpcSetNodeId"
+    v-model:select-mode="vpcSetSelectMode"
+    :loading="vpcSetLoading"
+    :group-list="vpcSetGroupList"
+    :node-list="vpcSetNodeList"
+    @confirm="submitVpcSet"
+  />
 
   <!-- 移动实例对话框（阶段 4 迁出到 components/dialogs/MoveInstanceDialog.vue） -->
   <MoveInstanceDialog
@@ -10938,30 +10928,13 @@ const handleBindsTest = async () => {
 
 
   <!-- 密码设置对话框 -->
-  <el-dialog
-    v-model="passwordDialogVisible"
-    :title="$t('common.setDevicePassword')"
-    width="400px"
-  >
-    <el-form :model="passwordForm" label-width="80px">
-      <el-form-item label="密码">
-        <el-input
-          v-model="passwordForm.password"
-          type="password"
-          placeholder="请输入密码"
-          show-password
-        ></el-input>
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="passwordDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSetPassword" :loading="passwordLoading">
-          {{ passwordLoading ? '设置中...' : '确定' }}
-        </el-button>
-      </span>
-    </template>
-  </el-dialog>
+  <!-- 设置设备密码弹窗（阶段 4 迁出到 components/dialogs/PasswordDialog.vue） -->
+  <PasswordDialog
+    v-model:visible="passwordDialogVisible"
+    :form="passwordForm"
+    :loading="passwordLoading"
+    @confirm="handleSetPassword"
+  />
 
 
   <!-- 授权同步对话框 -->
@@ -11212,25 +11185,15 @@ const handleBindsTest = async () => {
   </el-dialog>
 
   <!-- 下载云机文件对话框 -->
-  <el-dialog v-model="downloadCloudFileDialogVisible" :title="$t('common.download')" width="450px" :close-on-click-modal="false">
-    <el-form label-width="100px">
-      <el-form-item :label="$t('common.name')">
-        <span>{{ downloadFileInfo.name }}</span>
-      </el-form-item>
-      <el-form-item :label="$t('cloudMachine.savePath')">
-        <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-          <el-input v-model="localCurrentPath" size="small" readonly style="flex: 1;" />
-          <el-button size="small" @click="localSelectDirectory">
-            <el-icon><FolderOpened /></el-icon>
-          </el-button>
-        </div>
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <el-button @click="downloadCloudFileDialogVisible = false">{{ $t('common.cancel') }}</el-button>
-      <el-button type="primary" @click="submitDownloadCloudFile" :loading="downloadCloudFileLoading">{{ $t('common.confirm') }}</el-button>
-    </template>
-  </el-dialog>
+  <!-- 下载云机文件弹窗（阶段 4 迁出到 components/dialogs/DownloadCloudFileDialog.vue） -->
+  <DownloadCloudFileDialog
+    v-model:visible="downloadCloudFileDialogVisible"
+    v-model:current-path="localCurrentPath"
+    :loading="downloadCloudFileLoading"
+    :file-info="downloadFileInfo"
+    @select-directory="localSelectDirectory"
+    @confirm="submitDownloadCloudFile"
+  />
 
   <!-- 共享文件选择对话框 -->
   <el-dialog
