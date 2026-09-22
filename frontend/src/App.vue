@@ -234,6 +234,7 @@ import { toggleNodeExpanded, collectSharedFilePaths } from './utils/fileTree.js'
 import { copyToClipboard } from './utils/clipboard.js'
 import { useTheme } from './composables/useTheme.js'
 import { useScreenshotCache } from './composables/useScreenshotCache.js'
+import { useDeviceGroups } from './composables/useDeviceGroups.js'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -1251,93 +1252,6 @@ const saveDevicesToLocalStorage = () => {
   }
 }
 
-// 分组管理方法
-const addDeviceGroup = (groupName) => {
-  const name = groupName || `新分组${deviceGroups.value.length + 1}`
-  if (!deviceGroups.value.includes(name)) {
-    deviceGroups.value.push(name)
-    saveDeviceGroupsToLocalStorage()
-  }
-  return name
-}
-
-const renameDeviceGroup = (oldName, newName) => {
-  const index = deviceGroups.value.indexOf(oldName)
-  if (index !== -1 && newName && !deviceGroups.value.includes(newName)) {
-    // 更新分组列表
-    deviceGroups.value[index] = newName
-    // 更新所有属于该分组的设备
-    devices.value.forEach(device => {
-      if (device.group === oldName) {
-        device.group = newName
-      }
-    })
-    // 如果当前筛选的是被重命名的分组，更新筛选
-    if (deviceGroupFilter.value === oldName) {
-      deviceGroupFilter.value = newName
-    }
-    saveDevicesToLocalStorage()
-    saveDeviceGroupsToLocalStorage()
-  }
-}
-
-const deleteDeviceGroup = (groupName) => {
-  if (groupName === '默认分组') {
-    ElMessage.warning('默认分组不能删除')
-    return
-  }
-  const index = deviceGroups.value.indexOf(groupName)
-  if (index !== -1) {
-    deviceGroups.value.splice(index, 1)
-    // 将属于该分组的设备移回默认分组
-    devices.value.forEach(device => {
-      if (device.group === groupName) {
-        device.group = '默认分组'
-      }
-    })
-    // 如果当前筛选的是被删除的分组，重置为全部
-    if (deviceGroupFilter.value === groupName) {
-      deviceGroupFilter.value = '全部'
-    }
-    saveDevicesToLocalStorage()
-    saveDeviceGroupsToLocalStorage()
-    // 重新初始化云机分组
-    initCloudMachineGroups()
-    ElMessage.success(`分组 "${groupName}" 已删除，设备已移至默认分组`)
-  }
-}
-
-const moveDeviceToGroup = (deviceId, targetGroup) => {
-  const device = devices.value.find(d => d.id === deviceId)
-  if (device) {
-    const oldGroup = device.group || '默认分组'
-    device.group = targetGroup
-    saveDevicesToLocalStorage()
-    // 重新初始化云机分组
-    initCloudMachineGroups()
-    ElMessage.success(`设备 ${device.ip} 已从 "${oldGroup}" 移动到 "${targetGroup}"`)
-  }
-}
-
-const saveDeviceGroupsToLocalStorage = () => {
-  try {
-    localStorage.setItem('edgeclient_device_groups', JSON.stringify(deviceGroups.value))
-  } catch (error) {
-    console.error('保存设备分组到本地存储失败:', error)
-  }
-}
-
-const loadDeviceGroupsFromLocalStorage = () => {
-  try {
-    const savedGroups = localStorage.getItem('edgeclient_device_groups')
-    if (savedGroups) {
-      deviceGroups.value = JSON.parse(savedGroups)
-    }
-  } catch (error) {
-    console.error('从本地存储加载设备分组失败:', error)
-  }
-}
-
 // V3设备信息
 const v3DeviceInfo = ref({}) // 存储V3设备详细信息
 const v3LatestInfo = ref({}) // 存储最新版本信息
@@ -1497,6 +1411,23 @@ const getFilteredImages = (images, model) => {
 const deviceGroups = ref(['默认分组']) // 设备分组列表
 const deviceGroupFilter = ref('全部') // 当前选中的分组过滤
 const editingDeviceGroup = ref(null) // 当前编辑分组的设备
+
+// 设备分组 CRUD（阶段 3 迁出到 composables/useDeviceGroups.js）
+// initCloudMachineGroups 声明在本文件更靠后的位置，用箭头函数惰性取，避免 TDZ
+const {
+  addDeviceGroup,
+  renameDeviceGroup,
+  deleteDeviceGroup,
+  moveDeviceToGroup,
+  saveDeviceGroupsToLocalStorage,
+  loadDeviceGroupsFromLocalStorage,
+} = useDeviceGroups({
+  devices,
+  deviceGroups,
+  deviceGroupFilter,
+  saveDevicesToLocalStorage,
+  initCloudMachineGroups: () => initCloudMachineGroups(),
+})
 
 // 按IP地址比较（用于正确排序）
 const compareIPs = (ip1, ip2) => {
