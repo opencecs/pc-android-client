@@ -260,6 +260,9 @@ import { useDeviceMaintenance } from './composables/useDeviceMaintenance.js'
 import { useBackupListState } from './composables/useBackupListState.js'
 import { useDialogForms } from './composables/useDialogForms.js'
 
+// 阶段 4：独立弹窗拆成子组件（见 src/components/dialogs/）
+import MacVlanDialog from './components/dialogs/MacVlanDialog.vue'
+
 // 任务队列状态管理
 const taskQueue = ref([])
 const runningTasksCount = computed(() => {
@@ -12643,29 +12646,13 @@ const handleBindsTest = async () => {
     :update-info="updateInfo"
   />
 
-  <!-- 设置MacVlanIP对话框 -->
-  <el-dialog
-    v-model="macVlanDialogVisible"
-    title="设置MacVlanIP"
-    width="400px"
-  >
-    <el-form :model="macVlanForm" label-width="100px">
-      <el-form-item label="容器名称">
-        <el-input v-model="macVlanForm.name" disabled></el-input>
-      </el-form-item>
-      <el-form-item label="MacVlanIP" required>
-        <el-input v-model="macVlanForm.ip" placeholder="请输入MacVlanIP"></el-input>
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="macVlanDialogVisible = false">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="confirmSetMacVlanIP" :loading="macVlanLoading">
-          {{ $t('common.confirm') }}
-        </el-button>
-      </span>
-    </template>
-  </el-dialog>
+  <!-- 设置MacVlanIP对话框（阶段 4 迁出到 components/dialogs/MacVlanDialog.vue） -->
+  <MacVlanDialog
+    v-model:visible="macVlanDialogVisible"
+    :form="macVlanForm"
+    :loading="macVlanLoading"
+    @confirm="confirmSetMacVlanIP"
+  />
 
   <!-- GPS定位设置弹窗 -->
   <el-dialog
