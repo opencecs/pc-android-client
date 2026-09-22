@@ -280,6 +280,7 @@ import ApiDetailsDialog from './components/dialogs/ApiDetailsDialog.vue'
 import S5ProxyDialog from './components/dialogs/S5ProxyDialog.vue'
 import SetStreamDialog from './components/dialogs/SetStreamDialog.vue'
 import SwitchModelDialog from './components/dialogs/SwitchModelDialog.vue'
+import SharedFilesDialog from './components/dialogs/SharedFilesDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -10987,243 +10988,28 @@ const handleBindsTest = async () => {
   />
 
   <!-- 共享文件选择对话框 -->
-  <el-dialog
-    v-model="sharedFilesDialogVisible"
-    title="选择要上传的文件"
-    width="600px"
-  >
-    <div v-loading="filesLoading" element-loading-text="加载文件中...">
-      <div class="dialog-header" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <h3 style="margin: 0;">文件列表</h3>
-          <el-button 
-            type="text" 
-            size="small" 
-            @click="changeFileSort('name')"
-            :class="{ 'sort-active': fileSortType === 'name' }"
-          >
-            名称 {{ fileSortType === 'name' ? (fileSortOrder === 'asc' ? '↑' : '↓') : '' }}
-          </el-button>
-          <el-button 
-            type="text" 
-            size="small" 
-            @click="changeFileSort('time')"
-            :class="{ 'sort-active': fileSortType === 'time' }"
-          >
-            时间 {{ fileSortType === 'time' ? (fileSortOrder === 'asc' ? '↑' : '↓') : '' }}
-          </el-button>
-        </div>
-        <el-button type="primary" size="small" @click="openSharedDirectory">
-          打开共享目录
-        </el-button>
-      </div>
-
-      <!-- 上传路径说明 -->
-      <div style="margin-bottom: 8px; padding: 6px 12px; background: #ecf5ff; border-radius: 4px; border: 1px solid #d9ecff; font-size: 12px; color: #409eff;">
-        📤 上传完成路径: /sdcard/upload/
-      </div>
-
-      <!-- 共享目录路径设置 -->
-      <div style="margin-bottom: 12px; padding: 10px 12px; background: #f5f7fa; border-radius: 4px; border: 1px solid #e4e7ed;">
-        <div style="font-size: 12px; color: var(--el-text-color-regular); margin-bottom: 8px; font-weight: 500;">📂 文件来源目录</div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <el-input
-            v-model="singleUploadSharedDirInfo.path"
-            placeholder="共享目录路径"
-            size="small"
-            :readonly="true"
-            style="flex: 1;"
-          />
-          <el-button size="small" type="primary" :loading="singleUploadSharedDirLoading" @click="handleSelectSingleUploadSharedDir">
-            浏览
-          </el-button>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
-          <el-tag v-if="singleUploadSharedDirInfo.isDefault" type="info" size="small">默认目录</el-tag>
-          <el-tag v-else type="success" size="small">自定义目录</el-tag>
-          <el-button
-            v-if="!singleUploadSharedDirInfo.isDefault"
-            type="text"
-            size="small"
-            style="color: var(--el-text-color-secondary); padding: 0;"
-            :loading="singleUploadSharedDirLoading"
-            @click="handleResetSingleUploadSharedDir"
-          >
-            恢复默认
-          </el-button>
-        </div>
-      </div>
-
-      <div v-if="sharedFileTree" class="file-tree">
-        <!-- 递归渲染目录树 -->
-        <div class="tree-node">
-          <div class="node-checkbox">
-            <el-checkbox
-              :model-value="isSharedDirectoryFullySelected(sharedFileTree)"
-              :indeterminate="isSharedDirectoryPartiallySelected(sharedFileTree)"
-              @change="() => handleSharedNodeSelectionChange(sharedFileTree)"
-            ></el-checkbox>
-          </div>
-          <span class="node-icon" v-if="sharedFileTree.isDir && sharedFileTree.children && sharedFileTree.children.length > 0" @click.stop="toggleNodeExpanded(sharedFileTree)">
-            {{ sharedFileTree.expanded ? '▼' : '▶' }}
-          </span>
-          <span class="node-icon" v-else-if="sharedFileTree.isDir">
-            📁
-          </span>
-          <span class="node-name" @click="toggleNodeExpanded(sharedFileTree)">{{ sharedFileTree.name }}</span>
-        </div>
-        <!-- 递归渲染子节点 -->
-        <template v-if="sharedFileTree.expanded && sharedFileTree.isDir && sharedFileTree.children && sharedFileTree.children.length > 0">
-          <div class="tree-children">
-            <div v-for="child in sharedFileTree.children" :key="child.path">
-              <div class="tree-node">
-                <div class="node-checkbox" v-if="child.isDir">
-                  <el-checkbox
-                    :model-value="isSharedDirectoryFullySelected(child)"
-                    :indeterminate="isSharedDirectoryPartiallySelected(child)"
-                    @change="() => handleSharedNodeSelectionChange(child)"
-                  ></el-checkbox>
-                </div>
-                <div class="node-checkbox" v-else>
-                  <el-checkbox
-                    :model-value="selectedFiles.includes(child.path)"
-                    @change="(val) => handleSharedFileCheckChange(child.path, val)"
-                  >{{ child.name }}</el-checkbox>
-                </div>
-                <span class="node-icon" v-if="child.isDir && child.children && child.children.length > 0" @click.stop="toggleNodeExpanded(child)">
-                  {{ child.expanded ? '▼' : '▶' }}
-                </span>
-                <span class="node-icon" v-else-if="child.isDir">
-                  📁
-                </span>
-                <span class="node-name" v-if="child.isDir" @click="toggleNodeExpanded(child)">{{ child.name }}</span>
-                <span class="node-size" v-if="!child.isDir">{{ (child.size / 1024).toFixed(2) }} KB</span>
-                <span class="node-date" v-if="!child.isDir">{{ new Date(child.modTime * 1000).toLocaleString() }}</span>
-
-              </div>
-              <!-- 递归渲染子目录 -->
-              <template v-if="child.expanded && child.isDir && child.children && child.children.length > 0">
-                <div class="tree-children">
-                  <div v-for="grandchild in child.children" :key="grandchild.path">
-                    <div class="tree-node">
-                      <div class="node-checkbox" v-if="grandchild.isDir">
-                        <el-checkbox
-                          :model-value="isSharedDirectoryFullySelected(grandchild)"
-                          :indeterminate="isSharedDirectoryPartiallySelected(grandchild)"
-                          @change="() => handleSharedNodeSelectionChange(grandchild)"
-                        ></el-checkbox>
-                      </div>
-                      <div class="node-checkbox" v-else>
-                        <el-checkbox
-                          :model-value="selectedFiles.includes(grandchild.path)"
-                          @change="(val) => handleSharedFileCheckChange(grandchild.path, val)"
-                        >{{ grandchild.name }}</el-checkbox>
-                      </div>
-                      <span class="node-icon" v-if="grandchild.isDir && grandchild.children && grandchild.children.length > 0" @click.stop="toggleNodeExpanded(grandchild)">
-                        {{ grandchild.expanded ? '▼' : '▶' }}
-                      </span>
-                      <span class="node-icon" v-else-if="grandchild.isDir">
-                        📁
-                      </span>
-                      <span class="node-name" v-if="grandchild.isDir" @click="toggleNodeExpanded(grandchild)">{{ grandchild.name }}</span>
-                      <span class="node-size" v-if="!grandchild.isDir">{{ (grandchild.size / 1024).toFixed(2) }} KB</span>
-                      <span class="node-date" v-if="!grandchild.isDir">{{ new Date(grandchild.modTime * 1000).toLocaleString() }}</span>
-
-                    </div>
-                    <!-- 递归渲染更深层次的子目录 -->
-                    <template v-if="grandchild.expanded && grandchild.isDir && grandchild.children && grandchild.children.length > 0">
-                      <div class="tree-children">
-                        <div v-for="greatgrandchild in grandchild.children" :key="greatgrandchild.path">
-                          <div class="tree-node">
-                            <div class="node-checkbox" v-if="greatgrandchild.isDir">
-                              <el-checkbox
-                                :model-value="isSharedDirectoryFullySelected(greatgrandchild)"
-                                :indeterminate="isSharedDirectoryPartiallySelected(greatgrandchild)"
-                                @change="() => handleSharedNodeSelectionChange(greatgrandchild)"
-                              ></el-checkbox>
-                            </div>
-                            <div class="node-checkbox" v-else>
-                              <el-checkbox
-                                :model-value="selectedFiles.includes(greatgrandchild.path)"
-                                @change="(val) => handleSharedFileCheckChange(greatgrandchild.path, val)"
-                              >{{ greatgrandchild.name }}</el-checkbox>
-                            </div>
-                            <span class="node-icon" v-if="greatgrandchild.isDir && greatgrandchild.children && greatgrandchild.children.length > 0" @click.stop="toggleNodeExpanded(greatgrandchild)">
-                              {{ greatgrandchild.expanded ? '▼' : '▶' }}
-                            </span>
-                            <span class="node-icon" v-else-if="greatgrandchild.isDir">
-                              📁
-                            </span>
-                            <span class="node-name" v-if="greatgrandchild.isDir" @click="toggleNodeExpanded(greatgrandchild)">{{ greatgrandchild.name }}</span>
-                            <span class="node-size" v-if="!greatgrandchild.isDir">{{ (greatgrandchild.size / 1024).toFixed(2) }} KB</span>
-                            <span class="node-date" v-if="!greatgrandchild.isDir">{{ new Date(greatgrandchild.modTime * 1000).toLocaleString() }}</span>
-
-                          </div>
-                          <!-- 递归渲染更深层次的子目录 -->
-                          <template v-if="greatgrandchild.expanded && greatgrandchild.isDir && greatgrandchild.children && greatgrandchild.children.length > 0">
-                            <div class="tree-children">
-                              <div v-for="deepchild in greatgrandchild.children" :key="deepchild.path">
-                                <div class="tree-node">
-                                  <div class="node-checkbox" v-if="deepchild.isDir">
-                                    <el-checkbox
-                                      :model-value="isSharedDirectoryFullySelected(deepchild)"
-                                      :indeterminate="isSharedDirectoryPartiallySelected(deepchild)"
-                                      @change="() => handleSharedNodeSelectionChange(deepchild)"
-                                    ></el-checkbox>
-                                  </div>
-                                  <div class="node-checkbox" v-else>
-                                    <el-checkbox
-                                      :model-value="selectedFiles.includes(deepchild.path)"
-                                      @change="(val) => handleSharedFileCheckChange(deepchild.path, val)"
-                                    >{{ deepchild.name }}</el-checkbox>
-                                  </div>
-                                  <span class="node-icon" v-if="deepchild.isDir">
-                                    📁
-                                  </span>
-                                  <span class="node-name" v-if="deepchild.isDir">{{ deepchild.name }}</span>
-                                  <span class="node-size" v-if="!deepchild.isDir">{{ (deepchild.size / 1024).toFixed(2) }} KB</span>
-                                  <span class="node-date" v-if="!deepchild.isDir">{{ new Date(deepchild.modTime * 1000).toLocaleString() }}</span>
-                                </div>
-                              </div>
-                            </div>
-                          </template>
-                        </div>
-                      </div>
-                    </template>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </div>
-        </template>
-      </div>
-      <div v-else class="no-files">
-        <el-empty description="共享目录中没有文件"></el-empty>
-        <el-button type="primary" style="margin-top: 16px;" @click="openSharedDirectory">
-          打开共享目录
-        </el-button>
-      </div>
-    </div>
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="sharedFilesDialogVisible = false">取消</el-button>
-        <el-button 
-          type="primary" 
-          @click="handleUploadToCloudMachine" 
-          :loading="uploadLoading"
-          :disabled="selectedFiles.length === 0"
-        >
-          {{ uploadLoading ? '上传中...' : '上传' }}
-        </el-button>
-         <el-button 
-          type="primary" 
-          @click="handleUploadRefresh" 
-        >
-          刷新共享文件
-        </el-button>
-      </span>
-    </template>
-  </el-dialog>
+  <!-- 共享文件选择对话框（阶段 4 迁出到 components/dialogs/SharedFilesDialog.vue） -->
+  <SharedFilesDialog
+    v-model:visible="sharedFilesDialogVisible"
+    :loading="filesLoading"
+    :upload-loading="uploadLoading"
+    :shared-dir-info="singleUploadSharedDirInfo"
+    :shared-dir-loading="singleUploadSharedDirLoading"
+    :tree="sharedFileTree"
+    :selected-files="selectedFiles"
+    :file-sort-type="fileSortType"
+    :file-sort-order="fileSortOrder"
+    :is-shared-directory-fully-selected="isSharedDirectoryFullySelected"
+    :is-shared-directory-partially-selected="isSharedDirectoryPartiallySelected"
+    @change-file-sort="changeFileSort"
+    @open-shared-directory="openSharedDirectory"
+    @select-shared-dir="handleSelectSingleUploadSharedDir"
+    @reset-shared-dir="handleResetSingleUploadSharedDir"
+    @node-selection-change="handleSharedNodeSelectionChange"
+    @file-check-change="handleSharedFileCheckChange"
+    @upload="handleUploadToCloudMachine"
+    @upload-refresh="handleUploadRefresh"
+  />
 
   <!-- 批量认证对话框 -->
   <el-dialog
