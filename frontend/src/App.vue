@@ -286,6 +286,7 @@ import BatchUpdateImageDialog from './components/dialogs/BatchUpdateImageDialog.
 import SyncAuthDialog from './components/dialogs/SyncAuthDialog.vue'
 import RegisterDialog from './components/dialogs/RegisterDialog.vue'
 import ForgotPasswordDialog from './components/dialogs/ForgotPasswordDialog.vue'
+import BatchAuthDialog from './components/dialogs/BatchAuthDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -10476,119 +10477,15 @@ const handleBindsTest = async () => {
     @upload-refresh="handleUploadRefresh"
   />
 
-  <!-- 批量认证对话框 -->
-  <el-dialog
-    v-model="batchAuthDialogVisible"
-    title="设备批量认证"
-    width="600px"
-    :close-on-click-modal="false"
-    :close-on-press-escape="false"
-  >
-    <el-alert
-      :title="`需要对 ${batchAuthDevices.length} 个设备进行认证`"
-      type="warning"
-      :closable="false"
-      style="margin-bottom: 16px;"
-    >
-      <template #default>
-        <div style="font-size: 13px;">
-          请为以下设备输入认证密码
-        </div>
-      </template>
-    </el-alert>
-    
-    <!-- 设备列表 -->
-    <div style="max-height: 400px; overflow-y: auto;">
-      <el-form label-width="100px">
-        <div 
-          v-for="(item, index) in batchAuthDevices" 
-          :key="item.device.ip"
-          style="padding: 12px; margin-bottom: 12px; border: 1px solid #dcdfe6; border-radius: 4px;"
-          :style="{
-            borderColor: item.status === 'success' ? '#67c23a' : item.status === 'failed' ? '#f56c6c' : '#dcdfe6',
-            backgroundColor: item.status === 'success' ? '#f0f9ff' : item.status === 'failed' ? '#fef0f0' : '#fff'
-          }"
-        >
-          <!-- 设备标题 -->
-          <div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <span style="font-weight: bold; font-size: 14px;">设备 {{ index + 1 }}: {{ item.device.ip }}</span>
-            <el-tag 
-              v-if="item.status === 'verifying'" 
-              type="info" 
-              size="small" 
-              style="margin-left: 8px;"
-            >
-              验证中...
-            </el-tag>
-            <el-tag 
-              v-else-if="item.status === 'success'" 
-              type="success" 
-              size="small" 
-              style="margin-left: 8px;"
-            >
-              ✓ 认证成功
-            </el-tag>
-            <el-tag 
-              v-else-if="item.status === 'failed'" 
-              type="danger" 
-              size="small" 
-              style="margin-left: 8px;"
-            >
-              ✗ 认证失败
-            </el-tag>
-          </div>
-          
-          <!-- 密码输入 -->
-          <el-form-item label="密码" :required="true" style="margin-bottom: 8px;">
-            <el-input
-              v-model="item.password"
-              type="password"
-              placeholder="请输入设备密码"
-              show-password
-              :disabled="item.status === 'verifying' || item.status === 'success'"
-              @keyup.enter="handleBatchAuthSubmit"
-            >
-              <template #append v-if="item.status === 'success'">
-                <el-icon color="#67c23a"><CircleCheck /></el-icon>
-              </template>
-              <template #append v-else-if="item.status === 'failed'">
-                <el-icon color="#f56c6c"><CircleClose /></el-icon>
-              </template>
-            </el-input>
-          </el-form-item>
-          
-          <!-- 错误提示 -->
-          <div v-if="item.status === 'failed' && item.errorMsg" style="color: #f56c6c; font-size: 12px; margin-top: 4px;">
-            {{ item.errorMsg }}
-          </div>
-          
-          <!-- 保存密码选项 -->
-          <el-form-item style="margin-bottom: 0;">
-            <el-checkbox 
-              v-model="item.savePassword"
-              :disabled="item.status === 'verifying' || item.status === 'success'"
-            >
-              自动保存密码
-            </el-checkbox>
-          </el-form-item>
-        </div>
-      </el-form>
-    </div>
-    
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="handleBatchAuthCancel" :disabled="batchAuthLoading">取消</el-button>
-        <el-button 
-          type="primary" 
-          @click="handleBatchAuthSubmit" 
-          :loading="batchAuthLoading"
-          :disabled="batchAuthDevices.every(item => item.status === 'success')"
-        >
-          {{ batchAuthLoading ? '认证中...' : '确定' }}
-        </el-button>
-      </span>
-    </template>
-  </el-dialog>
+  <!-- 设备批量认证对话框（阶段 4 迁出到 components/dialogs/BatchAuthDialog.vue） -->
+  <BatchAuthDialog
+    v-model:visible="batchAuthDialogVisible"
+    :devices="batchAuthDevices"
+    :loading="batchAuthLoading"
+    @cancel="handleBatchAuthCancel"
+    @submit="handleBatchAuthSubmit"
+  />
+
 
   <!-- 机型切换对话框（阶段 4 迁出到 components/dialogs/SwitchModelDialog.vue） -->
   <SwitchModelDialog
