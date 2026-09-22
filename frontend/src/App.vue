@@ -282,6 +282,7 @@ import SetStreamDialog from './components/dialogs/SetStreamDialog.vue'
 import SwitchModelDialog from './components/dialogs/SwitchModelDialog.vue'
 import SharedFilesDialog from './components/dialogs/SharedFilesDialog.vue'
 import UpdateImageDialog from './components/dialogs/UpdateImageDialog.vue'
+import BatchUpdateImageDialog from './components/dialogs/BatchUpdateImageDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -10142,95 +10143,15 @@ const handleBindsTest = async () => {
   />
 
   <!-- 批量更新镜像对话框 -->
-  <el-dialog
-    v-model="batchUpdateImageDialogVisible"
-    :title="$t('common.batchUpdateImage')"
-    width="640px"
-    :close-on-click-modal="false"
-  >
-    <div v-for="(group, gIdx) in batchUpdateImageGroups" :key="group.groupKey" :style="{ marginBottom: gIdx < batchUpdateImageGroups.length - 1 ? '20px' : '0' }">
-      <!-- 分组标题 -->
-      <div style="font-weight:600;font-size:14px;color:var(--el-text-color-primary);padding:6px 0 10px 0;border-bottom:1px solid #ebeef5;margin-bottom:12px;">
-        {{ group.groupLabel }}
-        <span style="font-weight:400;color:var(--el-text-color-secondary);font-size:12px;margin-left:8px;">{{ $t('common.totalCloudMachines', { count: group.containers.length }) }}</span>
-      </div>
-
-      <el-form label-width="90px">
-        <!-- 若同时含 V2 和 V3，让用户选择版本 -->
-        <el-form-item v-if="group.hasV2 && group.hasV3" :label="$t('common.updateVersion')">
-          <el-radio-group v-model="group.androidType" @change="group.selectedUrl = ''; group.customUrl = ''">
-            <el-radio label="V3">{{ $t('common.v3Simulator') }}</el-radio>
-            <el-radio label="V2">{{ $t('common.v2Container') }}</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item v-else :label="$t('common.versionType')">
-          <span style="color:var(--el-text-color-regular);">{{ group.androidType === 'V2' ? $t('common.v2Container') : $t('common.v3Simulator') }}</span>
-        </el-form-item>
-
-        <!-- V2 模式：安卓版本选择 -->
-        <el-form-item v-if="group.androidType === 'V2'" :label="$t('common.androidVersion')">
-          <el-radio-group v-model="group.v2AndroidVersion" @change="group.selectedUrl = ''">
-            <el-radio :label="10">Android 10</el-radio>
-            <el-radio v-if="!isBatchImagePSeries(group.deviceName)" :label="12">Android 12</el-radio>
-            <el-radio :label="14">Android 14</el-radio>
-          </el-radio-group>
-        </el-form-item>
-
-        <!-- 镜像选择 -->
-        <el-form-item :label="$t('common.imageSelection')">
-          <el-select
-            v-model="group.selectedUrl"
-            filterable
-            style="width: 100%;"
-            :placeholder="$t('common.pleaseSelectImage')"
-          >
-            <el-option :label="$t('common.customImage')" value="custom" />
-            <template v-if="group.androidType === 'V3'">
-              <el-option
-                v-for="img in getBatchUpdateV3List(group.deviceName)"
-                :key="img.url"
-                :label="img.name"
-                :value="img.url"
-              />
-            </template>
-            <template v-else>
-              <el-option
-                v-for="img in getBatchUpdateV2List(group.deviceName, group.v2AndroidVersion)"
-                :key="img.url"
-                :label="img.name"
-                :value="img.url"
-              />
-            </template>
-          </el-select>
-          <div
-            v-if="group.androidType === 'V2' && getBatchUpdateV2List(group.deviceName, group.v2AndroidVersion).length === 0 && group.selectedUrl !== 'custom'"
-            style="color:var(--el-text-color-secondary);font-size:12px;margin-top:4px;"
-          >
-            {{ $t('common.noImageForVersion') }}
-          </div>
-        </el-form-item>
-
-        <!-- 自定义地址 -->
-        <el-form-item v-if="group.selectedUrl === 'custom'" :label="$t('common.customAddress')">
-          <el-input
-            v-model="group.customUrl"
-            :placeholder="$t('common.enterImageURL')"
-            clearable
-          />
-        </el-form-item>
-      </el-form>
-    </div>
-
-    <template #footer>
-      <div class="create-dialog-footer">
-        <el-button @click="batchUpdateImageDialogVisible = false">{{ $t('common.cancel') }}</el-button>
-        <el-button
-          type="primary"
-          @click="executeBatchUpdateImage"
-        >{{ $t('common.confirmUpdate') }}</el-button>
-      </div>
-    </template>
-  </el-dialog>
+  <!-- 批量更新镜像对话框（阶段 4 迁出到 components/dialogs/BatchUpdateImageDialog.vue） -->
+  <BatchUpdateImageDialog
+    v-model:visible="batchUpdateImageDialogVisible"
+    :groups="batchUpdateImageGroups"
+    :is-p-series="isBatchImagePSeries"
+    :get-v3-list="getBatchUpdateV3List"
+    :get-v2-list="getBatchUpdateV2List"
+    @confirm="executeBatchUpdateImage"
+  />
   
   <!-- IP连接测试弹窗（阶段 4 迁出到 components/dialogs/IpTestDialog.vue） -->
   <IpTestDialog
