@@ -279,6 +279,7 @@ import AnnouncementDialog from './components/dialogs/AnnouncementDialog.vue'
 import ApiDetailsDialog from './components/dialogs/ApiDetailsDialog.vue'
 import S5ProxyDialog from './components/dialogs/S5ProxyDialog.vue'
 import SetStreamDialog from './components/dialogs/SetStreamDialog.vue'
+import SwitchModelDialog from './components/dialogs/SwitchModelDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -11338,58 +11339,24 @@ const handleBindsTest = async () => {
     </template>
   </el-dialog>
 
-  <!-- 机型切换对话框 -->
-  <el-dialog
-    v-model="switchModelDialogVisible"
-    :title="`切换机型 - ${currentSwitchContainer?.name || ''}`"
-    width="500px"
-  >
-    <div style="padding: 10px 0;">
-      <el-form label-width="80px">
-        <el-form-item label="机型来源">
-          <el-radio-group v-model="switchModelType" @change="handleSwitchModelTypeChange">
-            <el-radio-button label="online">线上机型</el-radio-button>
-            <el-radio-button label="local">本地机型</el-radio-button>
-            <el-radio-button label="backup">备份机型</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="选择机型">
-          <el-select v-model="tempModelId" style="width: 100%;" placeholder="请选择要切换的机型" filterable :loading="fetchingModels || fetchingBackupModels">
-            <el-option 
-              v-for="model in displayedModels" 
-              :key="model.id" 
-              :label="model.name" 
-              :value="model.id"
-            ></el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="$t('common.modelCountry')">
-          <el-select
-            v-model="switchCountryCode"
-            :placeholder="$t('common.pleaseSelectModelCountry')"
-            :loading="countryListLoading"
-            filterable
-            @focus="fetchCountryList"
-          >
-            <el-option
-              v-for="country in countryList"
-              :key="country.countryCode"
-              :label="`${country.countryName} (${getCountryEnglishName(country.countryCode)})`"
-              :value="country.countryCode"
-            ></el-option>
-          </el-select>
-        </el-form-item>
-      </el-form>
-    </div>
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="cancelSwitchModel" :disabled="switchingModel">取消</el-button>
-        <el-button type="primary" @click="confirmSwitchModel" :loading="switchingModel" :disabled="switchingModel">
-          {{ switchingModel ? '正在切换' : '确定' }}
-        </el-button>
-      </span>
-    </template>
-  </el-dialog>
+  <!-- 机型切换对话框（阶段 4 迁出到 components/dialogs/SwitchModelDialog.vue） -->
+  <SwitchModelDialog
+    v-model:visible="switchModelDialogVisible"
+    v-model:switch-model-type="switchModelType"
+    v-model:temp-model-id="tempModelId"
+    v-model:switch-country-code="switchCountryCode"
+    :container="currentSwitchContainer"
+    :fetching-models="fetchingModels"
+    :fetching-backup-models="fetchingBackupModels"
+    :displayed-models="displayedModels"
+    :country-list="countryList"
+    :country-list-loading="countryListLoading"
+    :switching-model="switchingModel"
+    @type-change="handleSwitchModelTypeChange"
+    @fetch-country-list="fetchCountryList"
+    @cancel="cancelSwitchModel"
+    @confirm="confirmSwitchModel"
+  />
 
   <!-- 设置推流弹窗 -->
   <!-- 设置推流弹窗（阶段 4 迁出到 components/dialogs/SetStreamDialog.vue） -->
