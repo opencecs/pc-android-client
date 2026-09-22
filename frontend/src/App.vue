@@ -273,6 +273,9 @@ import BackupListDialog from './components/dialogs/BackupListDialog.vue'
 import VpcSetDialog from './components/dialogs/VpcSetDialog.vue'
 import DownloadCloudFileDialog from './components/dialogs/DownloadCloudFileDialog.vue'
 import PasswordDialog from './components/dialogs/PasswordDialog.vue'
+import BatchSwitchBackupProgressDialog from './components/dialogs/BatchSwitchBackupProgressDialog.vue'
+import RenameDialog from './components/dialogs/RenameDialog.vue'
+import AnnouncementDialog from './components/dialogs/AnnouncementDialog.vue'
 
 // 任务队列状态管理
 const taskQueue = ref([])
@@ -9289,61 +9292,22 @@ const handleBindsTest = async () => {
   </el-dialog>
 
   <!-- 云机重命名弹窗 -->
-  <el-dialog
-    v-model="renameDialogVisible"
-    :title="t('cloudMachine.renameCloudMachine')"
-    width="400px"
-    :close-on-click-modal="false"
-  >
-    <el-form :model="renameForm" label-width="80px">
-      <el-form-item :label="$t('cloudMachine.currentName')">
-        <el-input v-model="renameForm.name" disabled></el-input>
-      </el-form-item>
-      <el-form-item :label="$t('cloudMachine.newName')">
-        <el-input v-model="renameForm.newName" :placeholder="$t('cloudMachine.enterNewName')"></el-input>
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="renameDialogVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="submitRename" :loading="renameLoading">
-          {{ t('common.confirm') }}
-        </el-button>
-      </span>
-    </template>
-  </el-dialog>
+  <!-- 云机重命名弹窗（阶段 4 迁出到 components/dialogs/RenameDialog.vue） -->
+  <RenameDialog
+    v-model:visible="renameDialogVisible"
+    :form="renameForm"
+    :loading="renameLoading"
+    @confirm="submitRename"
+  />
   
   <!-- 系统公告弹窗 -->
-  <el-dialog
-    v-model="announcementVisible"
-    :title="announcementData.title"
-    width="520px"
-    :close-on-click-modal="false"
-    :show-close="false"
+  <!-- 系统公告弹窗（阶段 4 迁出到 components/dialogs/AnnouncementDialog.vue） -->
+  <AnnouncementDialog
+    v-model:visible="announcementVisible"
+    :data="announcementData"
+    :countdown="countdown"
     @close="closeAnnouncement"
-    class="announcement-dialog"
-  >
-    <div class="announcement-content">
-      <div class="announcement-icon">
-        <el-icon :size="48" color="#409EFF">
-          <BellFilled />
-        </el-icon>
-      </div>
-      <div class="announcement-text">
-        {{ announcementData.content }}
-      </div>
-    </div>
-    <template #footer>
-      <div class="announcement-footer">
-        <el-button type="primary" @click="closeAnnouncement" size="large">
-          {{ $t('common.understood') }}
-          <span v-if="countdown > 0" class="countdown-badge">
-            {{ countdown }}s
-          </span>
-        </el-button>
-      </div>
-    </template>
-  </el-dialog>
+  />
   
   <!-- 切换云机悬浮窗口（阶段 4 迁出到 components/dialogs/BackupListDialog.vue） -->
   <BackupListDialog
@@ -9364,87 +9328,14 @@ const handleBindsTest = async () => {
   />
   
   <!-- 批量切换云机进度对话框 -->
-  <el-dialog
-    v-model="batchSwitchBackupProgressVisible"
-    title="批量切换云机进度"
-    width="520px"
-    :close-on-click-modal="false"
-    :close-on-press-escape="false"
-    :show-close="batchSwitchBackupDone >= batchSwitchBackupTotal"
-  >
-    <div style="padding: 0 4px;">
-      <!-- 总进度条 -->
-      <div style="margin-bottom: 16px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <span style="font-size: 13px; color: var(--el-text-color-regular);">总进度</span>
-          <span style="font-size: 13px; color: var(--el-text-color-primary); font-weight: 500;">
-            {{ batchSwitchBackupDone }} / {{ batchSwitchBackupTotal }}
-          </span>
-        </div>
-        <el-progress
-          :percentage="batchSwitchBackupTotal > 0 ? Math.round(batchSwitchBackupDone / batchSwitchBackupTotal * 100) : 0"
-          :status="batchSwitchBackupDone >= batchSwitchBackupTotal
-            ? (batchSwitchBackupProgressList.some(i => i.status === 'failed') ? 'exception' : 'success')
-            : ''"
-          :stroke-width="12"
-        />
-      </div>
-      <!-- 每台云机进度列表 -->
-      <div style="max-height: 320px; overflow-y: auto;">
-        <div
-          v-for="item in batchSwitchBackupProgressList"
-          :key="item.slotNum + '-' + item.deviceIp"
-          style="display: flex; align-items: center; padding: 7px 0; border-bottom: 1px solid #f0f0f0; gap: 8px;"
-        >
-          <!-- 坑位 + 设备IP -->
-          <div style="min-width: 100px; font-size: 12px; color: var(--el-text-color-regular); flex-shrink: 0;">
-            <span>坑位 {{ item.slotNum }}</span>
-            <span v-if="cloudManageMode === 'batch'" style="display: block; color: var(--el-text-color-secondary); font-size: 11px;">{{ item.deviceIp }}</span>
-          </div>
-          <!-- 备份名称 -->
-          <div style="flex: 1; min-width: 0; font-size: 12px; color: var(--el-text-color-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.backupName">
-            → {{ item.backupName }}
-          </div>
-          <!-- 状态 -->
-          <div style="min-width: 82px; text-align: right; flex-shrink: 0;">
-            <el-tag
-              v-if="item.status === 'pending'"
-              size="small"
-              type="info"
-            >等待中</el-tag>
-            <el-tag
-              v-else-if="item.status === 'running'"
-              size="small"
-              type="warning"
-            >
-              <el-icon class="is-loading" style="margin-right: 3px;"><Loading /></el-icon>
-              {{ item.message }}
-            </el-tag>
-            <el-tag
-              v-else-if="item.status === 'success'"
-              size="small"
-              type="success"
-            >成功</el-tag>
-            <el-tag
-              v-else-if="item.status === 'failed'"
-              size="small"
-              type="danger"
-              :title="item.message"
-            >失败</el-tag>
-          </div>
-        </div>
-      </div>
-    </div>
-    <template #footer>
-      <el-button
-        type="primary"
-        :disabled="batchSwitchBackupDone < batchSwitchBackupTotal"
-        @click="batchSwitchBackupProgressVisible = false"
-      >
-        {{ batchSwitchBackupDone < batchSwitchBackupTotal ? '处理中...' : '关闭' }}
-      </el-button>
-    </template>
-  </el-dialog>
+  <!-- 批量切换云机进度对话框（阶段 4 迁出到 components/dialogs/BatchSwitchBackupProgressDialog.vue） -->
+  <BatchSwitchBackupProgressDialog
+    v-model:visible="batchSwitchBackupProgressVisible"
+    :list="batchSwitchBackupProgressList"
+    :total="batchSwitchBackupTotal"
+    :done="batchSwitchBackupDone"
+    :cloud-manage-mode="cloudManageMode"
+  />
 
   <!-- 创建云机弹窗 -->
   <div class="create-dialog-container">
