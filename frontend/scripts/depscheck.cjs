@@ -12,6 +12,12 @@
  * 恒不成立，功能整块不跑。要传就传取值函数 `() => x`（函数体是延迟执行的，
  * 所以箭头函数不会被这一遍报出来）。
  *
+ * 第三遍查转发壳丢实参：惰性依赖常写成 `addTaskToQueue: () => addTaskToQueue()` 来绕开 TDZ，
+ * 但这个壳把调用方传的实参全吞了 —— 调用点写 addTaskToQueue('create', targets)，函数体里
+ * targets 却是 undefined，一读 .length 就抛 "Cannot read properties of undefined (reading 'length')"。
+ * 而且它是被 composable 内部的 try/catch 兜住的，只会弹一句业务报错，看不出是转发壳的问题。
+ * 正确写法是 `(...a) => addTaskToQueue(...a)`。
+ *
  * 用法: node depscheck.cjs <App.vue> <composables目录>
  */
 const fs = require('fs');
@@ -129,6 +135,30 @@ for (const init of inits) {
     }
     if (frozen.length) {
       msgs.push('模块级 let/var 按值传入（composable 里会冻成快照，改用 `() => 名`）: ' + [...new Set(frozen)].join(' '));
+    }
+    // 惰性转发壳 `name: () => name()` 会把调用方传的实参全部丢掉。
+    // 调用点写 addTaskToQueue('create', targets)，进到函数体里 targets 就是 undefined，
+    // 一读 .length 就 "Cannot read properties of undefined (reading 'length')"。
+    // 正确写法是 `(...a) => name(...a)`（本文件其它惰性依赖都是这么写的）。
+    const dropped = [];
+    for (const arg of [init.arguments[0], init.arguments[1]]) {
+      if (!arg || arg.type !== 'ObjectExpression') continue;
+      for (const p of arg.properties) {
+        if (p.type !== 'ObjectProperty' || p.computed) continue;
+        const v = p.value;
+        if (!v || v.type !== 'ArrowFunctionExpression') continue;
+        if (v.params.length !== 0) continue;
+        const body = v.body;
+        const call = body && body.type === 'CallExpression' ? body
+          : (body && body.type === 'BlockStatement' && body.body.length === 1 &&
+             body.body[0].type === 'ExpressionStatement' ? body.body[0].expression : null);
+        if (call && call.type === 'CallExpression' && call.arguments.length === 0) {
+          dropped.push((p.key.name || p.key.value) + ': () => ' + (call.callee.name || '?') + '()');
+        }
+      }
+    }
+    if (dropped.length) {
+      msgs.push('惰性转发壳丢实参（写成 `(...a) => fn(...a)`）: ' + dropped.join(' | '));
     }
     // 该进第二参却写进了第一参 → 运行时恒为 undefined
     const misplaced = sig.lazy.filter((k) => s1.has(k) && !s2.has(k));

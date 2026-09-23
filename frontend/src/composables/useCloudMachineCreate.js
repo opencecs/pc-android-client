@@ -25,6 +25,7 @@ export function useCloudMachineCreate({
   localPhoneModels,
   backupPhoneModels,
   localCachedImages,
+  fetchLocalCachedImages,
   containerAndroidVersion,
   createDialogVisible,
   createDevice,
@@ -82,7 +83,7 @@ export function useCloudMachineCreate({
         let localImageOnlineUrl = ''
         if (localCachedImages.value.length === 0) {
           console.log('[单创建] 本地镜像列表为空，尝试加载...')
-          await fetchLocalImages()
+          await fetchLocalCachedImages()
         }
         const cachedImage = localCachedImages.value.find(img => img.path === imageUrl)
         if (cachedImage && cachedImage.onlineUrl) {
@@ -1295,7 +1296,7 @@ export function useCloudMachineCreate({
                        if (createForm.value.imageCategory === 'local' && createForm.value.localImageUrl) {
                            if (localCachedImages.value.length === 0) {
                                console.log(`[批量创建] 本地镜像列表为空，尝试加载...`)
-                               await fetchLocalImages()
+                               await fetchLocalCachedImages()
                            }
                            const cachedImage = localCachedImages.value.find(img => img.path === createForm.value.localImageUrl)
                            if (cachedImage && cachedImage.onlineUrl) {
@@ -1370,7 +1371,7 @@ export function useCloudMachineCreate({
                   // 确保本地镜像列表已加载
                   if (localCachedImages.value.length === 0) {
                     console.log(`[批量创建] 本地镜像列表为空，尝试加载...`)
-                    await fetchLocalImages()
+                    await fetchLocalCachedImages()
                   }
 
                   const cachedImage = localCachedImages.value.find(img => img.path === createForm.value.localImageUrl)

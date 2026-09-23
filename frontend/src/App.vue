@@ -4461,10 +4461,12 @@ const {
   batchSwitchModelOperationType: lazyRef(() => batchSwitchModelOperationType),   // 声明在下方，惰性 ref 避免 TDZ
   fetchAndroidContainers: (...a) => fetchAndroidContainers(...a),   // 声明在下方，惰性依赖避免 TDZ
 }, {
-  // 以下三个在下方才创建（截图缓存 / 任务队列），用惰性依赖避免 TDZ
-  resetScreenshotVersions: () => resetScreenshotVersions(),
-  addTaskToQueue: () => addTaskToQueue(),
-  executeTask: () => executeTask(),
+  // 以下三个在下方才创建（截图缓存 / 任务队列），用惰性依赖避免 TDZ。
+  // ⚠️ 转发壳必须写成 `(...a) => fn(...a)`：写成 `() => fn()` 会把调用方传的实参全部丢掉，
+  // 于是 addTaskToQueue('create', targets) 进到函数体里 targets 是 undefined，一读 .length 就炸。
+  resetScreenshotVersions: (...a) => resetScreenshotVersions(...a),
+  addTaskToQueue: (...a) => addTaskToQueue(...a),
+  executeTask: (...a) => executeTask(...a),
 })
 
 // 显示设备密码设置对话框
@@ -5072,6 +5074,7 @@ const {
   localPhoneModels,
   backupPhoneModels,
   localCachedImages,
+  fetchLocalCachedImages,
   containerAndroidVersion,
   createDialogVisible,
   createDevice,
@@ -5095,9 +5098,10 @@ const {
   isSlotOccupied,
   showAuthDialog,
 }, {
-  // 任务队列在下方（约 10760 行）才创建，用惰性依赖避免 TDZ
-  addTaskToQueue: () => addTaskToQueue(),
-  executeTask: () => executeTask(),
+  // 任务队列在下方（约 10760 行）才创建，用惰性依赖避免 TDZ。
+  // ⚠️ 必须 `(...a) => fn(...a)` 转发实参，`() => fn()` 会让 targets / taskId 全丢。
+  addTaskToQueue: (...a) => addTaskToQueue(...a),
+  executeTask: (...a) => executeTask(...a),
 })
 
 // 云机更新镜像（阶段 3 迁出到 composables/useCloudMachineUpdate.js）
@@ -6958,9 +6962,10 @@ const {
   selectedCloudDevice,
   batchUploadDialogVisible,
 }, {
-  // 任务队列在下方才创建，用惰性依赖避免 TDZ
-  addTaskToQueue: () => addTaskToQueue(),
-  executeTask: () => executeTask(),
+  // 任务队列在下方才创建，用惰性依赖避免 TDZ。
+  // ⚠️ 必须 `(...a) => fn(...a)` 转发实参，`() => fn()` 会让 targets / taskId 全丢。
+  addTaskToQueue: (...a) => addTaskToQueue(...a),
+  executeTask: (...a) => executeTask(...a),
 })
 
 

@@ -280,7 +280,9 @@ export function useDeviceListState({
     deviceGroups,
     deviceGroupFilter,
     saveDevicesToLocalStorage,
-    initCloudMachineGroups: () => initCloudMachineGroups(),
+    // 转发壳统一写 `(...a) => fn(...a)`：`() => fn()` 会吞掉实参，
+    // 眼下 initCloudMachineGroups 恰好不收参数所以看不出问题，但它一旦加参就会静默失效。
+    initCloudMachineGroups: (...a) => initCloudMachineGroups(...a),
   })
 
   // 按IP地址比较（用于正确排序）
