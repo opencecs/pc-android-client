@@ -6,6 +6,12 @@
  * 它不会被解构，值恒为 undefined；setup 不报错、构建也过，但运行时一调用就
  * "xxx is not a function" / 静默失效。这类错位只能靠对位检查发现。
  *
+ * 第二遍还查另一类静默失效：把 App.vue 的**模块级 let/var 按值**传进 composable。
+ * `let x = false` 被解构进 composable 后就冻成了调用那一刻的快照，之后 App.vue 里
+ * 再改 x，composable 里读到的永远是旧值 —— 于是 `if (x) doSomething()` 这类守卫
+ * 恒不成立，功能整块不跑。要传就传取值函数 `() => x`（函数体是延迟执行的，
+ * 所以箭头函数不会被这一遍报出来）。
+ *
  * 用法: node depscheck.cjs <App.vue> <composables目录>
  */
 const fs = require('fs');
@@ -73,6 +79,18 @@ function load(name) {
 }
 
 let problems = 0, checked = 0;
+
+// 0) App.vue 的模块级 let/var —— 这些是"会被重新赋值"的绑定，按值传进 composable 必冻成快照
+const mutableToplevel = new Set();
+for (const st of ast.program.body) {
+  if (st.type !== 'VariableDeclaration' || st.kind === 'const') continue;
+  for (const d of st.declarations) {
+    const names = [];
+    patternNames(d.id, names);
+    for (const n of names) mutableToplevel.add(n);
+  }
+}
+
 // 调用点有两种写法：`const {...} = useXxx({...})` 与不取返回值的裸调用 `useXxx({...})`
 const inits = [];
 for (const st of ast.program.body) {
@@ -98,6 +116,20 @@ for (const init of inits) {
       : [];
     const s1 = new Set(arg1), s2 = new Set(arg2);
     const msgs = [];
+    // 模块级 let/var 按值传入 → 在 composable 里是调用那一刻的快照，之后再变也看不到
+    const frozen = [];
+    for (const arg of [init.arguments[0], init.arguments[1]]) {
+      if (!arg || arg.type !== 'ObjectExpression') continue;
+      for (const p of arg.properties) {
+        if (p.type !== 'ObjectProperty' || p.computed) continue;
+        if (p.value && p.value.type === 'Identifier' && mutableToplevel.has(p.value.name)) {
+          frozen.push(p.value.name);
+        }
+      }
+    }
+    if (frozen.length) {
+      msgs.push('模块级 let/var 按值传入（composable 里会冻成快照，改用 `() => 名`）: ' + [...new Set(frozen)].join(' '));
+    }
     // 该进第二参却写进了第一参 → 运行时恒为 undefined
     const misplaced = sig.lazy.filter((k) => s1.has(k) && !s2.has(k));
     if (misplaced.length) msgs.push('惰性依赖写进了第一参（运行时为 undefined）: ' + misplaced.join(' '));

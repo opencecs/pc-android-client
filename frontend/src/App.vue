@@ -7202,7 +7202,10 @@ const {
   devicesLastUpdateTime,
   authCancelledDevices,
   initCloudMachineGroups,
-  heartbeatInitialized,
+  // heartbeatInitialized 是模块级 let，按值传进去会冻成调用时的 false，
+  // 于是"添加设备后通知后端更新监控列表"永远不执行，新设备一直是离线。
+  // 用取值函数保证读到的是实时值（同 useContextMenu 里 deviceHeartbeatTimer 的写法）。
+  isHeartbeatInitialized: () => heartbeatInitialized,
   showAuthDialog,
   createForm,
   contextMenuContainer,

@@ -35,7 +35,7 @@ export function useDeviceOperations({
   devicesLastUpdateTime,
   authCancelledDevices,
   initCloudMachineGroups,
-  heartbeatInitialized,
+  isHeartbeatInitialized,
   showAuthDialog,
   createForm,
   contextMenuContainer,
@@ -253,7 +253,7 @@ export function useDeviceOperations({
       autoGetAllDeviceVersions()
 
       // ✅ 手动触发心跳监控列表更新
-      if (heartbeatInitialized) {
+      if (isHeartbeatInitialized()) {
         console.log('[添加设备] 手动触发心跳监控更新')
         updateHeartbeatDevices()
       }
@@ -308,7 +308,7 @@ export function useDeviceOperations({
       autoGetAllDeviceVersions()
 
       // ✅ 手动触发心跳监控列表更新
-      if (heartbeatInitialized) {
+      if (isHeartbeatInitialized()) {
         console.log('[批量添加设备] 手动触发心跳监控更新')
         updateHeartbeatDevices()
       }
