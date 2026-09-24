@@ -5,6 +5,10 @@
  * 这类名字要么是漏传的依赖（运行时 ReferenceError），要么是漏 import。
  * range-deps.cjs 看不到 `const { x } = useFoo()` 这种解构出来的绑定，所以必须靠这一步兜底。
  *
+ * .vue 也能查：取 <script setup>（没有就取 <script>）整块当 JS 解析，报的行号是文件里的真实行号。
+ * 拆分出来的每个 .vue 都是「原来和 App.vue 顶层函数同处一个作用域、搬走后忘了 import」的
+ * 高危对象 —— taskDisplay.js 的 formatInstanceName 就是这么炸的。
+ *
  * 用法: node free-vars.cjs <文件...>
  */
 const fs = require('fs');
@@ -24,10 +28,31 @@ const BUILTINS = new Set([
   'MutationObserver', 'IntersectionObserver', 'ResizeObserver', 'HTMLElement', 'Element',
   'Node', 'WebSocket', 'XMLHttpRequest', 'arguments', 'this', 'super', 'eval',
   'process', 'require', 'module', 'exports', 'Buffer', '__dirname', '__filename',
+  'Uint8Array', 'Int8Array', 'Uint16Array', 'Int16Array', 'Uint32Array', 'Int32Array',
+  'Float32Array', 'Float64Array', 'ArrayBuffer', 'DataView', 'BigInt', 'BroadcastChannel',
+  'MessageChannel', 'performance', 'crypto', 'TextStream', 'EventSource', 'Worker',
+  // <script setup> 编译期宏（由 @vue/compiler-sfc 注入，不是运行时变量）
+  'defineProps', 'defineEmits', 'defineExpose', 'defineOptions', 'defineSlots', 'defineModel',
+  'withDefaults', 'useSlots', 'useAttrs', 'Function',
 ]);
 
+// .vue：只把 <script setup> / <script> 取出来解析，并把行号偏移回文件里的真实行号
+function extractScript(file) {
+  const raw = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+  if (!file.endsWith('.vue')) return { src: raw, offset: 0 };
+  const { parse } = require('@vue/compiler-sfc');
+  const { descriptor, errors } = parse(raw, { filename: file });
+  if (errors && errors.length) throw new Error(`SFC 解析失败: ${errors[0].message}`);
+  const block = descriptor.scriptSetup || descriptor.script;
+  if (!block) return null;
+  // block.loc.start.line 是 1-based，指向 <script> 标签那一行
+  return { src: block.content, offset: block.loc.start.line };
+}
+
 function analyze(file) {
-  const src = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+  const extracted = extractScript(file);
+  if (extracted === null) return { free: [], refCount: 0, boundCount: 0, noScript: true };
+  const { src, offset } = extracted;
   const ast = parser.parse(src, { sourceType: 'module', plugins: ['jsx'], errorRecovery: true });
 
   // ---- 第一遍：收集所有"绑定位置"上的 Identifier ----
@@ -120,6 +145,7 @@ function analyze(file) {
 
   const free = [...refs.entries()]
     .filter(([n]) => !BUILTINS.has(n) && !boundNames.has(n))
+    .map(([n, ln]) => [n, ln + offset])   // .vue 时把脚本块内的行号偏移回文件真实行号
     .sort((a, b) => a[1] - b[1]);
   return { free, refCount: refs.size, boundCount: boundNames.size };
 }
@@ -129,8 +155,18 @@ module.exports = { analyze, BUILTINS };
 if (require.main === module) {
   let bad = 0;
   for (const file of process.argv.slice(2)) {
-    const { free, boundCount } = analyze(file);
-    if (free.length === 0) {
+    let r;
+    try {
+      r = analyze(file);
+    } catch (e) {
+      bad++;
+      console.log(`ERR  ${file}  ${e.message}`);
+      continue;
+    }
+    const { free, boundCount, noScript } = r;
+    if (noScript) {
+      console.log(`SKIP ${file}  (无 <script> 块)`);
+    } else if (free.length === 0) {
       console.log(`OK   ${file}  (${boundCount} 个绑定)`);
     } else {
       bad++;

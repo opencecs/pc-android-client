@@ -1,7 +1,13 @@
 /**
  * 从 App.vue 抽出的纯工具函数（不依赖任何组件状态）。
  * 由 App.vue 拆分阶段 2 迁出，函数体与原实现逐字相同。
+ *
+ * ⚠️ getTaskTargetDisplay 里用到的 formatInstanceName 原来和它同在 App.vue 顶层作用域，
+ * 搬出来以后必须显式 import —— 否则批量上传（uploadFile）任务一渲染就
+ * `ReferenceError: formatInstanceName is not defined`，任务队列下拉整块渲染不出来
+ * （只剩标题行，进度条全无）。free-vars.cjs 会报这个。
  */
+import { formatInstanceName } from './format.js'
 
 
 // 获取指定设备IP的进度百分比
