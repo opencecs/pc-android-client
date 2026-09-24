@@ -449,12 +449,15 @@ async function getScreenshots(ip) {
   }
 }
 
-// 清空指定容器的截图缓存（重启/重置时调用）
+// 清空指定容器的截图缓存（重启/重置/删除时调用）
 // containerName 为空时清空该设备所有容器截图
 async function clearScreenshotCache(ip, containerName = '') {
   try {
-    // Go 端 ClearScreenshotCache(ips []string)，ips 为设备 IP 数组
-    await ClearScreenshotCache(ip ? [ip] : [])
+    // Go 端 ClearScreenshotCache(ips []string)：元素是设备 IP 时清该设备整机，
+    // 是 "ip_containerName" 时只清这一个容器（见 android_poll.go）。
+    // 之前这里把 containerName 丢掉、永远只传 [ip]，等于每清一台就把整台设备
+    // 所有云机的截图全抹了，前端会整屏闪一下"等待截图"。
+    await ClearScreenshotCache(ip ? [containerName ? `${ip}_${containerName}` : ip] : [])
   } catch (e) {
     console.error('[截图轮询] ClearScreenshotCache 失败:', e)
   }

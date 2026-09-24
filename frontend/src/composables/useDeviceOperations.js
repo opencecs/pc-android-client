@@ -47,7 +47,7 @@ export function useDeviceOperations({
   contextMenuVisible,
 }, lazyDeps = {}) {
   // 以下三个在 App.vue 下方才创建，用惰性依赖避免 TDZ
-  const { autoGetAllDeviceVersions, updateHeartbeatDevices, fetchAndroidContainers } = lazyDeps
+  const { autoGetAllDeviceVersions, updateHeartbeatDevices, fetchAndroidContainers, forgetDeletedCloudMachine } = lazyDeps
 
 
   const handleDeviceDetailDeleteContainer = async (container) => {
@@ -89,6 +89,8 @@ export function useDeviceOperations({
 
       if (response.data && response.data.code === 0) {
         ElMessage.success('删除云机成功')
+        // 摘掉批量模式里那张卡片 + 清掉截图缓存（否则删掉的云机连同旧画面一直挂着）
+        forgetDeletedCloudMachine({ ...container, deviceIp, name: containerName })
         await fetchDeviceDetailCloudMachines()
       } else {
         const errorMsg = response.data?.message || '删除失败'

@@ -30,6 +30,7 @@ export function useContextMenu({
   // 以下在 App.vue 下方才创建 / 赋值，用惰性依赖避免 TDZ 与「按值传参永远拿到 null」
   const {
     clearContainerScreenshotCache,
+    forgetDeletedCloudMachine,
     fetchAndroidContainers,
     deviceHeartbeatTimer,
     androidCacheTimer,
@@ -88,6 +89,10 @@ export function useContextMenu({
           await authRetry(targetDevice, async (password) => {
             await deleteContainer(targetDevice, container.name || container.ID, password)
           })
+          // 摘掉批量模式里那张卡片 + 清掉截图缓存：刷新容器列表只动
+          // deviceCloudMachinesCache，批量模式的卡片渲染的是 selectedCloudMachines，
+          // 不摘的话"云机删了、截图还在"
+          forgetDeletedCloudMachine(container)
           ElMessage.success('删除成功')
           break
         default:

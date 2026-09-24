@@ -4329,9 +4329,11 @@ onMounted(() => {
     showAuthDialog: showAuthDialog,
     refreshContainerList: fetchAndroidContainers,
     refreshDeviceInfo: (deviceIp) => {
-      // 刷新特定设备的信息
+      // 刷新特定设备的信息。
+      // ⚠️ 这里原来写的是 fetchAndroidContainers()，无参 → 函数第一行 `if (!device) return`，
+      // 等于什么都没做；设备 IP 是参数里给好的，直接用。
       if (activeDevice.value && activeDevice.value.ip === deviceIp) {
-        fetchAndroidContainers()
+        fetchAndroidContainers(activeDevice.value, true)
       }
     }
   })
@@ -5642,9 +5644,14 @@ const initCloudMachineGroups = () => {
 // 包装删除容器函数，删除后刷新备份列表
 const handleDeleteContainerWithBackupRefresh = async (container) => {
   const result = await handleDeleteContainer(container)
-  // 如果删除成功且备份列表可见，刷新备份列表
-  if (result?.success && backupListVisible.value) {
-    initBackupList()
+  if (result?.success) {
+    // 删掉的那台要立刻从批量模式的选中列表和截图缓存里消失，
+    // 否则卡片连同旧画面会一直留在页面上（见 forgetDeletedCloudMachine 注释）
+    forgetDeletedCloudMachine(container)
+    // 如果删除成功且备份列表可见，刷新备份列表
+    if (backupListVisible.value) {
+      initBackupList()
+    }
   }
   return result
 }
@@ -6501,6 +6508,7 @@ const {
 }, {
   // 以下在下方才创建 / 赋值，用惰性依赖避免 TDZ
   clearContainerScreenshotCache: (...a) => clearContainerScreenshotCache(...a),
+  forgetDeletedCloudMachine: (...a) => forgetDeletedCloudMachine(...a),
   fetchAndroidContainers: (...a) => fetchAndroidContainers(...a),
   // 两个 let 定时器句柄在下方才被赋值，每次现读才能拿到真实句柄
   deviceHeartbeatTimer: () => deviceHeartbeatTimer,
@@ -7225,6 +7233,7 @@ const {
   autoGetAllDeviceVersions: (...a) => autoGetAllDeviceVersions(...a),
   updateHeartbeatDevices: (...a) => updateHeartbeatDevices(...a),
   fetchAndroidContainers: (...a) => fetchAndroidContainers(...a),
+  forgetDeletedCloudMachine: (...a) => forgetDeletedCloudMachine(...a),
 })
 
 // 清空指定容器的截图缓存，用于重启/重置操作
@@ -7239,6 +7248,33 @@ const clearContainerScreenshotCache = (device, container) => {
   clearScreenshotCache(device.ip, container.name || '').catch(() => {})
 
   // console.log(`已清空容器 ${container.name} 的截图缓存并触发重新加载`);
+};
+
+// 云机被删除后的收尾：把它从批量模式的选中列表里摘掉，并清掉它的截图缓存。
+//
+// 两件事都得做，缺一个就会看到「云机已经删了、画面还在」：
+//   1. 批量模式的卡片/表格直接渲染 selectedCloudMachines，而删除流程从来不会把它
+//      从里面摘掉（容器列表刷新只更新 deviceCloudMachinesCache/cloudMachineGroups），
+//      于是那张卡片连同截图一直挂在那儿。
+//   2. screenshotDataCache 只增不减：后端在容器 destroy 时会把条目删掉，
+//      但前端这份 Map 没有任何地方清理，同一个坑位重建的新云机一上来
+//      会先显示上一台的画面。
+const forgetDeletedCloudMachine = (container) => {
+  if (!container) return
+
+  const id = container.id
+  if (id) {
+    const kept = selectedCloudMachines.value.filter(m => m.id !== id)
+    if (kept.length !== selectedCloudMachines.value.length) {
+      selectedCloudMachines.value = kept
+      treeSelectedKeys.value = (treeSelectedKeys.value || []).filter(k => k !== id)
+    }
+  }
+
+  const ip = container.deviceIp || container.ip
+  if (ip && container.name) {
+    clearContainerScreenshotCache({ ip }, container)
+  }
 };
 
 
@@ -7376,6 +7412,7 @@ const {
   t,
   cloudManageMode,
   selectedCloudDevice,
+  devices,
   taskQueue,
   opencecsManagementRef,
   imageList,
@@ -7398,6 +7435,7 @@ const {
   initBackupList,
   createCloudMachine,
   clearContainerScreenshotCache,
+  forgetDeletedCloudMachine: (...a) => forgetDeletedCloudMachine(...a),   // 和上面几个删除/刷新依赖保持同一种转发写法
   batchSwitchCountryCode: lazyRef(() => batchSwitchCountryCode),   // 声明在下方，惰性 ref 避免 TDZ
   fetchAndroidContainers: (...a) => fetchAndroidContainers(...a),   // 声明在下方，惰性依赖避免 TDZ
 })

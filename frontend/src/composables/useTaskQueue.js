@@ -34,6 +34,7 @@ export function useTaskQueue({
   t,
   cloudManageMode,
   selectedCloudDevice,
+  devices,
   taskQueue,
   opencecsManagementRef,
   imageList,
@@ -56,6 +57,7 @@ export function useTaskQueue({
   initBackupList,
   createCloudMachine,
   clearContainerScreenshotCache,
+  forgetDeletedCloudMachine,
   batchSwitchCountryCode,
   fetchAndroidContainers,
 }) {
@@ -700,6 +702,9 @@ export function useTaskQueue({
 
                   case 'delete': {
                     await deleteContainer({ ip: target.deviceIp, version: target.deviceVersion || 'v3' }, containerName)
+                    // 删掉的那台要立刻从批量模式的选中列表和截图缓存里消失，
+                    // 否则卡片连同旧画面会一直留在页面上
+                    forgetDeletedCloudMachine(target)
                     return true
                   }
 
@@ -1082,6 +1087,19 @@ export function useTaskQueue({
       // 刷新容器列表
       if (cloudManageMode.value === 'slot' && selectedCloudDevice.value) {
         await fetchAndroidContainers(selectedCloudDevice.value, true)
+      } else if (cloudManageMode.value === 'batch' && task.type === 'delete') {
+        // 批量模式下 selectedCloudDevice 是 null，上面那支永远不进，
+        // 于是删完云机 deviceCloudMachinesCache / cloudMachineGroups 一直是旧的。
+        // 按任务涉及的设备逐个刷新（顺序 await，避免同时打多台设备）
+        for (const ip of task.deviceIps || []) {
+          const dev = devices.value.find(d => d.ip === ip)
+          if (!dev) continue
+          try {
+            await fetchAndroidContainers(dev, true)
+          } catch (e) {
+            console.error(`刷新设备 ${ip} 云机列表失败:`, e)
+          }
+        }
       }
 
       // 如果是删除操作且备份列表可见，刷新备份列表

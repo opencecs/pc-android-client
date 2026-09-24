@@ -73,17 +73,21 @@ const handleDeleteContainer = async (container) => {
       // V0-V2设备返回模拟数据
       if (result && result.success !== false) {
         ElMessage.success(`云机 "${containerName}" 删除成功`)
-        
-        // 触发容器列表刷新
+
+        // 触发容器列表刷新。
+        // ⚠️ 必须把设备传进去：App.vue 注入的 refreshContainerList 就是
+        // fetchAndroidContainers(device, isUserInitiated)，而它的第一行是
+        // `if (!device) return` —— 以前这里写的是无参调用 refreshContainerList()，
+        // 于是删除后容器列表压根没刷新，"云机删了、卡片和截图还挂在页面上"。
         if (typeof refreshContainerList === 'function') {
-          refreshContainerList()
+          refreshContainerList({ ip: deviceIp, version: deviceVersion }, true)
         }
-        
+
         // 触发设备信息刷新
         if (typeof refreshDeviceInfo === 'function') {
           refreshDeviceInfo(deviceIp)
         }
-        
+
         return { success: true }
       } else {
         const errorMsg = result?.message || '删除失败'
@@ -95,17 +99,17 @@ const handleDeleteContainer = async (container) => {
     // 检查响应结果（仅适用于V3设备）
     if (response && response.data && response.data.code === 0) {
       ElMessage.success(`云机 "${containerName}" 删除成功`)
-      
-      // 触发容器列表刷新
+
+      // 触发容器列表刷新（同上：必须带设备，否则 fetchAndroidContainers 直接 return）
       if (typeof refreshContainerList === 'function') {
-        refreshContainerList()
+        refreshContainerList({ ip: deviceIp, version: deviceVersion }, true)
       }
-      
+
       // 触发设备信息刷新
       if (typeof refreshDeviceInfo === 'function') {
         refreshDeviceInfo(deviceIp)
       }
-      
+
       return { success: true }
     } else {
       const errorMsg = response?.data?.message || '删除失败'

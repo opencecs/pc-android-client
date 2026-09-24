@@ -637,8 +637,13 @@ func (a *App) GetScreenshots(ips []string) map[string]string {
 	return result
 }
 
-// ClearScreenshotCache 清除指定设备的截图缓存
-// ips 为空时清除所有设备缓存
+// ClearScreenshotCache 清除截图缓存。
+//
+// 参数既可以是设备 IP（清该设备下所有容器），也可以是 "ip_containerName"
+// （只清这一个容器）—— 删掉某台云机后要让它的旧画面彻底消失，而不是把
+// 同设备其它云机的截图一起抹掉再等 1s 重抓（前端会整屏闪一下"等待截图"）。
+//
+// ips 为空时清除所有设备缓存。
 func (a *App) ClearScreenshotCache(ips []string) {
 	a.screenshotCacheMutex.Lock()
 	defer a.screenshotCacheMutex.Unlock()
@@ -649,14 +654,18 @@ func (a *App) ClearScreenshotCache(ips []string) {
 		return
 	}
 	for _, ip := range ips {
-		// screenshotCache key 格式为 "ip_containerName"，按前缀批量删除
+		// screenshotCache key 格式为 "ip_containerName"
 		prefix := ip + "_"
 		for key := range a.screenshotCache {
-			if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+			if key == ip || (len(key) > len(prefix) && key[:len(prefix)] == prefix) {
 				delete(a.screenshotCache, key)
 			}
 		}
-		delete(a.screenshotVersions, ip)
+		// 版本号只在按设备整机清时删；按容器清时留着，
+		// 免得前端因为 versions[ip] 消失而跳过这一轮刷新
+		if !strings.Contains(ip, "_") {
+			delete(a.screenshotVersions, ip)
+		}
 	}
 }
 
