@@ -16,6 +16,7 @@
 import { onMounted } from 'vue'
 import { Events } from '@wailsio/runtime'
 import { ToggleProjectionWindowTop, ArrangeProjectionWindows, HttpRequest, ForceRefreshDeviceInfo, GetDevicesStatus } from '../../bindings/edgeclient/app'
+import { reportStartupUid } from '../services/startupReport'
 
 export function useAppBootstrap({
   loadDevicesFromLocalStorage,
@@ -74,6 +75,9 @@ export function useAppBootstrap({
 
     // 获取系统公告
     fetchAnnouncement()
+
+    // 回填 uid 给后端启动上报（Go 读不到 localStorage，只能由前端推过去）
+    reportStartupUid(localStorage.getItem('uid') || '')
 
     // 定时刷新设备数据（10秒）- 已禁用，避免频繁刷新
     // refreshInterval = setInterval(() => {

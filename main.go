@@ -179,6 +179,7 @@ func main() {
 		appService.CleanupProjectionProcesses()
 		appService.StopAllP2P()
 		appService.StopEventws() // 断开全部设备事件通道，避免退出时残留拨号 goroutine 刷屏
+		appService.StopStartupReport()
 		wailsApp.Quit()
 	})
 

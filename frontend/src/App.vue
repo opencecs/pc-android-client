@@ -3122,11 +3122,13 @@ const fetchImageList = async (deviceType) => {
     let localImages = getImageListFromLocal()
     
     // 首先使用本地缓存的数据
+    // 这一趟只负责"先有东西显示"：建桶 + 自动选中型号即可，下载状态不查。
+    // 联网那趟会整份重建分桶并查一遍状态，这里查了也是白查（省下 ~0.65s）。
     if (localImages.length > 0) {
       // console.log('使用本地缓存的镜像列表，共', localImages.length, '个镜像')
       imageList.value = localImages
       filterImageList(deviceType)
-      await categorizeOnlineImages() // 按型号分类在线镜像
+      await categorizeOnlineImages({ checkStatus: false }) // 按型号分类在线镜像
     } else {
       // 本地缓存为空，使用默认镜像
       // console.log('本地缓存为空，使用默认镜像列表')
@@ -3134,10 +3136,11 @@ const fetchImageList = async (deviceType) => {
         { name: 'registry.magicloud.tech/magicloud/dobox-android13:Q1', url: 'registry.magicloud.tech/magicloud/dobox-android13:Q1' }
       ];
       filterImageList(deviceType);
-      await categorizeOnlineImages() // 按型号分类在线镜像
+      await categorizeOnlineImages({ checkStatus: false }) // 按型号分类在线镜像
     }
-    
+
     // 无论是否需要更新，都尝试联网更新本地缓存（后台自动更新）
+    let freshListApplied = false
     try {
       console.log('尝试联网更新镜像列表...')
       
@@ -3164,8 +3167,9 @@ const fetchImageList = async (deviceType) => {
         
         // 过滤匹配当前设备类型的镜像
         filterImageList(deviceType)
-        // 按型号分类在线镜像
+        // 按型号分类在线镜像（权威的一趟：建桶 + 查下载状态）
         await categorizeOnlineImages()
+        freshListApplied = true
       } else {
         console.error('获取镜像列表失败: 无效的返回数据');
         ElMessage.warning('无法联网获取最新镜像列表，使用本地缓存！')
@@ -3173,6 +3177,12 @@ const fetchImageList = async (deviceType) => {
     } catch (error) {
       console.error('更新镜像列表失败:', error)
       ElMessage.warning('无法联网获取最新镜像，使用本地缓存老镜像列表！')
+    }
+
+    // 联网那趟没跑成（离线/接口异常）：本地缓存的分桶还没查过下载状态，在这里补上。
+    // 镜像管理页的"下载"按钮状态依赖 imageDownloadStatus，漏了会让已下载的镜像显示成未下载。
+    if (!freshListApplied) {
+      await checkAllImagesDownloadStatus()
     }
   } catch (error) {
     console.error('获取镜像列表失败:', error)
@@ -3296,7 +3306,9 @@ const isSpecialModelLocked = computed(() => {
 })
 
 // 按型号分类在线镜像
-const categorizeOnlineImages = async () => {
+// checkStatus=false 时只建型号分桶、不查下载状态 —— 本地缓存那一趟的结果马上会被
+// 联网拿到的新列表整份覆盖，那 300+ 次 IsImageDownloaded 纯属白跑（见 fetchImageList）。
+const categorizeOnlineImages = async ({ checkStatus = true } = {}) => {
   const imagesByModel = new Map()
   let firstModel = null // 记录第一个出现的型号
   
@@ -3342,7 +3354,9 @@ const categorizeOnlineImages = async () => {
   }
   
   // 检查每个在线镜像的下载状态
-  await checkAllImagesDownloadStatus()
+  if (checkStatus) {
+    await checkAllImagesDownloadStatus()
+  }
 }
 
 // 获取本地缓存镜像列表
@@ -3707,8 +3721,13 @@ const checkImageDownloadStatus = async (imageUrl) => {
 const checkAllImagesDownloadStatus = async () => {
   try {
     console.log('开始检查所有在线镜像的下载状态')
+    // 同一个镜像会被 push 进它支持的每个型号桶（P1/Q1/R1/C1），实测 178 个镜像
+    // 会变成 311 次调用。imageDownloadStatus 本来就按 url 存，去重后结果完全一致。
+    const checked = new Set()
     for (const [model, images] of onlineImagesByModel.value.entries()) {
       for (const image of images) {
+        if (checked.has(image.url)) continue
+        checked.add(image.url)
         await checkImageDownloadStatus(image.url)
       }
     }

@@ -557,7 +557,7 @@
             <el-form label-width="100px">
                 <el-form-item :label="t('backup.selectMachine')">
                     <el-select v-model="selectedContainer" :placeholder="t('backup.pleaseSelectMachine')" size="medium" style="width: 100%;"
-                        @change="handleContainerChange">
+                        filterable @change="handleContainerChange">
                         <el-option v-for="container in containerList" :key="container.id" :label="container.name"
                             :value="container.id" />
                     </el-select>
@@ -605,7 +605,7 @@
             <el-form label-width="100px">
                 <el-form-item :label="t('backup.selectMachine')">
                     <el-select v-model="selectedBackupMachineContainer" :placeholder="t('backup.pleaseSelectMachine')" size="medium" style="width: 100%;"
-                        :disabled="backupMachineCreating" @change="handleBackupMachineContainerChange">
+                        filterable :disabled="backupMachineCreating" @change="handleBackupMachineContainerChange">
                         <el-option v-for="container in backupMachineContainerList" :key="container.id" :label="container.name + (container.androidType === 'V2' ? ' (V2)' : '')"
                             :value="container.id" />
                     </el-select>

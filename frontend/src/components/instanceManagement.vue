@@ -403,6 +403,7 @@ import { Search, Loading, Cellphone, Lock as LockIcon, WarningFilled } from '@el
 import { GetUserRabbetListWithToken, GetPackage, CreateOrder, QueryOrderStatus, GetPhoneVCode, Register, GetUserAtt, ScoreExchangeTermTime } from '../../bindings/edgeclient/app'
 import CryptoJS from 'crypto-js'
 import { getDeviceAddr, getDevicePassword } from '../services/api.js'
+import { reportStartupUid } from '../services/startupReport'
 
 const props = defineProps({
     devices: {
@@ -1276,7 +1277,9 @@ const handleSyncAuthSubmit = async () => {
       localStorage.setItem('token', newToken)
       localStorage.setItem('uname', uname)
       localStorage.setItem('uid', uid)
-      
+      // 回填 uid 给后端启动上报（Go 读不到 localStorage）
+      reportStartupUid(uid || '')
+
       // 通知父组件更新 token
       emit('update:token', newToken)
       emit('update-user-info', { token: newToken, uname, uid })

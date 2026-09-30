@@ -14,6 +14,7 @@ import { ElMessage } from 'element-plus'
 import CryptoJS from 'crypto-js'
 import { computed } from 'vue'
 import { getContainers, saveDevicePassword } from '../services/api.js'
+import { reportStartupUid } from '../services/startupReport'
 import { GetPhoneVCode, Register } from '../../bindings/edgeclient/app'
 
 export function useAuthForms({
@@ -173,6 +174,8 @@ export function useAuthForms({
             uname.value = result.data.uname
             localStorage.setItem('token', result.data.token)
             localStorage.setItem('uname', result.data.uname)
+            // 回填 uid 给后端启动上报（这里原本不写 localStorage.uid，保持原样只推给后端）
+            reportStartupUid(result.data.uid || '')
             // 重新获取设备绑定状态
             fetchDeviceBindStatus()
           } else {
@@ -259,6 +262,8 @@ export function useAuthForms({
           localStorage.setItem('token', result.data.token)
           localStorage.setItem('uname', result.data.uname)
           localStorage.setItem('uid', result.data.uid)
+          // 回填 uid 给后端启动上报（Go 读不到 localStorage）
+          reportStartupUid(result.data.uid || '')
           // 登录成功后启动同步授权定时器
           startSyncAuthTimer()
           fetchDeviceBindStatus()

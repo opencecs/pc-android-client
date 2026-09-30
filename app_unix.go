@@ -4,8 +4,14 @@ package main
 
 import (
 	"os/exec"
+	"runtime"
 	"syscall"
 )
+
+// getOSVersionString 非Windows平台的系统版本串（启动上报用）
+func getOSVersionString() string {
+	return runtime.GOOS + " " + runtime.GOARCH
+}
 
 // setSocketBroadcast sets the SO_BROADCAST option on a socket
 func setSocketBroadcast(fd uintptr) error {

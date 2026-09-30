@@ -151,6 +151,8 @@ type App struct {
 	eventwsRefetchAt map[string]time.Time // {deviceIP -> 上次全量补查时间}
 	eventwsAuthMu    sync.Mutex           // 保护认证待办表
 	eventwsAuthFail  map[string]bool      // {deviceIP -> 当前卡在 401}
+	// 客户端启动上报（日活统计，见 startup_report.go）
+	startupReport *startupReporter
 }
 
 // WindowHandle 表示跨平台窗口句柄
@@ -1837,6 +1839,9 @@ func (a *App) startup() {
 
 	// 设备事件通道（SDK v206+）：只装配依赖，建连等设备列表下发后由 Sync 对账
 	a.initEventws()
+
+	// 客户端启动上报（日活统计）：独立 goroutine，不阻塞启动
+	a.StartStartupReport()
 
 	// 注意：心跳检测服务由前端通过 initDeviceHeartbeat() 启动
 	// 不在这里启动，避免重复启动

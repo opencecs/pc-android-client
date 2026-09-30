@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 // ---- 现代 IFileOpenDialog 文件夹选择器 (Vista+) ----
@@ -207,6 +210,45 @@ if ($dialog.FileName) {
 		"message": "文件选择成功",
 		"path":    filePath,
 	}
+}
+
+// getOSVersionString 返回可读的系统版本串，用于启动上报，形如 "Windows 11 Pro 10.0.22631"。
+// Windows 的 ProductName 在 Win11 上仍然写着 "Windows 10"，需要用 build 号纠正。
+func getOSVersionString() string {
+	const regPath = `SOFTWARE\Microsoft\Windows NT\CurrentVersion`
+
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, regPath, registry.QUERY_VALUE)
+	if err != nil {
+		log.Printf("[启动上报] 读取系统版本失败: %v", err)
+		return "Windows " + runtime.GOARCH
+	}
+	defer k.Close()
+
+	productName, _, _ := k.GetStringValue("ProductName")
+	productName = strings.TrimSpace(productName)
+	if productName == "" {
+		productName = "Windows"
+	}
+
+	build, _, _ := k.GetStringValue("CurrentBuildNumber")
+	build = strings.TrimSpace(build)
+	if n, err := strconv.Atoi(build); err == nil && n >= 22000 {
+		productName = strings.Replace(productName, "Windows 10", "Windows 11", 1)
+	}
+
+	major, _, errMajor := k.GetIntegerValue("CurrentMajorVersionNumber")
+	minor, _, _ := k.GetIntegerValue("CurrentMinorVersionNumber")
+	if errMajor != nil {
+		// 老系统没有这两个 DWORD，退回 CurrentVersion 字符串（如 "6.3"）
+		ver, _, _ := k.GetStringValue("CurrentVersion")
+		ver = strings.TrimSpace(ver)
+		if ver == "" {
+			ver = "0.0"
+		}
+		return strings.TrimSpace(fmt.Sprintf("%s %s %s", productName, ver, build))
+	}
+
+	return strings.TrimSpace(fmt.Sprintf("%s %d.%d %s", productName, major, minor, build))
 }
 
 // setSocketBroadcast sets the SO_BROADCAST option on a socket

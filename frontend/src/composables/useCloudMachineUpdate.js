@@ -108,7 +108,8 @@ export function useCloudMachineUpdate({
 
     // 重置表单
     updateImageForm.value = {
-      imageSelect: '',
+      // 先用容器当前镜像占位，列表拉回来后会被下面第 1 步的匹配结果覆盖
+      imageSelect: container.image || '',
       customImageUrl: '',
       modelName: container.modelName || '',
       enableMagisk: container.mgenable === '1',
@@ -129,6 +130,18 @@ export function useCloudMachineUpdate({
       enforce: container.enforce !== false // 安全模式，从容器数据读取（undefined/true均视为开启）
     }
 
+    // 表单已就绪，先把弹窗开出来。
+    // 下面的取列表都是网络请求（镜像列表 ~1.5s、网卡/分组/型号各一次），
+    // 串行等完再开弹窗会让用户干等 1.5s+；下拉框自带 :loading，数据回来会自己补上。
+    updateImageDialogVisible.value = true
+
+    // 网卡列表必须跟开弹窗同一拍发起（不 await）：fetchNetworkCardsForUpdate 一进来就
+    // 把 hasMacVlan 重置为 false，若等到镜像列表回来再调，公有网卡容器会先闪一下
+    // "未检测到MacVlan配置"。它开头同步置 fetchingNetworkCards=true，能挡住这个窗口。
+    const networkCardsPromise = targetDevice.version === 'v3'
+      ? fetchNetworkCardsForUpdate(targetDevice.ip)
+      : Promise.resolve()
+
     // 获取设备类型
     const deviceType = targetDevice.name || 'C1'
 
@@ -138,7 +151,7 @@ export function useCloudMachineUpdate({
      // 获取网络分组列表
      await fetchVpcGroupList(targetDevice.ip)
 
-     // 获取网卡列表 (仅V3设备)
+     // 获取网卡列表 (仅V3设备) —— 上面已发起，这里只等它收尾
      if (targetDevice.version === 'v3') {
        // 由于 fetchNetworkCards 依赖 createDevice.value 和 createForm.value，我们需要临时设置一下
        // 但更好的方式是让 fetchNetworkCards 接受参数，或者在这里直接调用底层 API
@@ -148,7 +161,7 @@ export function useCloudMachineUpdate({
        // 注意：fetchNetworkCards 使用的是 createForm.value，而这里是 updateImageForm
        // 所以我们需要改造 fetchNetworkCards 或者 复制一份逻辑
        // 为了避免副作用，我们在这里复制一份逻辑，专门用于 updateImageForm
-       await fetchNetworkCardsForUpdate(targetDevice.ip)
+       await networkCardsPromise
      }
 
      // 获取当前容器使用的镜像
@@ -202,8 +215,6 @@ export function useCloudMachineUpdate({
     if (targetDevice.version === 'v3') {
       await getV3PhoneModels(targetDevice.ip)
     }
-
-    updateImageDialogVisible.value = true
   }
 
   // 处理更新镜像提交
