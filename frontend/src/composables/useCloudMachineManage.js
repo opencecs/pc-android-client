@@ -9,8 +9,8 @@
  * `t` 是 App.vue 里的本地 i18n 包装，通过依赖对象传入。
  */
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { startContainer, stopContainer, startBatchProjection, startProjectionBatchControl, stopProjectionBatchControl } from '../services/api.js'
-import { DeleteLocalImage } from '../../bindings/edgeclient/app'
+import { startContainer, stopContainer, startBatchProjection, startProjectionBatchControl, stopProjectionBatchControl, getDevicePassword } from '../services/api.js'
+import { DeleteLocalImage, ExecuteBatchCommand } from '../../bindings/edgeclient/app'
 
 export function useCloudMachineManage({
   t,
@@ -652,6 +652,93 @@ export function useCloudMachineManage({
             } else {
               console.error('批量投屏控制失败:', error)
               ElMessage.error(`批量投屏控制失败: ${error.message || '未知错误'}`)
+            }
+          }
+          break
+        case 'reset-projection':
+          // 重置投屏：强制结束云机内的 hwcodec 进程（设备侧会自动重新拉起）
+          console.log(`执行重置投屏操作`)
+
+          let resetProjectionAll = []
+          let resetProjectionContainers = []
+
+          // 根据云机管理模式获取需要操作的容器
+          if (cloudManageMode.value === 'slot') {
+            // 坑位模式：根据选中的坑位号获取容器实例
+            resetProjectionAll = instances.value.filter(inst => Array.isArray(selectedData) && selectedData.includes(inst.indexNum))
+          } else {
+            // 批量模式：直接使用传递的云机对象数组
+            resetProjectionAll = selectedData
+          }
+
+          // hwcodec 只在运行中的云机里存在，只对运行中的云机执行
+          resetProjectionContainers = resetProjectionAll.filter(container => container.status === 'running')
+
+          if (resetProjectionAll.length === 0) {
+            ElMessage.warning('没有选中的云机')
+            break
+          }
+
+          if (resetProjectionContainers.length === 0) {
+            ElMessage.warning('选中的云机都没有处于运行状态')
+            break
+          }
+
+          if (resetProjectionContainers.length < resetProjectionAll.length) {
+            const resetProjectionNotRunning = resetProjectionAll.length - resetProjectionContainers.length
+            ElMessage.info(`有 ${resetProjectionNotRunning} 个选中的云机未处于运行状态，将只对运行中的 ${resetProjectionContainers.length} 个云机重置投屏`)
+          }
+
+          try {
+            // 显示确认对话框
+            await ElMessageBox.confirm(`确定要重置选中的 ${resetProjectionContainers.length} 个云机的投屏吗？将强制结束云机内的投屏进程（hwcodec）。`, '重置投屏', {
+              confirmButtonText: '确定',
+              cancelButtonText: '取消',
+              type: 'warning'
+            })
+
+            // 构造 ExecuteBatchCommand 的目标列表（字段名要与后端 Target 结构体匹配）
+            const resetProjectionTargets = resetProjectionContainers.map(container => {
+              const isSlotMode = cloudManageMode.value === 'slot' && selectedCloudDevice.value
+              const deviceIp = isSlotMode ? selectedCloudDevice.value.ip : container.deviceIp
+              return {
+                device_ip: deviceIp,
+                container_id: container.name || container.id,
+                container_name: container.name || '',
+                device_version: isSlotMode ? selectedCloudDevice.value.version : (container.deviceVersion || 'v3'),
+                password: getDevicePassword(deviceIp) || ''
+              }
+            })
+
+            const resetProjectionResult = await ExecuteBatchCommand(
+              resetProjectionTargets,
+              'kill -9 $(pidof hwcodec)',
+              `重置投屏_${new Date().toLocaleString()}`
+            )
+
+            // 汇总执行结果
+            if (resetProjectionResult && resetProjectionResult.success && Array.isArray(resetProjectionResult.history?.results)) {
+              const resetProjectionResults = resetProjectionResult.history.results
+              const resetProjectionOk = resetProjectionResults.filter(r => r.success).length
+              const resetProjectionFail = resetProjectionResults.length - resetProjectionOk
+              if (resetProjectionFail === 0) {
+                ElMessage.success(`已对 ${resetProjectionOk} 个云机重置投屏`)
+              } else {
+                ElMessage.warning(`重置投屏完成：成功 ${resetProjectionOk} 个，失败 ${resetProjectionFail} 个`)
+              }
+            } else if (resetProjectionResult && !resetProjectionResult.success) {
+              ElMessage.error(`重置投屏失败: ${resetProjectionResult.message || '未知错误'}`)
+            } else {
+              ElMessage.success('重置投屏命令已发送')
+            }
+          } catch (error) {
+            if (error === 'cancel') {
+              // 用户取消了操作
+              console.log('用户取消了重置投屏操作')
+              ElMessage.info('已取消重置投屏操作')
+            } else {
+              console.error('重置投屏失败:', error)
+              ElMessage.error(`重置投屏失败: ${error.message || '未知错误'}`)
             }
           }
           break

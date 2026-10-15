@@ -242,6 +242,7 @@
               <el-dropdown-menu>
                 <el-dropdown-item command="restart">{{ t('common.batchRestart') }}</el-dropdown-item>
                 <el-dropdown-item command="projection">{{ t('common.batchProjection') }}</el-dropdown-item>
+                <el-dropdown-item command="reset-projection">{{ t('common.resetProjection') }}</el-dropdown-item>
                 <el-dropdown-item command="shutdown">{{ t('common.batchShutdown') }}</el-dropdown-item>
                 <el-dropdown-item command="update-image">{{ t('common.batchUpdateImage') }}</el-dropdown-item>
                 <el-dropdown-item command="switch-backup">{{ t('common.batchSwitchBackup') }}</el-dropdown-item>
